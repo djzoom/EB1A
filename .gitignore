@@ -26,6 +26,8 @@ package-lock.json
 # Data (large files, will be re-downloaded)
 data/raw/uscis/*.xlsx
 data/raw/dos/*.pdf
+data/raw/dos/*.xlsx
+data/raw/community/*.csv
 *.parquet
 
 # Build
