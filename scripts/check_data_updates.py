@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""
+Check USCIS and DOS websites for new data files and download them.
+
+Usage:
+    python scripts/check_data_updates.py              # check + download
+    python scripts/check_data_updates.py --dry-run    # check only, no download
+"""
+import argparse
+import os
+import sys
+import urllib.request
+import urllib.error
+from datetime import datetime, timedelta
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+USCIS_DIR = REPO_ROOT / "data" / "raw" / "uscis"
+DOS_DIR = REPO_ROOT / "data" / "raw" / "dos"
+
+MONTHS = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+]
+
+USCIS_BASE = "https://www.uscis.gov/sites/default/files/document/data"
+DOS_BASE = "https://travel.state.gov/content/dam/visas/Statistics/Immigrant-Statistics/MonthlyIVIssuances/Excel"
+
+
+def probe_url(url: str) -> bool:
+    req = urllib.request.Request(url, method="HEAD")
+    req.add_header("User-Agent", "EB1A-DataUpdater/1.0")
+    try:
+        resp = urllib.request.urlopen(req, timeout=15)
+        return resp.status == 200
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+        return False
+
+
+def download(url: str, dest: Path) -> bool:
+    req = urllib.request.Request(url)
+    req.add_header("User-Agent", "EB1A-DataUpdater/1.0")
+    try:
+        resp = urllib.request.urlopen(req, timeout=30)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(resp.read())
+        return True
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
+        print(f"  DOWNLOAD FAILED: {e}")
+        return False
+
+
+def check_i485_inventory(dry_run: bool) -> list[str]:
+    """Check for new monthly I-485 Pending Inventory snapshots."""
+    new_files = []
+    now = datetime.now()
+
+    for year in range(2025, now.year + 1):
+        for month_name in MONTHS:
+            month_idx = MONTHS.index(month_name) + 1
+            if year == now.year and month_idx > now.month:
+                break
+
+            local = USCIS_DIR / f"I485_Pending_Inventory_{month_name}_{year}.xlsx"
+            if local.exists():
+                continue
+
+            url = f"{USCIS_BASE}/eb_inventory_{month_name}_{year}.xlsx"
+            if probe_url(url):
+                new_files.append(str(local.relative_to(REPO_ROOT)))
+                if not dry_run:
+                    if download(url, local):
+                        print(f"  DOWNLOADED: {local.name}")
+                    else:
+                        new_files.pop()
+                else:
+                    print(f"  AVAILABLE: {local.name}")
+
+    return new_files
+
+
+def check_i140_quarterly(dry_run: bool) -> list[str]:
+    """Check for new I-140 quarterly reports."""
+    new_files = []
+    now = datetime.now()
+    current_fy = now.year if now.month >= 10 else now.year
+    # e.g. May 2026 -> FY2026, Nov 2026 -> FY2027
+
+    for fy in range(2024, current_fy + 2):
+        for q in range(1, 5):
+            local = USCIS_DIR / f"I140_FY{fy}_Q{q}.xlsx"
+            if local.exists():
+                continue
+
+            for suffix in [f"i140_fy{fy}_q{q}.xlsx", f"i140_fy{fy}_q{q}_0.xlsx"]:
+                url = f"{USCIS_BASE}/{suffix}"
+                if probe_url(url):
+                    new_files.append(str(local.relative_to(REPO_ROOT)))
+                    if not dry_run:
+                        if download(url, local):
+                            print(f"  DOWNLOADED: {local.name}")
+                        else:
+                            new_files.pop()
+                    else:
+                        print(f"  AVAILABLE: {local.name}")
+                    break
+
+    return new_files
+
+
+def check_i140_approved(dry_run: bool) -> list[str]:
+    """Check for new I-140/I-360/I-526 Approved Awaiting Visa reports."""
+    new_files = []
+    now = datetime.now()
+    current_fy = now.year if now.month >= 10 else now.year
+
+    for fy in range(2025, current_fy + 2):
+        for q in range(1, 5):
+            local = USCIS_DIR / f"I140_I360_I526_Approved_FY{fy}_Q{q}.xlsx"
+            if local.exists():
+                continue
+
+            url = f"{USCIS_BASE}/eb_i140_i360_i526_performancedata_fy{fy}_q{q}.xlsx"
+            if probe_url(url):
+                new_files.append(str(local.relative_to(REPO_ROOT)))
+                if not dry_run:
+                    if download(url, local):
+                        print(f"  DOWNLOADED: {local.name}")
+                    else:
+                        new_files.pop()
+                else:
+                    print(f"  AVAILABLE: {local.name}")
+
+    return new_files
+
+
+def fy_months(fy: int) -> list[tuple[str, int]]:
+    """Return (month_name, calendar_year) for all 12 months of a fiscal year."""
+    result = []
+    for m in range(10, 13):
+        result.append((MONTHS[m - 1], fy - 1))
+    for m in range(1, 10):
+        result.append((MONTHS[m - 1], fy))
+    return result
+
+
+def check_dos_issuance(dry_run: bool) -> list[str]:
+    """Check for new DOS Monthly IV Issuance files."""
+    new_files = []
+    now = datetime.now()
+    current_fy = now.year if now.month >= 10 else now.year + 1
+
+    for fy in range(2024, current_fy + 1):
+        for month_name, cal_year in fy_months(fy):
+            if cal_year > now.year or (cal_year == now.year and MONTHS.index(month_name) + 1 > now.month):
+                continue
+
+            local = DOS_DIR / f"iv_issuance_{month_name}_{cal_year}.xlsx"
+            if local.exists():
+                continue
+
+            encoded_month = month_name.upper() + f" {cal_year}"
+            encoded = encoded_month.replace(" ", "%20")
+            url = (
+                f"{DOS_BASE}/FY{fy}/"
+                f"{encoded}%20-%20IV%20Issuances%20by%20FSC%20or%20Place%20of%20Birth"
+                f"%20and%20Visa%20Class.xlsx"
+            )
+            if probe_url(url):
+                new_files.append(str(local.relative_to(REPO_ROOT)))
+                if not dry_run:
+                    if download(url, local):
+                        print(f"  DOWNLOADED: {local.name}")
+                    else:
+                        new_files.pop()
+                else:
+                    print(f"  AVAILABLE: {local.name}")
+
+    return new_files
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Check for new USCIS/DOS data files")
+    parser.add_argument("--dry-run", action="store_true", help="Check only, don't download")
+    args = parser.parse_args()
+
+    USCIS_DIR.mkdir(parents=True, exist_ok=True)
+    DOS_DIR.mkdir(parents=True, exist_ok=True)
+
+    all_new = []
+
+    print("Checking USCIS I-485 Pending Inventory...")
+    all_new.extend(check_i485_inventory(args.dry_run))
+
+    print("Checking USCIS I-140 Quarterly Reports...")
+    all_new.extend(check_i140_quarterly(args.dry_run))
+
+    print("Checking USCIS I-140/I-360/I-526 Approved Awaiting Visa...")
+    all_new.extend(check_i140_approved(args.dry_run))
+
+    print("Checking DOS Monthly IV Issuance...")
+    all_new.extend(check_dos_issuance(args.dry_run))
+
+    print()
+    if all_new:
+        action = "found" if args.dry_run else "downloaded"
+        print(f"=== {len(all_new)} new file(s) {action} ===")
+        for f in all_new:
+            print(f"  {f}")
+    else:
+        print("=== All data is up to date ===")
+
+    # Set GitHub Actions output
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+            fh.write(f"new_files={len(all_new)}\n")
+
+    return 0 if not all_new or not args.dry_run else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
