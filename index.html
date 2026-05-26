@@ -1683,18 +1683,19 @@ var PARAM_META = {
   chinaBaseQuota: {
     label: '中国 EB-1 基础配额',
     icon: '⚖️',
-    default: 2803, min: 2000, max: 3500, step: 50,
+    default: 2803, min: 2803, max: 2803, step: 1,
+    fixed: true,
     unit: '签证/年',
     format: function(v) { return v; },
     source: {
-      title: 'INA 法定基础配额',
+      title: 'INA 法定基础配额 (不可调)',
       rows: [
         { lbl: '全球年配额', val: '140,000' },
         { lbl: 'EB 占比 (×28.6%)', val: '40,040' },
         { lbl: '中国上限 (×7%)', val: '2,803' },
         { lbl: 'INA 章节', val: 'Section 201(d), 202(a)(2)' }
       ],
-      methodology: '基础配额是法定的硬约束: 140,000 × 28.6% × 7% = 2,803。这是中国 EB-1 每年至少能拿到的签证数(若中国本身需求达到)。',
+      methodology: '法定硬约束: 140,000 × 28.6% × 7% = 2,803。这是中国 EB-1 每年的法定基础配额,不随政策波动。',
       sources: ['INA Section 201(d)', 'INA Section 203(b)', 'INA Section 202(a)(2)']
     }
   },
@@ -3035,6 +3036,15 @@ function renderParams() {
       return '<span class="source-chip">' + s + '</span>';
     }).join('');
     
+    var sliderHTML = meta.fixed
+      ? '<div class="param-meta" style="justify-content:center;opacity:0.7;font-size:0.8em;">⚖️ 法定值,不可调</div>'
+      : '<input type="range" id="' + key + '" min="' + meta.min + '" max="' + meta.max + '" value="' + val + '" step="' + meta.step + '">' +
+        '<div class="param-meta">' +
+          '<span>' + meta.format(meta.min) + ' ' + meta.unit + '</span>' +
+          '<span>默认 ' + meta.format(meta.default) + '</span>' +
+          '<span>' + meta.format(meta.max) + ' ' + meta.unit + '</span>' +
+        '</div>';
+
     html += '<div class="param-row" id="param-row-' + key + '">' +
       '<div class="param-label">' +
         '<span class="param-name" onclick="toggleSource(\'' + key + '\')">' +
@@ -3042,12 +3052,7 @@ function renderParams() {
         '</span>' +
         '<span class="param-value"><span id="v-' + key + '">' + meta.format(val) + '</span> ' + meta.unit + '</span>' +
       '</div>' +
-      '<input type="range" id="' + key + '" min="' + meta.min + '" max="' + meta.max + '" value="' + val + '" step="' + meta.step + '">' +
-      '<div class="param-meta">' +
-        '<span>' + meta.format(meta.min) + ' ' + meta.unit + '</span>' +
-        '<span>默认 ' + meta.format(meta.default) + '</span>' +
-        '<span>' + meta.format(meta.max) + ' ' + meta.unit + '</span>' +
-      '</div>' +
+      sliderHTML +
       '<div class="source-popup" id="source-' + key + '">' +
         '<span class="sp-close" onclick="closeSource()">×</span>' +
         '<div class="sp-title">' + meta.source.title + '</div>' +
@@ -3067,6 +3072,7 @@ function renderParams() {
   container.innerHTML = html;
   
   Object.keys(PARAM_META).forEach(function(key) {
+    if (PARAM_META[key].fixed) return;
     document.getElementById(key).addEventListener('input', function(e) {
       currentParams[key] = +e.target.value;
       document.getElementById('v-' + key).textContent = PARAM_META[key].format(currentParams[key]);
