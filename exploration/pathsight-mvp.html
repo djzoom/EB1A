@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PathSight — 个人化移民排期决策引擎</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0a0e1a;
+    color: #e8eaf0;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 80px;
+  }
+  
+  /* App Bar */
+  .app-bar {
+    position: sticky;
+    top: 0;
+    background: rgba(10,14,26,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid #1f2640;
+    padding: 14px 16px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .app-logo {
+    font-size: 17px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .app-logo .logo-icon {
+    width: 26px;
+    height: 26px;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+  .app-bar-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #131829;
+    border: 1px solid #1f2640;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #b4bcd0;
+    position: relative;
+  }
+  .notif-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff5e8a;
+    border: 2px solid #0a0e1a;
+  }
+  
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 12px 14px;
+  }
+  
+  /* Tab Bar */
+  .tab-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(19,24,41,0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid #1f2640;
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0 18px;
+    z-index: 10;
+  }
+  .tab-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    color: #6b7390;
+    cursor: pointer;
+    flex: 1;
+    transition: color 0.15s;
+  }
+  .tab-item.active { color: #60a5fa; }
+  .tab-icon { font-size: 20px; }
+  
+  /* Hero (Today section) */
+  .hero {
+    background: linear-gradient(135deg, #1e293b, #2a3654);
+    border: 1px solid #3b4870;
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, rgba(96,165,250,0.15), transparent 70%);
+    border-radius: 50%;
+  }
+  .hero-label {
+    font-size: 11px;
+    color: #8b92a8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .hero-value {
+    font-size: 30px;
+    font-weight: 700;
+    color: #ffd166;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+  .hero-detail {
+    font-size: 12px;
+    color: #b4bcd0;
+    line-height: 1.5;
+  }
+  .hero-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .hero-delta.up {
+    background: rgba(74,222,128,0.15);
+    color: #4ade80;
+  }
+  .hero-delta.down {
+    background: rgba(248,113,113,0.15);
+    color: #f87171;
+  }
+  
+  /* Section title */
+  .sec-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8b92a8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 18px 0 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sec-action {
+    font-size: 11px;
+    color: #60a5fa;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+  }
+  
+  /* Card */
+  .card {
+    background: #131829;
+    border: 1px solid #1f2640;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  
+  /* News card */
+  .news-card {
+    background: #131829;
+    border: 1px solid #1f2640;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .news-card.high-impact {
+    border-left: 3px solid #f87171;
+  }
+  .news-card.medium-impact {
+    border-left: 3px solid #fbbf24;
+  }
+  .news-card.low-impact {
+    border-left: 3px solid #60a5fa;
+  }
+  .news-card.positive {
+    border-left: 3px solid #4ade80;
+  }
+  
+  .news-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: #6b7390;
+    margin-bottom: 6px;
+  }
+  .news-tag {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .news-tag.alert {
+    background: rgba(248,113,113,0.15);
+    color: #f87171;
+  }
+  .news-tag.warning {
+    background: rgba(251,191,36,0.15);
+    color: #fbbf24;
+  }
+  .news-tag.info {
+    background: rgba(96,165,250,0.15);
+    color: #60a5fa;
+  }
+  .news-tag.positive {
+    background: rgba(74,222,128,0.15);
+    color: #4ade80;
+  }
+  
+  .news-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e8eaf0;
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+  
+  .news-summary {
+    font-size: 12px;
+    color: #b4bcd0;
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+  
+  .news-impact {
+    background: #0a0e1a;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: #b4bcd0;
+    line-height: 1.5;
+  }
+  .news-impact .impact-label {
+    color: #ffd166;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .news-impact .delta-pos {
+    color: #4ade80;
+    font-weight: 600;
+  }
+  .news-impact .delta-neg {
+    color: #f87171;
+    font-weight: 600;
+  }
+  
+  /* 路径比较卡 */
+  .path-comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .path-card {
+    background: #0f1424;
+    border: 1px solid #1f2640;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .path-card.recommended {
+    border-color: #4ade80;
+    background: linear-gradient(135deg, #131829, #0f2018);
+  }
+  .path-name {
+    font-size: 11px;
+    color: #8b92a8;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .path-name .recommend-badge {
+    background: #4ade80;
+    color: #0a0e1a;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .path-time {
+    font-size: 16px;
+    font-weight: 700;
+    color: #60a5fa;
+    margin-bottom: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .path-card.recommended .path-time { color: #4ade80; }
+  .path-date {
+    font-size: 10px;
+    color: #6b7390;
+    margin-bottom: 8px;
+  }
+  .path-pros, .path-cons {
+    font-size: 10px;
+    color: #b4bcd0;
+    line-height: 1.4;
+    margin-bottom: 3px;
+  }
+  .path-pros::before { content: '+ '; color: #4ade80; }
+  .path-cons::before { content: '− '; color: #f87171; }
+  
+  /* 用户档案 */
+  .profile-card {
+    background: linear-gradient(135deg, #1a2238, #1e293b);
+    border: 1px solid #2a3654;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .profile-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 12px;
+  }
+  .profile-row .pr-label { color: #8b92a8; }
+  .profile-row .pr-value { color: #ffd166; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .profile-row .pr-link {
+    color: #60a5fa;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  
+  /* 订阅卡 */
+  .subscription-banner {
+    background: linear-gradient(135deg, #a78bfa, #60a5fa);
+    border-radius: 14px;
+    padding: 16px;
+    margin: 16px 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .sub-label {
+    font-size: 10px;
+    color: rgba(255,255,255,0.85);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .sub-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 4px;
+  }
+  .sub-desc {
+    font-size: 11px;
+    color: rgba(255,255,255,0.9);
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .sub-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .sub-price {
+    font-size: 22px;
+    font-weight: 700;
+    color: white;
+    font-variant-numeric: tabular-nums;
+  }
+  .sub-period {
+    font-size: 11px;
+    color: rgba(255,255,255,0.85);
+  }
+  .sub-cta {
+    background: white;
+    color: #2563eb;
+    border: 0;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  
+  /* 模型更新动画 */
+  .model-pulse {
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.25);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: #b4bcd0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+    animation: pulse 2s infinite;
+    flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+  }
+  .pulse-text strong { color: #4ade80; }
+  
+  /* Mini chart */
+  .mini-chart-wrap {
+    background: #0f1424;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .mini-chart-svg { display: block; width: 100%; height: auto; }
+  
+  /* 视图切换 */
+  .view { display: none; }
+  .view.active { display: block; }
+  
+  /* 设置项 */
+  .setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: #131829;
+    border: 1px solid #1f2640;
+    border-radius: 10px;
+    margin-bottom: 6px;
+  }
+  .setting-label {
+    font-size: 13px;
+    color: #e8eaf0;
+  }
+  .setting-sub {
+    font-size: 11px;
+    color: #6b7390;
+    margin-top: 2px;
+  }
+  .setting-value {
+    font-size: 12px;
+    color: #60a5fa;
+  }
+  
+  /* Toggle */
+  .toggle {
+    width: 40px;
+    height: 22px;
+    background: #2a3654;
+    border-radius: 22px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle.on { background: #4ade80; }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: left 0.2s;
+  }
+  .toggle.on::after { left: 20px; }
+  
+  /* 价格对比 */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .pricing-card {
+    background: #0f1424;
+    border: 1px solid #1f2640;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+  }
+  .pricing-card.featured {
+    border-color: #a78bfa;
+    background: linear-gradient(135deg, #131829, #1a1f3a);
+    position: relative;
+  }
+  .pricing-card.featured::before {
+    content: 'POPULAR';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #a78bfa;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+  .pricing-tier {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .pricing-price {
+    font-size: 22px;
+    font-weight: 700;
+    color: #60a5fa;
+    font-variant-numeric: tabular-nums;
+  }
+  .pricing-card.featured .pricing-price { color: #a78bfa; }
+  .pricing-period {
+    font-size: 10px;
+    color: #6b7390;
+    margin-bottom: 10px;
+  }
+  .pricing-feature {
+    font-size: 10px;
+    color: #b4bcd0;
+    text-align: left;
+    margin: 4px 0;
+    padding-left: 12px;
+    position: relative;
+  }
+  .pricing-feature::before {
+    content: '✓';
+    color: #4ade80;
+    position: absolute;
+    left: 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- App Bar -->
+<div class="app-bar">
+  <div class="app-logo">
+    <div class="logo-icon">🎯</div>
+    <span>PathSight</span>
+  </div>
+  <div class="app-bar-actions">
+    <div class="icon-btn">
+      🔔
+      <div class="notif-dot"></div>
+    </div>
+    <div class="icon-btn">👤</div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ============ TODAY 视图 ============ -->
+<div class="view active" id="view-today">
+  
+  <div class="model-pulse">
+    <div class="pulse-dot"></div>
+    <div class="pulse-text">
+      模型已基于 <strong>3 条新政策</strong> 更新 · 上次同步 12 分钟前
+    </div>
+  </div>
+  
+  <div class="hero">
+    <div class="hero-label">你的预计绿卡时间</div>
+    <div class="hero-value">2028 年 4 月</div>
+    <div class="hero-detail">基准情景 · 距今 <strong style="color:#ffd166">22 个月</strong> · 90% 区间 ±10 月</div>
+    <div class="hero-delta up">
+      <span>↑</span> 较上月预测提前 <strong>1.5 个月</strong>
+    </div>
+  </div>
+  
+  <div class="profile-card">
+    <div class="profile-row">
+      <span class="pr-label">PD</span>
+      <span class="pr-value">2024-06 (示例)</span>
+    </div>
+    <div class="profile-row">
+      <span class="pr-label">类别 / 出生国</span>
+      <span class="pr-value">EB-1A · CN</span>
+    </div>
+    <div class="profile-row">
+      <span class="pr-label">规划路径</span>
+      <span class="pr-value">CP · 曼谷</span>
+    </div>
+    <div class="profile-row">
+      <span class="pr-label">距 cutoff</span>
+      <span class="pr-value">+447 天</span>
+    </div>
+  </div>
+  
+  <div class="sec-title">
+    <span>3 条路径对比</span>
+    <span class="sec-action">详情 →</span>
+  </div>
+  
+  <div class="path-comparison">
+    <div class="path-card recommended">
+      <div class="path-name">
+        CP · 曼谷
+        <span class="recommend-badge">最优</span>
+      </div>
+      <div class="path-time">22 月</div>
+      <div class="path-date">≈ 2028-04</div>
+      <div class="path-pros">面签短 (6-10 周)</div>
+      <div class="path-pros">PM-0199 利好</div>
+      <div class="path-cons">需泰国居留</div>
+    </div>
+    <div class="path-card">
+      <div class="path-name">CP · 广州</div>
+      <div class="path-time">26 月</div>
+      <div class="path-date">≈ 2028-07</div>
+      <div class="path-pros">流程标准</div>
+      <div class="path-cons">面签排队 4-6 月</div>
+      <div class="path-cons">广州池子拥挤</div>
+    </div>
+  </div>
+  
+  <div class="path-comparison" style="grid-template-columns: 1fr;">
+    <div class="path-card">
+      <div class="path-name">境内 AOS (需先入美)</div>
+      <div class="path-time">28-32 月</div>
+      <div class="path-date">≈ 2028-09 至 2029-01</div>
+      <div class="path-pros">可境内等待 + 工作授权 (EAD)</div>
+      <div class="path-cons">PM-0199 后境内 AOS 收紧,自由裁量风险高</div>
+      <div class="path-cons">需先有合法非移民身份入境</div>
+    </div>
+  </div>
+  
+  <div class="sec-title">
+    <span>影响你的最新动态</span>
+    <span class="sec-action">查看全部 →</span>
+  </div>
+  
+  <div class="news-card high-impact">
+    <div class="news-meta">
+      <span class="news-tag alert">高影响</span>
+      <span>USCIS · 2 小时前</span>
+    </div>
+    <div class="news-title">PM-602-0199 发布:身份调整从"权利"变"特权"</div>
+    <div class="news-summary">
+      新政将境内 AOS 审批纳入自由裁量,境外申请人 (你的路径) 配额相对增加。
+    </div>
+    <div class="news-impact">
+      <span class="impact-label">对你的影响:</span>
+      预计加速 <span class="delta-pos">+2 个月</span> · 模型已自动更新
+    </div>
+  </div>
+  
+  <div class="news-card positive">
+    <div class="news-meta">
+      <span class="news-tag positive">利好</span>
+      <span>DOS · 昨天</span>
+    </div>
+    <div class="news-title">75 国移民签证冻结持续生效,EB-1 全球需求下降</div>
+    <div class="news-summary">
+      Proclamation 10998 持续执行,家庭类未用完名额预计在 FY27 溢出到 EB 类。
+    </div>
+    <div class="news-impact">
+      <span class="impact-label">对你的影响:</span>
+      预计加速 <span class="delta-pos">+3 个月</span> · 受 7% 上限限制
+    </div>
+  </div>
+  
+  <div class="news-card medium-impact">
+    <div class="news-meta">
+      <span class="news-tag warning">观察</span>
+      <span>DOS · 3 天前</span>
+    </div>
+    <div class="news-title">June 2026 visa bulletin:EB-2 China 退化警告</div>
+    <div class="news-summary">
+      EB-2 China 可能退化或标记"不可用"。EB-1 China 维持 2023-04-01 不变。
+    </div>
+    <div class="news-impact">
+      <span class="impact-label">对你的影响:</span>
+      间接影响 · 反映 FY26 配额紧张 <span class="delta-neg">−0.5 月</span>
+    </div>
+  </div>
+  
+  <div class="subscription-banner">
+    <div class="sub-label">🔓 PathSight Pro</div>
+    <div class="sub-title">解锁完整预测引擎</div>
+    <div class="sub-desc">
+      实时新闻推送 · 每条新政自动重算时间表 · 多路径对比 · 历史数据回溯
+    </div>
+    <div class="sub-price-row">
+      <div>
+        <div class="sub-price">¥38</div>
+        <div class="sub-period">/月 · 年付 ¥328</div>
+      </div>
+      <button class="sub-cta">免费试用 14 天</button>
+    </div>
+  </div>
+  
+</div>
+
+<!-- ============ NEWS 视图 ============ -->
+<div class="view" id="view-news">
+  
+  <div class="sec-title">
+    <span>新闻推送</span>
+    <span class="sec-action">筛选 ⏷</span>
+  </div>
+  
+  <div class="news-card high-impact">
+    <div class="news-meta">
+      <span class="news-tag alert">高影响</span>
+      <span>USCIS · 2026-05-22</span>
+    </div>
+    <div class="news-title">PM-602-0199:身份调整改为自由裁量恩典</div>
+    <div class="news-summary">
+      USCIS 发布政策备忘录,要求境内 AOS 申请人需证明"特殊情况"。所有非双重意图签证持有人受影响最大。
+    </div>
+    <div class="news-impact">
+      <span class="impact-label">模型变更:</span>
+      AOS 比例 70% → 40% · 你的预测 <span class="delta-pos">−2 个月</span>
+    </div>
+  </div>
+  
+  <div class="news-card positive">
+    <div class="news-meta">
+      <span class="news-tag positive">利好</span>
+      <span>DOS · 2026-05-22</span>
+    </div>
+    <div class="news-title">75 国移民签证冻结持续,FY27 名额预期溢出</div>
+    <div class="news-summary">
+      Proclamation 10998 执行半年。家庭类未用完名额预计创历史新高,FY27 EB 类全球池子扩大。
+    </div>
+    <div class="news-impact">
+      <span class="impact-label">模型变更:</span>
+      溢出乘数 1.0 → 1.20 · 你的预测 <span class="delta-pos">−3 个月</span>
+    </div>
+  </div>
+  
+  <div class="news-card medium-impact">
+    <div class="news-meta">
+      <span class="news-tag warning">需关注</span>
+      <span>DOS · 2026-05-15</span>
+    </div>
+    <div class="news-title">June 2026 visa bulletin:EB-2 China 退化警告</div>
+    <div class="news-summary">
+      EB-2 China 需求和签证号使用增加,DOS 警告未来几个月可能退化或标"U"。
+    </div>
+    <div class="news-impact">
+      <span class="impact-label">模型变更:</span>
+      退化风险 15% → 20% · 你的预测 <span class="delta-neg">+0.5 月</span>
+    </div>
+  </div>
+  
+  <div class="news-card low-impact">
+    <div class="news-meta">
+      <span class="news-tag info">参考</span>
+      <span>NVC · 2026-05-10</span>
+    </div>
+    <div class="news-title">NVC 居住国面签政策清单更新</div>
+    <div class="news-summary">
+      2025-11 生效的"居住国面签"政策清单细化,泰国居住证明文件清单明确。
+    </div>
+    <div class="news-impact">
+      <span class="impact-label">行动建议:</span>
+      建议准备 DTV 或 LTR 长期签证 (你的 ED 已短期化)
+    </div>
+  </div>
+  
+  <div class="news-card low-impact">
+    <div class="news-meta">
+      <span class="news-tag info">参考</span>
+      <span>诉讼追踪 · 2026-04-28</span>
+    </div>
+    <div class="news-title">75 国禁令面临联邦法院挑战</div>
+    <div class="news-summary">
+      多个移民律师团体提起诉讼,挑战 DOS 暂停 75 国移民签证的法定权限。
+    </div>
+    <div class="news-impact">
+      <span class="impact-label">风险:</span>
+      诉讼推翻概率 20% → 25% · 若推翻,你的预测 <span class="delta-neg">+3 月</span>
+    </div>
+  </div>
+  
+</div>
+
+<!-- ============ MODEL 视图 ============ -->
+<div class="view" id="view-model">
+  
+  <div class="sec-title">
+    <span>当前模型状态</span>
+  </div>
+  
+  <div class="mini-chart-wrap">
+    <svg class="mini-chart-svg" viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet" id="mini-chart"></svg>
+  </div>
+  
+  <div class="profile-card">
+    <div class="profile-row">
+      <span class="pr-label">基础配额 (China 7%)</span>
+      <span class="pr-value">2,800 张/年</span>
+    </div>
+    <div class="profile-row">
+      <span class="pr-label">75 国溢出加成</span>
+      <span class="pr-value" style="color:#4ade80">+560 张</span>
+    </div>
+    <div class="profile-row">
+      <span class="pr-label">境外通道有效配额</span>
+      <span class="pr-value">2,016 张/年</span>
+    </div>
+    <div class="profile-row">
+      <span class="pr-label">PD 密度</span>
+      <span class="pr-value">7.9 案/天</span>
+    </div>
+    <div class="profile-row">
+      <span class="pr-label">财年末开口预期</span>
+      <span class="pr-value">+800 张</span>
+    </div>
+    <div class="profile-row">
+      <span class="pr-label">诉讼推翻概率</span>
+      <span class="pr-value" style="color:#f87171">25%</span>
+    </div>
+  </div>
+  
+  <div class="sec-title">
+    <span>模型更新历史</span>
+  </div>
+  
+  <div class="card">
+    <div style="font-size:11px; color:#8b92a8; margin-bottom:4px">2026-05-23 16:32</div>
+    <div style="font-size:12px; color:#e8eaf0;">PM-602-0199 触发 · AOS 比例下调</div>
+    <div style="font-size:11px; color:#4ade80; margin-top:4px;">预测变化:2028-06 → 2028-04 (−2 月)</div>
+  </div>
+  
+  <div class="card">
+    <div style="font-size:11px; color:#8b92a8; margin-bottom:4px">2026-05-15 09:01</div>
+    <div style="font-size:12px; color:#e8eaf0;">June 2026 bulletin 发布 · EB-1 China 维持</div>
+    <div style="font-size:11px; color:#f87171; margin-top:4px;">预测变化:2028-04 → 2028-06 (+1.5 月)</div>
+  </div>
+  
+  <div class="card">
+    <div style="font-size:11px; color:#8b92a8; margin-bottom:4px">2026-04-22 11:14</div>
+    <div style="font-size:12px; color:#e8eaf0;">75 国诉讼受理 · 推翻概率上调</div>
+    <div style="font-size:11px; color:#fbbf24; margin-top:4px;">预测变化:2027-12 → 2028-03 (+3 月)</div>
+  </div>
+  
+</div>
+
+<!-- ============ PRICING 视图 ============ -->
+<div class="view" id="view-pricing">
+  
+  <div style="text-align:center; padding: 14px 0 20px;">
+    <div style="font-size:20px; font-weight:700; margin-bottom:6px;">选择你的订阅</div>
+    <div style="font-size:12px; color:#8b92a8;">所有方案 14 天免费试用 · 随时取消</div>
+  </div>
+  
+  <div class="pricing-grid">
+    <div class="pricing-card">
+      <div class="pricing-tier">Free</div>
+      <div class="pricing-price">¥0</div>
+      <div class="pricing-period">永久免费</div>
+      <div class="pricing-feature">基础排期查询</div>
+      <div class="pricing-feature">月度 bulletin 通知</div>
+      <div class="pricing-feature">单一情景预测</div>
+    </div>
+    <div class="pricing-card featured">
+      <div class="pricing-tier">Pro</div>
+      <div class="pricing-price">¥38</div>
+      <div class="pricing-period">/月 · 年付 ¥328 (省 28%)</div>
+      <div class="pricing-feature">三情景预测</div>
+      <div class="pricing-feature">新闻自动更新模型</div>
+      <div class="pricing-feature">多路径对比</div>
+      <div class="pricing-feature">实时推送</div>
+      <div class="pricing-feature">历史数据回溯</div>
+    </div>
+  </div>
+  
+  <div class="pricing-card" style="margin-bottom:12px;">
+    <div class="pricing-tier" style="color:#ffd166;">Elite · ¥888 / 一次性</div>
+    <div style="font-size:11px; color:#8b92a8; margin-top:4px; margin-bottom:10px;">永久使用 · 适合长排期申请人</div>
+    <div class="pricing-feature">Pro 全部功能</div>
+    <div class="pricing-feature">个人移民顾问 1v1 咨询 2 次</div>
+    <div class="pricing-feature">案件材料模板库</div>
+    <div class="pricing-feature">NVC / 领馆面签模拟训练</div>
+    <div class="pricing-feature">优先客服</div>
+  </div>
+  
+  <div style="background:#0f1424; border-radius:10px; padding:14px; margin-top:14px;">
+    <div style="font-size:11px; color:#ffd166; font-weight:600; margin-bottom:6px;">💡 为什么定价合理</div>
+    <div style="font-size:11px; color:#b4bcd0; line-height:1.6;">
+      移民律师咨询单次约 ¥1,500-3,000。PathSight Pro 一年的费用 ≈ 律师一次咨询的 1/5,但提供持续的政策追踪和决策辅助。<br><br>
+      对你这种已经在排期的人,<strong style="color:#ffd166;">每提前 1 个月 = 在美国多 1 个月的事业机会</strong>。
+    </div>
+  </div>
+  
+</div>
+
+</div>
+
+<!-- Tab Bar -->
+<div class="tab-bar">
+  <div class="tab-item active" data-view="today">
+    <div class="tab-icon">🏠</div>
+    <div>今日</div>
+  </div>
+  <div class="tab-item" data-view="news">
+    <div class="tab-icon">📰</div>
+    <div>新闻</div>
+  </div>
+  <div class="tab-item" data-view="model">
+    <div class="tab-icon">📊</div>
+    <div>模型</div>
+  </div>
+  <div class="tab-item" data-view="pricing">
+    <div class="tab-icon">💎</div>
+    <div>订阅</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// 视图切换
+var tabs = document.querySelectorAll('.tab-item');
+for (var i = 0; i < tabs.length; i++) {
+  tabs[i].addEventListener('click', function(e) {
+    var view = this.dataset.view;
+    var allViews = document.querySelectorAll('.view');
+    for (var j = 0; j < allViews.length; j++) allViews[j].classList.remove('active');
+    document.getElementById('view-' + view).classList.add('active');
+    
+    var allTabs = document.querySelectorAll('.tab-item');
+    for (var k = 0; k < allTabs.length; k++) allTabs[k].classList.remove('active');
+    this.classList.add('active');
+    
+    window.scrollTo(0, 0);
+    
+    if (view === 'model') drawMiniChart();
+  });
+}
+
+// Mini chart on model view
+function drawMiniChart() {
+  var svg = document.getElementById('mini-chart');
+  if (!svg) return;
+  
+  var W = 600, H = 220, PAD = 30;
+  
+  // 模拟历史 + 预测数据
+  var historicalY = [22, 22, 22, 22, 22.5, 23, 23.5, 23, 22, 22, 22, 22];
+  var predictionY = [22, 21, 20, 19, 17, 14, 10, 6, 3, 1, 0];
+  var months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月'];
+  
+  var maxVal = 24;
+  
+  function sx(idx, total) {
+    return PAD + (idx / (total - 1)) * (W - PAD * 2);
+  }
+  function sy(val) {
+    return PAD + (1 - val / maxVal) * (H - PAD * 2);
+  }
+  
+  // 历史曲线
+  var histPath = 'M';
+  for (var i = 0; i < historicalY.length; i++) {
+    histPath += sx(i, historicalY.length + predictionY.length).toFixed(1) + ',' + sy(historicalY[i]).toFixed(1) + (i < historicalY.length - 1 ? 'L' : '');
+  }
+  
+  // 预测曲线
+  var predStart = historicalY.length - 1;
+  var predPath = 'M' + sx(predStart, historicalY.length + predictionY.length).toFixed(1) + ',' + sy(historicalY[historicalY.length - 1]).toFixed(1);
+  for (var j = 0; j < predictionY.length; j++) {
+    predPath += 'L' + sx(predStart + j + 1, historicalY.length + predictionY.length).toFixed(1) + ',' + sy(predictionY[j]).toFixed(1);
+  }
+  
+  // 网格
+  var gridSvg = '';
+  for (var g = 0; g <= 4; g++) {
+    var gy = PAD + (g / 4) * (H - PAD * 2);
+    gridSvg += '<line x1="' + PAD + '" y1="' + gy + '" x2="' + (W - PAD) + '" y2="' + gy + '" stroke="#1f2640" stroke-width="1"/>';
+    gridSvg += '<text x="' + (PAD - 6) + '" y="' + (gy + 3) + '" fill="#6b7390" font-size="9" text-anchor="end">' + Math.round(maxVal - g * (maxVal/4)) + 'm</text>';
+  }
+  
+  // 今天的垂直分隔线
+  var todayX = sx(predStart, historicalY.length + predictionY.length);
+  
+  svg.innerHTML = 
+    gridSvg +
+    '<line x1="' + todayX + '" y1="' + PAD + '" x2="' + todayX + '" y2="' + (H - PAD) + '" stroke="#ffd166" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>' +
+    '<text x="' + todayX + '" y="' + (PAD - 6) + '" fill="#ffd166" font-size="9" text-anchor="middle">今天</text>' +
+    '<path d="' + histPath + '" fill="none" stroke="#8b92a8" stroke-width="2"/>' +
+    '<path d="' + predPath + '" fill="none" stroke="#60a5fa" stroke-width="2.5"/>' +
+    '<text x="' + (W - PAD) + '" y="' + (sy(0) + 14) + '" fill="#4ade80" font-size="10" text-anchor="end" font-weight="600">→ Current</text>' +
+    '<text x="' + PAD + '" y="' + (H - 8) + '" fill="#6b7390" font-size="9">距 Current 的月数 (蓝线 = 预测)</text>';
+}
+
+drawMiniChart();
+</script>
+
+</body>
+</html>

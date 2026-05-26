@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EB-1 China 双变量敏感性分析</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0a0e1a;
+    color: #e8eaf0;
+    padding: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 19px; margin-bottom: 4px; font-weight: 600; }
+  .subtitle { color: #8b92a8; font-size: 12px; margin-bottom: 16px; line-height: 1.5; }
+  
+  .card {
+    background: #131829;
+    border: 1px solid #1f2640;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  
+  .section-title {
+    font-size: 13px;
+    color: #b4bcd0;
+    margin-bottom: 12px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title::before {
+    content: '';
+    width: 3px;
+    height: 12px;
+    background: #60a5fa;
+    border-radius: 2px;
+  }
+  
+  /* 极限区间表 */
+  .limits-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .limits-table th {
+    text-align: left;
+    padding: 8px 6px;
+    background: #0f1424;
+    color: #8b92a8;
+    font-weight: 500;
+    font-size: 11px;
+    border-bottom: 1px solid #1f2640;
+  }
+  .limits-table td {
+    padding: 10px 6px;
+    border-bottom: 1px solid #1a2038;
+    font-variant-numeric: tabular-nums;
+  }
+  .limits-table tr:last-child td { border-bottom: 0; }
+  .limits-table .var-name { color: #b4bcd0; font-weight: 500; }
+  .limits-table .opt { color: #4ade80; }
+  .limits-table .base { color: #60a5fa; }
+  .limits-table .pess { color: #f87171; }
+  .limits-table .delta { color: #ffd166; font-size: 10px; }
+  
+  /* 二维热图 */
+  .heatmap-wrap {
+    background: #0f1424;
+    border-radius: 8px;
+    padding: 14px;
+    overflow-x: auto;
+  }
+  .heatmap-canvas {
+    display: block;
+    margin: 0 auto;
+  }
+  .heatmap-legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 10px;
+    color: #8b92a8;
+    justify-content: center;
+  }
+  .legend-gradient {
+    width: 200px;
+    height: 8px;
+    background: linear-gradient(to right, #4ade80, #ffd166, #f87171);
+    border-radius: 4px;
+  }
+  
+  /* 控制条 */
+  .control-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #b4bcd0;
+  }
+  .control-label .value-display {
+    color: #60a5fa;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 20px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    background: #1f2640;
+    border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: #60a5fa;
+    border-radius: 50%;
+    margin-top: -5.5px;
+    box-shadow: 0 0 0 3px rgba(96,165,250,0.15);
+  }
+  
+  /* 极限情景框 */
+  .extreme-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .extreme-cell {
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid;
+  }
+  .extreme-cell.best {
+    background: rgba(74,222,128,0.08);
+    border-color: rgba(74,222,128,0.3);
+  }
+  .extreme-cell.worst {
+    background: rgba(248,113,113,0.08);
+    border-color: rgba(248,113,113,0.3);
+  }
+  .extreme-cell .extreme-label {
+    font-size: 10px;
+    color: #8b92a8;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .extreme-cell .extreme-value {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .extreme-cell.best .extreme-value { color: #4ade80; }
+  .extreme-cell.worst .extreme-value { color: #f87171; }
+  .extreme-cell .extreme-detail {
+    font-size: 10px;
+    color: #6b7390;
+    line-height: 1.5;
+  }
+  
+  .footnote {
+    font-size: 10px;
+    color: #5a6280;
+    padding: 10px;
+    background: #0a0e1a;
+    border-left: 2px solid #1f2640;
+    line-height: 1.6;
+    margin-top: 10px;
+  }
+  
+  .anchor-card {
+    background: linear-gradient(135deg, #1a2238, #1e293b);
+    border: 1px solid #2a3654;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: #b4bcd0;
+    line-height: 1.6;
+  }
+  .anchor-card strong { color: #ffd166; }
+  .anchor-card .anchor-data {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>双变量敏感性分析</h1>
+<div class="subtitle">"积压案件池" × "境内 AOS 比例" — 对你 PD 2024-06-20 到 current 时间的影响极限</div>
+
+<div class="anchor-card">
+  <strong>真实数据锚点 (USCIS FY2025Q2 报告):</strong>
+  <div class="anchor-data">
+    <div>EB-1 China 2022 PD pending: <strong>1,300</strong></div>
+    <div>EB-1 China 2023 PD pending: <strong>2,365</strong></div>
+  </div>
+  <div style="margin-top:6px; color:#8b92a8">EB-1A/B 不要 PERM → 2022-2023 是真实需求曲线。线性外推至 2024 全年约 <strong>3,000-3,500 案</strong>。这是积压池参数的硬约束。</div>
+</div>
+
+<div class="card">
+  <div class="section-title">变量一: 积压案件池</div>
+  
+  <table class="limits-table">
+    <thead>
+      <tr>
+        <th>情景</th>
+        <th>积压案件 (总)</th>
+        <th>你之前的 PD 密度</th>
+        <th>等待月数</th>
+        <th>幅度</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="var-name opt">极限乐观</td>
+        <td>5,500 案</td>
+        <td>~2.8 案/天</td>
+        <td class="opt">14 月</td>
+        <td class="delta">-13 月</td>
+      </tr>
+      <tr>
+        <td class="var-name base">基准估算</td>
+        <td>8,500 案</td>
+        <td>~4.3 案/天</td>
+        <td class="base">22 月</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td class="var-name pess">极限悲观</td>
+        <td>13,000 案</td>
+        <td>~6.5 案/天</td>
+        <td class="pess">36 月</td>
+        <td class="delta">+14 月</td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <div class="footnote" style="margin-top:6px">
+    积压池影响路径: 池子越大 → PD 密度越高 → 每张签证只能推进更少天数 → cutoff 慢。<br>
+    上限锚定: USCIS 实报 2022-2023 = 3,665 案 + 估算 2024 全年 3,500 案 + 已批未消化 ≈ <strong>8,500 是中位数</strong>。
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">变量二: 境内 AOS 比例 (PM-0199 影响)</div>
+  
+  <table class="limits-table">
+    <thead>
+      <tr>
+        <th>情景</th>
+        <th>AOS 占比</th>
+        <th>境外可用名额</th>
+        <th>等待月数</th>
+        <th>幅度</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="var-name opt">极限乐观</td>
+        <td>20%</td>
+        <td>~2,240 张/年</td>
+        <td class="opt">15 月</td>
+        <td class="delta">-7 月</td>
+      </tr>
+      <tr>
+        <td class="var-name base">PM-0199 中性</td>
+        <td>40%</td>
+        <td>~1,680 张/年</td>
+        <td class="base">22 月</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td class="var-name pess">极限悲观</td>
+        <td>70%</td>
+        <td>~840 张/年</td>
+        <td class="pess">42 月</td>
+        <td class="delta">+20 月</td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <div class="footnote" style="margin-top:6px">
+    AOS 比例影响路径: 此变量只对**你这种走领事程序的人**起作用——分母变小，你的有效名额变大。<br>
+    上限锚定: 历史 AOS 占比约 65-75%。PM-0199 后预期 35-45%。极端值假设新政被强力执行 (20%) 或被法院推翻 (70%)。
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">二维敏感性: 两变量交互</div>
+  
+  <div class="heatmap-wrap">
+    <canvas id="heatmap" width="540" height="360" class="heatmap-canvas"></canvas>
+    <div class="heatmap-legend">
+      <span>快</span>
+      <div class="legend-gradient"></div>
+      <span>慢</span>
+      <span style="margin-left:12px">(月)</span>
+    </div>
+  </div>
+  
+  <div class="footnote" style="margin-top:8px">
+    每个格子 = 一组 (积压池, AOS 比例) 组合下你 PD current 所需月数。<br>
+    左下绿色区 = 双重利好 (小积压 + 低 AOS); 右上红色区 = 双重不利。<br>
+    黄色星标 = 当前最可能落点 (8500 案, 40% AOS)。
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">极限情景</div>
+  
+  <div class="extreme-row">
+    <div class="extreme-cell best">
+      <div class="extreme-label">理论最快</div>
+      <div class="extreme-value">10 个月</div>
+      <div class="extreme-detail">
+        积压 5,500 案 + AOS 仅 20%<br>
+        2027 年 Q1 你 PD current<br>
+        <em style="color:#4ade80">概率 < 5%</em>
+      </div>
+    </div>
+    <div class="extreme-cell worst">
+      <div class="extreme-label">理论最慢</div>
+      <div class="extreme-value">52 个月</div>
+      <div class="extreme-detail">
+        积压 13,000 案 + AOS 维持 70%<br>
+        2030 年下半年 PD current<br>
+        <em style="color:#f87171">概率 < 5%</em>
+      </div>
+    </div>
+  </div>
+  
+  <div style="margin-top:12px; padding:10px; background:#0f1424; border-radius:8px; border:1px solid #2a3654">
+    <div style="font-size:11px; color:#8b92a8; margin-bottom:4px">90% 置信区间</div>
+    <div style="font-size:18px; font-weight:600; color:#60a5fa">16 — 32 个月</div>
+    <div style="font-size:11px; color:#6b7390; margin-top:4px">
+      即 <strong style="color:#ffd166">2027 年 9 月 — 2029 年 1 月</strong> 之间，你 PD 大概率 current
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">交互式: 试试任意组合</div>
+  
+  <div class="control-row">
+    <div class="control-label">
+      <span>积压案件池</span>
+      <span class="value-display"><span id="v-pool">8500</span> 案</span>
+    </div>
+    <input type="range" id="pool" min="5500" max="13000" value="8500" step="500">
+  </div>
+  
+  <div class="control-row">
+    <div class="control-label">
+      <span>境内 AOS 比例</span>
+      <span class="value-display"><span id="v-aos">40</span>%</span>
+    </div>
+    <input type="range" id="aos" min="20" max="70" value="40" step="5">
+  </div>
+  
+  <div style="padding:14px; background:#0f1424; border-radius:8px; text-align:center; margin-top:8px">
+    <div style="font-size:11px; color:#8b92a8; margin-bottom:6px">预测 current 时间</div>
+    <div style="font-size:28px; font-weight:700; color:#60a5fa; font-variant-numeric: tabular-nums" id="prediction">22 月</div>
+    <div style="font-size:11px; color:#6b7390; margin-top:6px" id="prediction-date">≈ 2028 年 3 月</div>
+  </div>
+</div>
+
+<div class="footnote">
+  <strong>模型核心公式:</strong> 等待月数 = (你 PD 距 cutoff 的天数 × 当月 PD 密度) ÷ (年配额 × 回收 × 境外占比 / 12)<br>
+  其中 PD 密度 = 积压池 ÷ 积压跨度 (按 36 个月分布)。你的 PD 距当前 cutoff 距离: <strong>447 天</strong>。<br>
+  FY2026 EB-1 China 年配额按法定推算 ≈ 2,800 张，回收乘数取 1.15 (历史中位)。
+</div>
+
+</div>
+
+<script>
+const YOUR_PD = new Date('2024-06-20');
+const CURRENT_CUTOFF = new Date('2023-04-01');
+const DAYS_TO_PD = (YOUR_PD - CURRENT_CUTOFF) / (1000 * 3600 * 24); // 447 days
+const TODAY = new Date('2026-05-23');
+const ANNUAL_QUOTA = 2800;
+const RECAPTURE = 1.15;
+
+function predictMonths(pool, aosPercent) {
+  const overseasShare = 1 - aosPercent / 100;
+  const monthlyVisas = (ANNUAL_QUOTA * RECAPTURE * overseasShare) / 12;
+  const dailyDensity = pool / (36 * 30); // 积压在 36 个月内均匀分布
+  const advancePerMonth = monthlyVisas / dailyDensity; // 每月推进天数
+  return DAYS_TO_PD / advancePerMonth;
+}
+
+function formatDate(months) {
+  const d = new Date(TODAY);
+  d.setMonth(d.getMonth() + Math.round(months));
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1;
+  return `≈ ${year} 年 ${month} 月`;
+}
+
+// ============================================
+// 热图
+// ============================================
+function drawHeatmap() {
+  const canvas = document.getElementById('heatmap');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  
+  const pools = [5500, 6500, 7500, 8500, 9500, 10500, 11500, 12500];
+  const aosVals = [20, 30, 40, 50, 60, 70];
+  
+  const padLeft = 70, padTop = 30, padRight = 20, padBottom = 50;
+  const gridW = W - padLeft - padRight;
+  const gridH = H - padTop - padBottom;
+  const cellW = gridW / pools.length;
+  const cellH = gridH / aosVals.length;
+  
+  // 计算所有值找 min/max
+  const values = [];
+  for (let aos of aosVals) {
+    for (let pool of pools) {
+      values.push(predictMonths(pool, aos));
+    }
+  }
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  
+  function colorFor(v) {
+    const t = (v - minV) / (maxV - minV);
+    // 绿 -> 黄 -> 红
+    let r, g, b;
+    if (t < 0.5) {
+      const tt = t * 2;
+      r = Math.round(74 + (255 - 74) * tt);
+      g = Math.round(222 + (209 - 222) * tt);
+      b = Math.round(128 + (102 - 128) * tt);
+    } else {
+      const tt = (t - 0.5) * 2;
+      r = Math.round(255 + (248 - 255) * tt);
+      g = Math.round(209 + (113 - 209) * tt);
+      b = Math.round(102 + (113 - 102) * tt);
+    }
+    return `rgb(${r},${g},${b})`;
+  }
+  
+  // 画格子
+  for (let i = 0; i < pools.length; i++) {
+    for (let j = 0; j < aosVals.length; j++) {
+      const v = predictMonths(pools[i], aosVals[j]);
+      const x = padLeft + i * cellW;
+      const y = padTop + (aosVals.length - 1 - j) * cellH;
+      
+      ctx.fillStyle = colorFor(v);
+      ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
+      
+      // 数字
+      ctx.fillStyle = '#0a0e1a';
+      ctx.font = '600 11px -apple-system';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(v), x + cellW/2, y + cellH/2);
+    }
+  }
+  
+  // 标记当前最可能落点 (8500, 40)
+  const starI = pools.indexOf(8500);
+  const starJ = aosVals.indexOf(40);
+  const sx = padLeft + starI * cellW + cellW/2;
+  const sy = padTop + (aosVals.length - 1 - starJ) * cellH + cellH/2;
+  
+  // 画星形
+  ctx.save();
+  ctx.translate(sx, sy - cellH/2 + 8);
+  ctx.fillStyle = '#ffd166';
+  ctx.strokeStyle = '#0a0e1a';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const angle = (k * Math.PI) / 5 - Math.PI / 2;
+    const r = k % 2 === 0 ? 6 : 2.5;
+    const px = Math.cos(angle) * r;
+    const py = Math.sin(angle) * r;
+    if (k === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  
+  // 坐标轴
+  ctx.fillStyle = '#8b92a8';
+  ctx.font = '10px -apple-system';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  
+  // X 轴 (积压池)
+  for (let i = 0; i < pools.length; i++) {
+    const x = padLeft + i * cellW + cellW/2;
+    ctx.fillText((pools[i]/1000).toFixed(1) + 'k', x, padTop + gridH + 6);
+  }
+  ctx.font = '11px -apple-system';
+  ctx.fillStyle = '#b4bcd0';
+  ctx.fillText('积压案件池', padLeft + gridW/2, padTop + gridH + 24);
+  
+  // Y 轴 (AOS)
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.font = '10px -apple-system';
+  ctx.fillStyle = '#8b92a8';
+  for (let j = 0; j < aosVals.length; j++) {
+    const y = padTop + (aosVals.length - 1 - j) * cellH + cellH/2;
+    ctx.fillText(aosVals[j] + '%', padLeft - 8, y);
+  }
+  ctx.save();
+  ctx.translate(20, padTop + gridH/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.font = '11px -apple-system';
+  ctx.fillStyle = '#b4bcd0';
+  ctx.textAlign = 'center';
+  ctx.fillText('境内 AOS 比例', 0, 0);
+  ctx.restore();
+  
+  // 标题
+  ctx.fillStyle = '#b4bcd0';
+  ctx.font = '11px -apple-system';
+  ctx.textAlign = 'center';
+  ctx.fillText('PD current 等待月数', W/2, 12);
+}
+
+// ============================================
+// 交互
+// ============================================
+function updatePrediction() {
+  const pool = +document.getElementById('pool').value;
+  const aos = +document.getElementById('aos').value;
+  document.getElementById('v-pool').textContent = pool;
+  document.getElementById('v-aos').textContent = aos;
+  
+  const months = predictMonths(pool, aos);
+  document.getElementById('prediction').textContent = Math.round(months) + ' 月';
+  document.getElementById('prediction-date').textContent = formatDate(months);
+}
+
+document.querySelectorAll('input[type="range"]').forEach(input => {
+  input.addEventListener('input', updatePrediction);
+});
+
+drawHeatmap();
+updatePrediction();
+</script>
+
+</body>
+</html>

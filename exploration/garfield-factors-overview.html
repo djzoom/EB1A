@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>影响你排期的因素全景</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0a0e1a;
+    color: #e8eaf0;
+    padding: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 19px; margin-bottom: 4px; font-weight: 600; }
+  .subtitle { color: #8b92a8; font-size: 12px; margin-bottom: 18px; line-height: 1.5; }
+  
+  /* 影响因素卡片 */
+  .factor-card {
+    background: #131829;
+    border: 1px solid #1f2640;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  
+  .factor-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    gap: 12px;
+  }
+  
+  .factor-rank {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .rank-1 { background: linear-gradient(135deg, #f87171, #dc2626); color: white; }
+  .rank-2 { background: linear-gradient(135deg, #fb923c, #ea580c); color: white; }
+  .rank-3 { background: linear-gradient(135deg, #fbbf24, #d97706); color: white; }
+  .rank-4 { background: linear-gradient(135deg, #60a5fa, #2563eb); color: white; }
+  .rank-5 { background: linear-gradient(135deg, #a78bfa, #7c3aed); color: white; }
+  .rank-6 { background: linear-gradient(135deg, #4ade80, #16a34a); color: white; }
+  .rank-7 { background: linear-gradient(135deg, #6b7390, #475569); color: white; }
+  
+  .factor-meta { flex: 1; min-width: 0; }
+  .factor-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8eaf0;
+    margin-bottom: 2px;
+  }
+  .factor-tag {
+    font-size: 10px;
+    color: #6b7390;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  
+  /* 影响力条 */
+  .impact-bar {
+    height: 4px;
+    background: #0f1424;
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 0 14px 12px;
+  }
+  .impact-fill {
+    height: 100%;
+    border-radius: 2px;
+  }
+  .impact-1 { width: 95%; background: linear-gradient(90deg, #f87171, #dc2626); }
+  .impact-2 { width: 80%; background: linear-gradient(90deg, #fb923c, #ea580c); }
+  .impact-3 { width: 65%; background: linear-gradient(90deg, #fbbf24, #d97706); }
+  .impact-4 { width: 50%; background: linear-gradient(90deg, #60a5fa, #2563eb); }
+  .impact-5 { width: 35%; background: linear-gradient(90deg, #a78bfa, #7c3aed); }
+  .impact-6 { width: 22%; background: linear-gradient(90deg, #4ade80, #16a34a); }
+  .impact-7 { width: 12%; background: linear-gradient(90deg, #6b7390, #475569); }
+  
+  .factor-detail {
+    padding: 0 14px 14px;
+    font-size: 12px;
+    color: #b4bcd0;
+    line-height: 1.7;
+  }
+  
+  .factor-body {
+    margin-top: 4px;
+  }
+  
+  .factor-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    margin-right: 4px;
+  }
+  .status-positive { background: rgba(74,222,128,0.15); color: #4ade80; }
+  .status-negative { background: rgba(248,113,113,0.15); color: #f87171; }
+  .status-neutral { background: rgba(96,165,250,0.15); color: #60a5fa; }
+  .status-mixed { background: rgba(251,146,60,0.15); color: #fb923c; }
+  
+  .factor-effect {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: #0a0e1a;
+    border-radius: 6px;
+    border-left: 2px solid #2a3654;
+    font-size: 11px;
+  }
+  .factor-effect strong { color: #ffd166; }
+  
+  /* 顶部摘要 */
+  .summary-card {
+    background: linear-gradient(135deg, #1a2238, #1e293b);
+    border: 1px solid #2a3654;
+    padding: 14px;
+    border-radius: 12px;
+    margin-bottom: 14px;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .summary-cell {
+    text-align: center;
+    padding: 8px;
+  }
+  .summary-cell .summary-label {
+    font-size: 10px;
+    color: #8b92a8;
+    margin-bottom: 4px;
+  }
+  .summary-cell .summary-val {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffd166;
+    font-variant-numeric: tabular-nums;
+  }
+  
+  .legend {
+    display: flex;
+    justify-content: space-around;
+    font-size: 10px;
+    color: #8b92a8;
+    margin-top: 8px;
+    padding: 8px;
+    background: #0f1424;
+    border-radius: 6px;
+  }
+  
+  .section-title {
+    font-size: 13px;
+    color: #b4bcd0;
+    margin: 16px 0 10px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title::before {
+    content: '';
+    width: 3px;
+    height: 12px;
+    background: #60a5fa;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>影响你排期的因素 — 按影响力排序</h1>
+<div class="subtitle">PD 2024-06 (示例) · EB-1A · 中国大陆出生</div>
+
+<div class="summary-card">
+  <div style="font-size: 11px; color: #8b92a8; margin-bottom: 4px;">基准情景预测</div>
+  <div style="font-size: 22px; font-weight: 700; color: #ffd166;">2028 年 3-5 月面签</div>
+  <div class="summary-grid">
+    <div class="summary-cell">
+      <div class="summary-label">距今</div>
+      <div class="summary-val">~23 个月</div>
+    </div>
+    <div class="summary-cell">
+      <div class="summary-label">90% 区间</div>
+      <div class="summary-val">±10 月</div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <span>🔴 减速</span>
+  <span>🟠 双向</span>
+  <span>🔵 中性</span>
+  <span>🟢 加速</span>
+</div>
+
+<div class="section-title">第一梯队 · 决定性因素</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-1">1</div>
+    <div class="factor-meta">
+      <div class="factor-name">EB-1 China 7% 单国上限</div>
+      <div class="factor-tag">
+        <span class="factor-status status-negative">硬约束</span>
+        <span>法律层面 · 不会变</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-1"></div></div>
+  <div class="factor-detail">
+    INA 规定每个国家最多分得 EB 类总配额的 7%。全球 EB-1 配额约 4 万,中国分到约 <strong style="color:#ffd166">2,800 张/年</strong>。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 这是你排期慢的根本原因。无论其他变量怎么波动,你的"分母"被锁死在这里。所有"利好"都要先穿过 7% 这道门。
+    </div>
+  </div>
+</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-2">2</div>
+    <div class="factor-meta">
+      <div class="factor-name">积压案件池 (隐藏 + 显性)</div>
+      <div class="factor-tag">
+        <span class="factor-status status-negative">主要瓶颈</span>
+        <span>FY22-24 累计 16,818 件</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-2"></div></div>
+  <div class="factor-detail">
+    中国大陆 EB-1A 申请量从 FY22 的 3,422 件飙升到 FY24 的 7,160 件。三年累计申请已超过 18 年的中国 EB-1 配额。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 排在你前面的人越多,推进越慢。±14 个月的影响幅度,是<strong>单变量最大影响因子</strong>。8,500 案 → 22 月,13,000 案 → 36 月。
+    </div>
+  </div>
+</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-3">3</div>
+    <div class="factor-meta">
+      <div class="factor-name">财年末"开口"吸收量</div>
+      <div class="factor-tag">
+        <span class="factor-status status-positive">关键加速器</span>
+        <span>历史 cutoff 跳跃主因</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-3"></div></div>
+  <div class="factor-detail">
+    每年 7-9 月,其他国家没用完的 EB-1 名额会"开口"给中国/印度。<strong style="color:#ffd166">75 国禁令使 FY26-27 末的开口量异常大</strong>。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 2026 年 9-10 月和 2027 年 9-10 月是两个最关键的窗口。模型估算这两次开口可能让 cutoff 各跳跃 4-8 个月。
+    </div>
+  </div>
+</div>
+
+<div class="section-title">第二梯队 · 政策变量</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-4">4</div>
+    <div class="factor-meta">
+      <div class="factor-name">75 国移民签证冻结</div>
+      <div class="factor-tag">
+        <span class="factor-status status-positive">间接利好</span>
+        <span>Proclamation 10998 · 2026-01 生效</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-4"></div></div>
+  <div class="factor-detail">
+    中国<strong style="color:#4ade80">不在</strong>75 国名单。但禁令使全球签证号消化变慢,家庭类未用完会溢出到 EB 类,中国按 7% 分到。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 净加速 3-6 个月。<strong>风险</strong> — 已有诉讼挑战 (25% 推翻概率),若被推翻溢出消失。
+    </div>
+  </div>
+</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-5">5</div>
+    <div class="factor-meta">
+      <div class="factor-name">PM-602-0199 (AOS 收紧)</div>
+      <div class="factor-tag">
+        <span class="factor-status status-positive">利好</span>
+        <span>2026-05-21 发布</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-5"></div></div>
+  <div class="factor-detail">
+    把"境内身份调整"变成"自由裁量特权",境内 AOS 通道收紧。<strong style="color:#ffd166">境外配额相对增加 ~15%</strong>。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 净加速 2-3 个月。你走曼谷领事程序,反向受益。<strong>风险</strong> — 30% 诉讼推翻概率。
+    </div>
+  </div>
+</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-5">6</div>
+    <div class="factor-meta">
+      <div class="factor-name">财年末退化风险</div>
+      <div class="factor-tag">
+        <span class="factor-status status-negative">短期不确定</span>
+        <span>每年 7-9 月可能发生</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-5"></div></div>
+  <div class="factor-detail">
+    若某财年签证号即将超额,DOS 会把 cutoff 临时退化甚至标"U"。FY25 EB-1 全球曾在 8 月用完。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 约 20-25% 概率短期延迟 1-3 个月。<strong>2026 年 7-9 月是首个高风险窗口</strong>。即使发生,FY27 (10 月) 会重置。
+    </div>
+  </div>
+</div>
+
+<div class="section-title">第三梯队 · 流程因素</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-6">7</div>
+    <div class="factor-meta">
+      <div class="factor-name">曼谷面签队列容量</div>
+      <div class="factor-tag">
+        <span class="factor-status status-positive">独立通道</span>
+        <span>非广州池子</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-6"></div></div>
+  <div class="factor-detail">
+    曼谷 IV Unit 处理整个东南亚,中国大陆 EB-1A 申请人占比极小。cutoff 到达后,从 NVC 排到面签 <strong style="color:#4ade80">6-10 周</strong> (广州需 4-6 月)。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 节省 3-4 个月。这部分确定性高,不太可能变坏。
+    </div>
+  </div>
+</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-6">8</div>
+    <div class="factor-meta">
+      <div class="factor-name">NVC 文件处理效率</div>
+      <div class="factor-tag">
+        <span class="factor-status status-neutral">可控</span>
+        <span>你可主动加速</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-6"></div></div>
+  <div class="factor-detail">
+    NVC 收到 cutoff 推进信号后,开始处理 DS-260、民事文件审核、安排面签。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 提前备齐所有文件 (出生公证、无犯罪记录、居留证明等) 可省 1-2 个月。<strong>这是你能直接控制的唯一变量</strong>。
+    </div>
+  </div>
+</div>
+
+<div class="section-title">第四梯队 · 你的个人状态</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-7">9</div>
+    <div class="factor-meta">
+      <div class="factor-name">泰国签证身份连续性</div>
+      <div class="factor-tag">
+        <span class="factor-status status-mixed">需主动维护</span>
+        <span>ED 签证已短期化</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-7"></div></div>
+  <div class="factor-detail">
+    面签当天需要有效的泰国长期签证 + 居住证明。当前 ED 签证已变短期,建议切换 DTV。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 不影响排期速度,但影响是否能在曼谷面签。<strong>不维护好可能导致被迫转广州 (慢 3-4 月)</strong>。
+    </div>
+  </div>
+</div>
+
+<div class="factor-card">
+  <div class="factor-header">
+    <div class="factor-rank rank-7">10</div>
+    <div class="factor-meta">
+      <div class="factor-name">个人案件质量 (EB-1A 材料)</div>
+      <div class="factor-tag">
+        <span class="factor-status status-positive">已完成</span>
+        <span>I-140 已批 · premium</span>
+      </div>
+    </div>
+  </div>
+  <div class="impact-bar"><div class="impact-fill impact-7"></div></div>
+  <div class="factor-detail">
+    I-140 已于 2024-09 通过 premium processing 批准,案件质量已被 USCIS 认可。
+    <div class="factor-effect">
+      <strong>对你的影响:</strong> 几乎无风险。曼谷领事官 RFE 概率极低,主要看排期。
+    </div>
+  </div>
+</div>
+
+<div class="section-title">关键洞察</div>
+
+<div class="factor-card" style="background: linear-gradient(135deg, #1a2238, #2a1f3a); border-color: #ff5e8a;">
+  <div class="factor-detail" style="padding: 14px; font-size: 12px; line-height: 1.7;">
+    <p style="margin-bottom: 8px;"><strong style="color:#ff8eaa;">真正决定你排期的不是 10 个因素均匀作用,而是 3 个核心:</strong></p>
+    <ul style="margin-left: 18px; color: #b4bcd0;">
+      <li style="margin: 4px 0;"><strong style="color:#ffd166;">7% 上限 (无法改变)</strong> + <strong style="color:#ffd166;">积压池</strong> 决定基础速度</li>
+      <li style="margin: 4px 0;"><strong style="color:#ffd166;">财年末开口</strong> 决定何时跳跃 (75 国禁令放大此效应)</li>
+      <li style="margin: 4px 0;"><strong style="color:#ffd166;">诉讼结果</strong> 决定最终情景在哪个梯队 (乐观/基准/悲观)</li>
+    </ul>
+    <p style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #2a3654;">
+      你<strong style="color:#4ade80;">能控制的只有第 8 项 (NVC 文件准备)</strong> 和 <strong style="color:#4ade80;">第 9 项 (签证身份)</strong>。其他都是宏观变量,你只能等和观察。
+    </p>
+  </div>
+</div>
+
+<div class="section-title">你应该盯住的三个观察窗口</div>
+
+<div class="factor-card">
+  <div class="factor-detail" style="padding: 14px;">
+    <div style="margin-bottom: 12px; padding: 10px; background: #0a0e1a; border-radius: 6px; border-left: 3px solid #ffd166;">
+      <div style="color: #ffd166; font-weight: 600; font-size: 12px;">🎯 2026 年 8-10 月</div>
+      <div style="font-size: 11px; color: #b4bcd0; margin-top: 4px;">
+        DOS 公布 FY26 用完情况 + 75 国禁令首份完整年度数据。届时不确定性<strong>大幅收窄</strong>。
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 12px; padding: 10px; background: #0a0e1a; border-radius: 6px; border-left: 3px solid #60a5fa;">
+      <div style="color: #60a5fa; font-weight: 600; font-size: 12px;">🎯 2026 年下半年至 2027 年初</div>
+      <div style="font-size: 11px; color: #b4bcd0; margin-top: 4px;">
+        75 国禁令诉讼初步裁决。如果禁令被推翻,你的基准时间表会<strong>后退 3-4 个月</strong>。
+      </div>
+    </div>
+    
+    <div style="padding: 10px; background: #0a0e1a; border-radius: 6px; border-left: 3px solid #4ade80;">
+      <div style="color: #4ade80; font-weight: 600; font-size: 12px;">🎯 2027 年 9-10 月</div>
+      <div style="font-size: 11px; color: #b4bcd0; margin-top: 4px;">
+        FY28 新财年开始。你 PD current 的<strong>最高概率窗口</strong>。届时如未 current,准备进入下一个 FY28 末观察。
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
