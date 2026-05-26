@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EB-1 China 排期模拟器 V3</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0a0e1a;
+    color: #e8eaf0;
+    padding: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 19px; margin-bottom: 4px; font-weight: 600; }
+  .subtitle { color: #8b92a8; font-size: 12px; margin-bottom: 16px; line-height: 1.5; }
+  .version-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: rgba(96,165,250,0.15);
+    color: #60a5fa;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  
+  .card {
+    background: #131829;
+    border: 1px solid #1f2640;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  
+  .section-title {
+    font-size: 13px;
+    color: #b4bcd0;
+    margin-bottom: 10px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title::before {
+    content: '';
+    width: 3px;
+    height: 12px;
+    background: #60a5fa;
+    border-radius: 2px;
+  }
+  
+  .pd-badge {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #1e293b, #2a3654);
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #3b4870;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .pd-badge strong { color: #ffd166; }
+  
+  /* 主图区域 */
+  .chart-wrap {
+    background: #0f1424;
+    border-radius: 8px;
+    padding: 8px;
+    overflow-x: auto;
+  }
+  .chart-svg { display: block; width: 100%; height: auto; }
+  
+  /* 当前结果显示 */
+  .current-result {
+    background: linear-gradient(135deg, #1a2238, #1e293b);
+    border: 1px solid #3b4870;
+    padding: 12px 14px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+  }
+  .current-result .cr-label {
+    font-size: 10px;
+    color: #8b92a8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .current-result .cr-scenario {
+    font-size: 13px;
+    color: #b4bcd0;
+    margin: 2px 0;
+  }
+  .current-result .cr-scenario strong { color: #ffd166; }
+  
+  .cr-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .cr-cell {
+    background: #0a0e1a;
+    border-radius: 6px;
+    padding: 8px 6px;
+    text-align: center;
+  }
+  .cr-cell .cr-cell-label {
+    font-size: 9px;
+    color: #6b7390;
+    margin-bottom: 2px;
+  }
+  .cr-cell .cr-cell-val {
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .cr-cell .cr-cell-date {
+    font-size: 9px;
+    color: #6b7390;
+    margin-top: 2px;
+  }
+  .cr-cell.opt .cr-cell-val { color: #4ade80; }
+  .cr-cell.base .cr-cell-val { color: #60a5fa; }
+  .cr-cell.pess .cr-cell-val { color: #f87171; }
+  
+  /* 基线选择器 */
+  .baseline-selector {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  @media (min-width: 540px) {
+    .baseline-selector { grid-template-columns: repeat(4, 1fr); }
+  }
+  .baseline-btn {
+    padding: 10px 6px;
+    font-size: 11px;
+    background: #0f1424;
+    border: 1px solid #1f2640;
+    color: #e8eaf0;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    position: relative;
+    transition: all 0.15s;
+    text-align: left;
+  }
+  .baseline-btn:hover { background: #1a2238; }
+  .baseline-btn.active {
+    background: #1e293b;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .baseline-btn .bl-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .baseline-btn .bl-name {
+    font-weight: 600;
+    color: #e8eaf0;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .baseline-btn .bl-desc {
+    font-size: 10px;
+    color: #6b7390;
+    display: block;
+  }
+  .baseline-btn.active .bl-desc {
+    color: #8b92a8;
+  }
+  
+  /* 控件 */
+  .controls { display: flex; flex-direction: column; gap: 10px; }
+  .control-row { display: flex; flex-direction: column; gap: 4px; }
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #b4bcd0;
+  }
+  .control-label .value-display {
+    color: #60a5fa;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 20px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    background: #1f2640;
+    border-radius: 2px;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 3px;
+    background: #1f2640;
+    border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: #60a5fa;
+    border-radius: 50%;
+    margin-top: -5.5px;
+    box-shadow: 0 0 0 3px rgba(96,165,250,0.15);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: #60a5fa;
+    border-radius: 50%;
+    border: 0;
+    box-shadow: 0 0 0 3px rgba(96,165,250,0.15);
+  }
+  
+  .info-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2a3654;
+    color: #8b92a8;
+    text-align: center;
+    line-height: 14px;
+    font-size: 10px;
+    cursor: help;
+    margin-left: 4px;
+  }
+  
+  .legend {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    font-size: 10px;
+    color: #b4bcd0;
+    margin-top: 6px;
+    padding: 8px;
+    background: #0a0e1a;
+    border-radius: 6px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .legend-swatch {
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+  }
+  
+  .footnote {
+    font-size: 10px;
+    color: #5a6280;
+    margin-top: 12px;
+    padding: 10px;
+    background: #0a0e1a;
+    border-left: 2px solid #1f2640;
+    line-height: 1.7;
+  }
+  
+  .factor-note {
+    background: linear-gradient(135deg, #1a2238, #2a1f3a);
+    border: 1px solid #2a3654;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: #b4bcd0;
+    line-height: 1.6;
+  }
+  .factor-note strong { color: #ffd166; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>EB-1 China 排期模拟器 <span class="version-badge">V3 · 多基线同图</span></h1>
+<div class="subtitle">所有预测基线<strong style="color:#60a5fa">同图显示</strong>,选中某组时高亮该组的乐观/基准/悲观三条曲线</div>
+
+<div class="card">
+  <div class="pd-badge">
+    <span>你的 PD:</span>
+    <strong>2024-06-20</strong>
+    <span style="color:#6b7390">·</span>
+    <span>距 cutoff (2023-04-01)</span>
+    <strong>+447 天</strong>
+  </div>
+  
+  <div class="factor-note">
+    <strong>核心约束</strong> · 7% 上限 (天花板) + 积压池规模 (~8,500 案) + 财年末开口 (主要引擎)<br>
+    <span style="font-size:10px; color:#8b92a8">75 国冻结、PM-0199、退化风险等政策变量,通过下方"基线"选择切换其组合状态</span>
+  </div>
+  
+  <div class="chart-wrap">
+    <svg id="chart" class="chart-svg" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+  
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#8b92a8"></div>历史</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#ffd166"></div>你的 PD</div>
+    <div class="legend-item" style="margin-left:8px"><span style="font-size:9px;color:#6b7390">点击下方基线切换高亮</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">选择预测基线</div>
+  
+  <div class="baseline-selector" id="baselines">
+    <button class="baseline-btn active" data-baseline="current" style="--accent: #60a5fa;">
+      <span class="bl-dot"></span>
+      <span class="bl-name">当前现实</span>
+      <span class="bl-desc">含 75 国 + PM-0199<br>诉讼 25% 推翻概率</span>
+    </button>
+    <button class="baseline-btn" data-baseline="pre-2026" style="--accent: #8b92a8;">
+      <span class="bl-dot"></span>
+      <span class="bl-name">2026 前基线</span>
+      <span class="bl-desc">假设所有 2026<br>新政都不存在</span>
+    </button>
+    <button class="baseline-btn" data-baseline="best-case" style="--accent: #4ade80;">
+      <span class="bl-dot"></span>
+      <span class="bl-name">最佳情景</span>
+      <span class="bl-desc">禁令持续 + 大溢出<br>积压偏小</span>
+    </button>
+    <button class="baseline-btn" data-baseline="worst-case" style="--accent: #f87171;">
+      <span class="bl-dot"></span>
+      <span class="bl-name">最坏情景</span>
+      <span class="bl-desc">诉讼推翻 + 退化<br>积压大</span>
+    </button>
+  </div>
+  
+  <div class="current-result">
+    <div class="cr-label">当前选中基线</div>
+    <div class="cr-scenario"><strong id="current-name">当前现实</strong></div>
+    <div class="cr-grid">
+      <div class="cr-cell opt">
+        <div class="cr-cell-label">乐观 P10</div>
+        <div class="cr-cell-val" id="r-opt">—</div>
+        <div class="cr-cell-date" id="d-opt"></div>
+      </div>
+      <div class="cr-cell base">
+        <div class="cr-cell-label">基准 P50</div>
+        <div class="cr-cell-val" id="r-base">—</div>
+        <div class="cr-cell-date" id="d-base"></div>
+      </div>
+      <div class="cr-cell pess">
+        <div class="cr-cell-label">悲观 P90</div>
+        <div class="cr-cell-val" id="r-pess">—</div>
+        <div class="cr-cell-date" id="d-pess"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">微调当前基线 (高级)</div>
+  <div class="controls">
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>积压案件池<span class="info-icon" title="累计已批 I-140 中国大陆申请人">i</span></span>
+        <span class="value-display"><span id="v-pool">8500</span> 件</span>
+      </div>
+      <input type="range" id="pool" min="5500" max="13000" value="8500" step="500">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>财年末开口<span class="info-icon" title="其他国家未用完时中国吸收量">i</span></span>
+        <span class="value-display"><span id="v-yearend">800</span> 张</span>
+      </div>
+      <input type="range" id="yearend" min="200" max="2000" value="800" step="100">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>境外通道比例<span class="info-icon" title="PM-0199 让境内 AOS 收紧后,境外获得的份额">i</span></span>
+        <span class="value-display"><span id="v-aos">60</span>%</span>
+      </div>
+      <input type="range" id="aos" min="20" max="80" value="60" step="5">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>诉讼推翻概率<span class="info-icon" title="75 国禁令 + PM-0199 被法院推翻的可能性">i</span></span>
+        <span class="value-display"><span id="v-litigation">25</span>%</span>
+      </div>
+      <input type="range" id="litigation" min="0" max="80" value="25" step="5">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>退化风险<span class="info-icon" title="财年末 cutoff 临时退化概率">i</span></span>
+        <span class="value-display"><span id="v-retro">20</span>%</span>
+      </div>
+      <input type="range" id="retro" min="0" max="50" value="20" step="5">
+    </div>
+    
+  </div>
+</div>
+
+<div class="footnote">
+  <strong>读图指南:</strong> 同时显示 4 组基线的预测曲线 (每组含乐观/基准/悲观三条)。当前选中基线高亮显示,其他基线淡化但仍可见以便对比。曲线穿过黄色虚线 (你的 PD) 的时刻 = current 时刻。点击不同基线按钮即可切换高亮组。微调控件会调整<strong>当前选中基线</strong>的参数。
+</div>
+
+</div>
+
+<script>
+"use strict";
+
+var YOUR_PD = new Date('2024-06-20').getTime();
+var TODAY = new Date('2026-05-23').getTime();
+var CURRENT_CUTOFF = new Date('2023-04-01').getTime();
+var MS_PER_DAY = 24 * 3600 * 1000;
+
+var HISTORY = [
+  ['2023-04-15', '2022-02-15'],
+  ['2023-10-15', '2022-04-01'],
+  ['2024-04-15', '2022-07-15'],
+  ['2024-10-15', '2022-11-08'],
+  ['2025-04-15', '2022-11-08'],
+  ['2025-10-15', '2022-12-22'],
+  ['2025-12-15', '2023-01-22'],
+  ['2026-01-15', '2023-02-01'],
+  ['2026-03-15', '2023-03-15'],
+  ['2026-04-15', '2023-04-01'],
+  ['2026-05-15', '2023-04-01'],
+  ['2026-06-15', '2023-04-01']
+].map(function(p) {
+  return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() };
+});
+
+// 四个基线
+var BASELINES = {
+  'current': {
+    name: '当前现实',
+    color: '#60a5fa',
+    params: { quota: 2800, overflow: 1.20, yearend: 800, aos: 60, pool: 8500, retro: 20, litigation: 0.25 }
+  },
+  'pre-2026': {
+    name: '2026 前基线',
+    color: '#8b92a8',
+    params: { quota: 2800, overflow: 1.00, yearend: 600, aos: 30, pool: 8500, retro: 25, litigation: 0 }
+  },
+  'best-case': {
+    name: '最佳情景',
+    color: '#4ade80',
+    params: { quota: 3000, overflow: 1.40, yearend: 1400, aos: 70, pool: 6500, retro: 10, litigation: 0.10 }
+  },
+  'worst-case': {
+    name: '最坏情景',
+    color: '#f87171',
+    params: { quota: 2400, overflow: 1.05, yearend: 400, aos: 35, pool: 11000, retro: 40, litigation: 0.70 }
+  }
+};
+
+var activeBaseline = 'current';
+
+// ============================================
+// 模拟核心
+// ============================================
+function simulate(params, scenarioBias) {
+  var months = 60;
+  var result = [];
+  var cutoff = CURRENT_CUTOFF;
+  
+  var effectiveOverflow = 1 + (params.overflow - 1) * (1 - params.litigation);
+  var overseasShare = 1 - params.aos / 100;
+  var yearMonthlyBase = params.quota * effectiveOverflow * overseasShare / 12;
+  var dailyDensity = params.pool / (36 * 30);
+  
+  var startDate = new Date(TODAY);
+  
+  for (var i = 0; i < months; i++) {
+    var monthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 15);
+    var m = monthDate.getMonth();
+    
+    var noise = (Math.random() + Math.random() + Math.random() - 1.5) * 0.35;
+    var monthlyVisas = yearMonthlyBase * (1 + noise + scenarioBias * 0.2);
+    
+    if (m === 6 || m === 7 || m === 8) {
+      monthlyVisas += (params.yearend / 3) * (1 + noise * 0.5) * (1 - params.litigation);
+    }
+    
+    if ((m === 7 || m === 8) && Math.random() * 100 < params.retro) {
+      monthlyVisas = -Math.abs(monthlyVisas) * 0.8;
+    }
+    
+    if (m === 9 && i > 0) {
+      monthlyVisas *= (2.0 + (effectiveOverflow - 1) * 2);
+    }
+    
+    var advanceDays = monthlyVisas / dailyDensity;
+    cutoff = cutoff + advanceDays * MS_PER_DAY;
+    result.push({ x: monthDate.getTime(), y: cutoff });
+    
+    if (cutoff > YOUR_PD + 365 * MS_PER_DAY) break;
+  }
+  
+  return result;
+}
+
+function findCrossing(curve) {
+  for (var i = 0; i < curve.length; i++) {
+    if (curve[i].y >= YOUR_PD) return curve[i].x;
+  }
+  return null;
+}
+
+function formatMonthsAway(timestamp) {
+  if (!timestamp) return '5年+';
+  var diff = (timestamp - TODAY) / (MS_PER_DAY * 30.44);
+  if (diff < 1) return '<1月';
+  if (diff < 12) return Math.round(diff) + '月';
+  var y = Math.floor(diff / 12);
+  var m = Math.round(diff - y * 12);
+  return y + '年' + (m > 0 ? m + '月' : '');
+}
+
+function formatDate(timestamp) {
+  if (!timestamp) return '';
+  var d = new Date(timestamp);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+function medianOfCurves(curves) {
+  var maxLen = 0;
+  for (var i = 0; i < curves.length; i++) {
+    if (curves[i].length > maxLen) maxLen = curves[i].length;
+  }
+  var out = [];
+  for (var idx = 0; idx < maxLen; idx++) {
+    var vals = [];
+    var xRef = null;
+    for (var c = 0; c < curves.length; c++) {
+      if (curves[c][idx]) {
+        vals.push(curves[c][idx].y);
+        if (xRef === null) xRef = curves[c][idx].x;
+      }
+    }
+    if (vals.length === 0) break;
+    vals.sort(function(a, b) { return a - b; });
+    var med = vals[Math.floor(vals.length / 2)];
+    out.push({ x: xRef, y: med });
+  }
+  return out;
+}
+
+// 对每个基线运行 sim,返回三个中位数曲线
+function runBaseline(params) {
+  var runs = { opt: [], base: [], pess: [] };
+  for (var i = 0; i < 12; i++) {
+    runs.opt.push(simulate(params, 1));
+    runs.base.push(simulate(params, 0));
+    runs.pess.push(simulate(params, -1));
+  }
+  return {
+    opt: medianOfCurves(runs.opt),
+    base: medianOfCurves(runs.base),
+    pess: medianOfCurves(runs.pess)
+  };
+}
+
+// ============================================
+// SVG 绘图
+// ============================================
+var SVG_W = 600, SVG_H = 400;
+var PAD = { left: 50, right: 12, top: 16, bottom: 32 };
+var PLOT_W = SVG_W - PAD.left - PAD.right;
+var PLOT_H = SVG_H - PAD.top - PAD.bottom;
+
+function drawChart(allResults) {
+  // 收集全部数据点确定坐标范围
+  var allX = [];
+  var allY = [];
+  
+  for (var i = 0; i < HISTORY.length; i++) {
+    allX.push(HISTORY[i].x);
+    allY.push(HISTORY[i].y);
+  }
+  
+  var keys = Object.keys(allResults);
+  for (var k = 0; k < keys.length; k++) {
+    var r = allResults[keys[k]];
+    var arrs = [r.opt, r.base, r.pess];
+    for (var a = 0; a < arrs.length; a++) {
+      for (var p = 0; p < arrs[a].length; p++) {
+        allX.push(arrs[a][p].x);
+        allY.push(arrs[a][p].y);
+      }
+    }
+  }
+  allY.push(YOUR_PD);
+  
+  var xMin = Math.min.apply(null, allX);
+  var xMax = Math.max.apply(null, allX);
+  var yMin = Math.min.apply(null, allY);
+  var yMax = Math.max.apply(null, allY);
+  
+  var yPad = (yMax - yMin) * 0.05;
+  yMin -= yPad;
+  yMax += yPad;
+  
+  function sx(x) { return PAD.left + (x - xMin) / (xMax - xMin) * PLOT_W; }
+  function sy(y) { return PAD.top + (1 - (y - yMin) / (yMax - yMin)) * PLOT_H; }
+  
+  function pathFor(data) {
+    if (data.length === 0) return '';
+    var d = 'M' + sx(data[0].x).toFixed(1) + ',' + sy(data[0].y).toFixed(1);
+    for (var i = 1; i < data.length; i++) {
+      d += 'L' + sx(data[i].x).toFixed(1) + ',' + sy(data[i].y).toFixed(1);
+    }
+    return d;
+  }
+  
+  // 网格
+  var xGridLines = '', xLabels = '';
+  var startYear = new Date(xMin).getFullYear();
+  var endYear = new Date(xMax).getFullYear();
+  for (var y = startYear; y <= endYear; y++) {
+    var t = new Date(y, 0, 1).getTime();
+    if (t < xMin || t > xMax) continue;
+    var px = sx(t);
+    xGridLines += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PLOT_H) + '" stroke="#1f2640" stroke-width="1"/>';
+    xLabels += '<text x="' + px + '" y="' + (PAD.top + PLOT_H + 14) + '" fill="#8b92a8" font-size="10" text-anchor="middle">' + y + '</text>';
+  }
+  
+  var yGridLines = '', yLabels = '';
+  var yStartYear = new Date(yMin).getFullYear();
+  var yEndYear = new Date(yMax).getFullYear();
+  for (var yr = yStartYear; yr <= yEndYear; yr++) {
+    var ty = new Date(yr, 0, 1).getTime();
+    if (ty < yMin || ty > yMax) continue;
+    var py = sy(ty);
+    yGridLines += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PLOT_W) + '" y2="' + py + '" stroke="#1f2640" stroke-width="1"/>';
+    yLabels += '<text x="' + (PAD.left - 6) + '" y="' + (py + 3) + '" fill="#8b92a8" font-size="10" text-anchor="end">' + yr + '</text>';
+  }
+  
+  // PD 水平线
+  var pdY = sy(YOUR_PD);
+  var pdLine = '<line x1="' + PAD.left + '" y1="' + pdY + '" x2="' + (PAD.left + PLOT_W) + '" y2="' + pdY + '" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.8"/>';
+  var pdLabel = '<text x="' + (PAD.left + PLOT_W - 4) + '" y="' + (pdY - 4) + '" fill="#ffd166" font-size="10" text-anchor="end">PD: 2024-06-20</text>';
+  
+  // 今天垂直线
+  var todayX = sx(TODAY);
+  var todayLine = '<line x1="' + todayX + '" y1="' + PAD.top + '" x2="' + todayX + '" y2="' + (PAD.top + PLOT_H) + '" stroke="#6b7390" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>';
+  var todayLabel = '<text x="' + todayX + '" y="' + (PAD.top - 4) + '" fill="#6b7390" font-size="9" text-anchor="middle">今天</text>';
+  
+  // 历史
+  var histPath = '<path d="' + pathFor(HISTORY) + '" fill="none" stroke="#8b92a8" stroke-width="2"/>';
+  var histPoints = '';
+  for (var i = 0; i < HISTORY.length; i++) {
+    histPoints += '<circle cx="' + sx(HISTORY[i].x).toFixed(1) + '" cy="' + sy(HISTORY[i].y).toFixed(1) + '" r="2" fill="#8b92a8"/>';
+  }
+  
+  // 绘制四个基线的曲线 (非活动的先画,活动的后画在上层)
+  var nonActiveSvg = '', activeSvg = '';
+  var crossingMarkers = '';
+  
+  var blKeys = Object.keys(allResults);
+  for (var k = 0; k < blKeys.length; k++) {
+    var key = blKeys[k];
+    var color = BASELINES[key].color;
+    var r = allResults[key];
+    var isActive = (key === activeBaseline);
+    
+    var opacity = isActive ? 1.0 : 0.18;
+    var optWidth = isActive ? 1.8 : 1.0;
+    var baseWidth = isActive ? 2.8 : 1.4;
+    var pessWidth = isActive ? 1.8 : 1.0;
+    
+    // 置信带 (仅活动的画填充)
+    var bandSvg = '';
+    if (isActive && r.opt.length > 0 && r.pess.length > 0) {
+      var bandLen = Math.min(r.opt.length, r.pess.length);
+      var bd = 'M' + sx(r.opt[0].x).toFixed(1) + ',' + sy(r.opt[0].y).toFixed(1);
+      for (var bi = 1; bi < bandLen; bi++) {
+        bd += 'L' + sx(r.opt[bi].x).toFixed(1) + ',' + sy(r.opt[bi].y).toFixed(1);
+      }
+      for (var bj = bandLen - 1; bj >= 0; bj--) {
+        bd += 'L' + sx(r.pess[bj].x).toFixed(1) + ',' + sy(r.pess[bj].y).toFixed(1);
+      }
+      bd += 'Z';
+      bandSvg = '<path d="' + bd + '" fill="' + color + '" opacity="0.1"/>';
+    }
+    
+    var optStroke = '<path d="' + pathFor(r.opt) + '" fill="none" stroke="' + color + '" stroke-width="' + optWidth + '" stroke-dasharray="3 2" opacity="' + opacity + '"/>';
+    var baseStroke = '<path d="' + pathFor(r.base) + '" fill="none" stroke="' + color + '" stroke-width="' + baseWidth + '" opacity="' + opacity + '"/>';
+    var pessStroke = '<path d="' + pathFor(r.pess) + '" fill="none" stroke="' + color + '" stroke-width="' + pessWidth + '" stroke-dasharray="3 2" opacity="' + opacity + '"/>';
+    
+    var groupSvg = bandSvg + pessStroke + optStroke + baseStroke;
+    
+    if (isActive) {
+      activeSvg += groupSvg;
+      
+      // 活动基线的关键标记点 (cutoff 穿过 PD)
+      var crossT = findCrossing(r.base);
+      if (crossT) {
+        var cx = sx(crossT);
+        crossingMarkers += '<circle cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="6" fill="' + color + '" stroke="#0a0e1a" stroke-width="2"/>';
+        crossingMarkers += '<text x="' + cx + '" y="' + (pdY - 12) + '" fill="' + color + '" font-size="10" text-anchor="middle" font-weight="600">' + formatDate(crossT) + '</text>';
+      }
+    } else {
+      nonActiveSvg += groupSvg;
+    }
+  }
+  
+  var svgContent =
+    xGridLines + yGridLines +
+    nonActiveSvg +
+    todayLine + todayLabel +
+    histPath + histPoints +
+    pdLine +
+    activeSvg +
+    crossingMarkers +
+    pdLabel +
+    xLabels + yLabels;
+  
+  document.getElementById('chart').innerHTML = svgContent;
+}
+
+// ============================================
+// 状态管理
+// ============================================
+function getParamsFromControls() {
+  // 当前控件值
+  return {
+    pool: +document.getElementById('pool').value,
+    yearend: +document.getElementById('yearend').value,
+    aos: +document.getElementById('aos').value,
+    litigation: +document.getElementById('litigation').value / 100,
+    retro: +document.getElementById('retro').value
+  };
+}
+
+function setControlsFromParams(params) {
+  document.getElementById('pool').value = params.pool;
+  document.getElementById('yearend').value = params.yearend;
+  document.getElementById('aos').value = params.aos;
+  document.getElementById('litigation').value = Math.round(params.litigation * 100);
+  document.getElementById('retro').value = params.retro;
+  updateLabels();
+}
+
+function updateLabels() {
+  document.getElementById('v-pool').textContent = document.getElementById('pool').value;
+  document.getElementById('v-yearend').textContent = document.getElementById('yearend').value;
+  document.getElementById('v-aos').textContent = document.getElementById('aos').value;
+  document.getElementById('v-litigation').textContent = document.getElementById('litigation').value;
+  document.getElementById('v-retro').textContent = document.getElementById('retro').value;
+}
+
+function getCurrentBaselineParams() {
+  // 把当前基线的固定参数 (quota, overflow) 和控件参数合并
+  var base = BASELINES[activeBaseline].params;
+  var controls = getParamsFromControls();
+  return {
+    quota: base.quota,
+    overflow: base.overflow,
+    yearend: controls.yearend,
+    aos: controls.aos,
+    pool: controls.pool,
+    retro: controls.retro,
+    litigation: controls.litigation
+  };
+}
+
+// ============================================
+// 主渲染
+// ============================================
+function render() {
+  try {
+    updateLabels();
+    
+    var allResults = {};
+    var keys = Object.keys(BASELINES);
+    for (var k = 0; k < keys.length; k++) {
+      var key = keys[k];
+      var params;
+      if (key === activeBaseline) {
+        // 活动基线用控件覆盖参数
+        params = getCurrentBaselineParams();
+      } else {
+        params = BASELINES[key].params;
+      }
+      allResults[key] = runBaseline(params);
+    }
+    
+    drawChart(allResults);
+    
+    // 更新当前基线的数字
+    var current = allResults[activeBaseline];
+    var optDate = findCrossing(current.opt);
+    var baseDate = findCrossing(current.base);
+    var pessDate = findCrossing(current.pess);
+    
+    document.getElementById('r-opt').textContent = formatMonthsAway(optDate);
+    document.getElementById('r-base').textContent = formatMonthsAway(baseDate);
+    document.getElementById('r-pess').textContent = formatMonthsAway(pessDate);
+    document.getElementById('d-opt').textContent = formatDate(optDate);
+    document.getElementById('d-base').textContent = formatDate(baseDate);
+    document.getElementById('d-pess').textContent = formatDate(pessDate);
+    
+    document.getElementById('current-name').textContent = BASELINES[activeBaseline].name;
+  } catch (err) {
+    console.error('Render error:', err);
+    document.getElementById('chart').innerHTML = '<text x="300" y="200" fill="#f87171" text-anchor="middle">' + err.message + '</text>';
+  }
+}
+
+// ============================================
+// 事件绑定
+// ============================================
+function selectBaseline(name) {
+  activeBaseline = name;
+  
+  // 更新按钮样式
+  var btns = document.querySelectorAll('.baseline-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].dataset.baseline === name);
+  }
+  
+  // 把对应基线参数加载到控件
+  setControlsFromParams(BASELINES[name].params);
+  render();
+}
+
+var baselineBtns = document.querySelectorAll('.baseline-btn');
+for (var i = 0; i < baselineBtns.length; i++) {
+  baselineBtns[i].addEventListener('click', function(e) {
+    var btn = e.target.closest('.baseline-btn');
+    if (btn) selectBaseline(btn.dataset.baseline);
+  });
+}
+
+var rangeInputs = document.querySelectorAll('input[type="range"]');
+for (var j = 0; j < rangeInputs.length; j++) {
+  rangeInputs[j].addEventListener('input', render);
+}
+
+// 初始化
+selectBaseline('current');
+</script>
+
+</body>
+</html>

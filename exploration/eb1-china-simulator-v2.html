@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EB-1 China 排期模拟器 V2</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0a0e1a;
+    color: #e8eaf0;
+    padding: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 19px; margin-bottom: 4px; font-weight: 600; }
+  .subtitle { color: #8b92a8; font-size: 12px; margin-bottom: 16px; line-height: 1.5; }
+  .version-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: rgba(255,94,138,0.15);
+    color: #ff8eaa;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  
+  .card {
+    background: #131829;
+    border: 1px solid #1f2640;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  
+  .section-title {
+    font-size: 13px;
+    color: #b4bcd0;
+    margin-bottom: 10px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title::before {
+    content: '';
+    width: 3px;
+    height: 12px;
+    background: #60a5fa;
+    border-radius: 2px;
+  }
+  
+  .ban-card {
+    background: linear-gradient(135deg, #1a1f3a, #2a1f3a);
+    border: 1px solid #ff5e8a;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .ban-card .ban-title {
+    font-size: 13px;
+    color: #ff8eaa;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .ban-card .mechanism {
+    background: #0a0e1a;
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin-top: 8px;
+    font-size: 11px;
+    border-left: 2px solid #ff8eaa;
+  }
+  .ban-card .mechanism strong { color: #ffd166; }
+  
+  .pd-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #1e293b, #2a3654);
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #3b4870;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .pd-badge strong { color: #ffd166; }
+  
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .result-cell {
+    background: #0f1424;
+    border: 1px solid #1f2640;
+    border-radius: 8px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .result-cell .label { font-size: 11px; color: #8b92a8; margin-bottom: 4px; }
+  .result-cell .value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .result-cell.optimistic .value { color: #4ade80; }
+  .result-cell.base .value { color: #60a5fa; }
+  .result-cell.pessimistic .value { color: #f87171; }
+  
+  .controls { display: flex; flex-direction: column; gap: 10px; }
+  .control-row { display: flex; flex-direction: column; gap: 4px; }
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #b4bcd0;
+  }
+  .control-label .value-display {
+    color: #60a5fa;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 20px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    background: #1f2640;
+    border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: #60a5fa;
+    border-radius: 50%;
+    margin-top: -5.5px;
+    box-shadow: 0 0 0 3px rgba(96,165,250,0.15);
+  }
+  
+  .chart-wrap {
+    background: #0f1424;
+    border-radius: 8px;
+    padding: 12px 8px 8px;
+    position: relative;
+    height: 320px;
+  }
+  
+  .preset-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .preset-btn {
+    padding: 8px 4px;
+    font-size: 11px;
+    background: #0f1424;
+    border: 1px solid #1f2640;
+    color: #e8eaf0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .preset-btn.active {
+    background: #1e293b;
+    border-color: #60a5fa;
+    color: #60a5fa;
+  }
+  
+  .info-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2a3654;
+    color: #8b92a8;
+    text-align: center;
+    line-height: 14px;
+    font-size: 10px;
+    cursor: help;
+    margin-left: 4px;
+  }
+  
+  .footnote {
+    font-size: 10px;
+    color: #5a6280;
+    margin-top: 12px;
+    padding: 10px;
+    background: #0a0e1a;
+    border-left: 2px solid #1f2640;
+    line-height: 1.7;
+  }
+  
+  .mechanism-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .mech-cell {
+    background: #0f1424;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+  .mech-cell .mech-label {
+    color: #8b92a8;
+    margin-bottom: 3px;
+  }
+  .mech-cell .mech-val {
+    color: #4ade80;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .mech-cell.neg .mech-val { color: #f87171; }
+  
+  .delta-positive { color: #4ade80; font-size: 10px; }
+  .delta-negative { color: #f87171; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>EB-1 China 排期模拟器 <span class="version-badge">V2 · 含 75 国禁令</span></h1>
+<div class="subtitle">基于 FY2023–FY2026 月度数据 + PM-602-0199 + Proclamation 10998 + 75 国冻结 + 配额溢出机制</div>
+
+<div class="card">
+  <div class="ban-card">
+    <div class="ban-title">▎75 国冻结对你的影响机制</div>
+    <div>中国<strong style="color:#4ade80">不在</strong>名单上。但这个政策通过<strong style="color:#ffd166">三条间接路径</strong>影响你的排期:</div>
+    
+    <div class="mechanism">
+      <strong>机制 ①:全球需求下降 → 名额溢出</strong><br>
+      75 国签证停发 → FY2026 家庭类未用完 → 下一年 (FY2027) 这些剩余下沉到就业类 → EB-1 全球池子变大。
+    </div>
+    <div class="mechanism">
+      <strong>机制 ②:中国 7% 上限是天花板</strong><br>
+      即使 EB-1 全球池子翻倍,中国仍然只能拿其中 7%。所以中国受益**有限但实际**。
+    </div>
+    <div class="mechanism">
+      <strong>机制 ③:其他国家未用完中国可吸收</strong><br>
+      到财年末 (7-9 月),如果其他国家未用完 EB-1 配额,会"开口"给中国/印度大批人持有 PD 的申请人。这是 EB-1 China cutoff 跳跃的主要机制。
+    </div>
+  </div>
+  
+  <div class="pd-badge">
+    <span>你的 PD:</span>
+    <strong>2024-06-20</strong>
+    <span style="color:#6b7390">·</span>
+    <span>距 cutoff (2023-04-01)</span>
+    <strong>+447 天</strong>
+  </div>
+  
+  <div class="result-grid">
+    <div class="result-cell optimistic">
+      <div class="label">乐观情景</div>
+      <div class="value" id="r-opt">—</div>
+    </div>
+    <div class="result-cell base">
+      <div class="label">基准情景</div>
+      <div class="value" id="r-base">—</div>
+    </div>
+    <div class="result-cell pessimistic">
+      <div class="label">悲观情景</div>
+      <div class="value" id="r-pess">—</div>
+    </div>
+  </div>
+  
+  <div class="chart-wrap">
+    <canvas id="chart"></canvas>
+  </div>
+  
+  <div class="footnote">
+    虚线 = 你的 PD (2024-06-20)。曲线穿越虚线的月份 = current 时刻。曲线在 10 月 (新财年) 通常会有跳跃,反映配额释放与溢出。
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">情景预设</div>
+  <div class="preset-row">
+    <button class="preset-btn" data-preset="pre-2026">2026 前基线</button>
+    <button class="preset-btn" data-preset="current">当前现实</button>
+    <button class="preset-btn active" data-preset="best-case">最佳情景</button>
+    <button class="preset-btn" data-preset="worst-case">最坏情景</button>
+  </div>
+  
+  <div class="section-title">关键参数</div>
+  <div class="controls">
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>FY2026 EB-1 China 基础配额<span class="info-icon" title="法定 EB-1 全球 28.6%,中国 7% 上限,基础配额约 2,800">i</span></span>
+        <span class="value-display"><span id="v-quota">2800</span> 张</span>
+      </div>
+      <input type="range" id="quota" min="2200" max="3500" value="2800" step="100">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>75 国冻结溢出乘数<span class="info-icon" title="禁令使全球需求下降,FY27 名额溢出到 EB 类,中国按 7% 分到">i</span></span>
+        <span class="value-display"><span id="v-overflow">1.25</span>×</span>
+      </div>
+      <input type="range" id="overflow" min="100" max="160" value="125" step="5">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>财年末"开口"吸收量<span class="info-icon" title="每年 7-9 月其他国家未用完,中国可大额吸收,历史上贡献最大 cutoff 跳跃">i</span></span>
+        <span class="value-display"><span id="v-yearend">800</span> 张</span>
+      </div>
+      <input type="range" id="yearend" min="200" max="2000" value="800" step="100">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>PM-0199 境外比例提升<span class="info-icon" title="境内 AOS 比例从 70% 降到 40%,境外通道获得更多配额">i</span></span>
+        <span class="value-display"><span id="v-aos">60</span>%</span>
+      </div>
+      <input type="range" id="aos" min="20" max="80" value="60" step="5">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>积压案件池<span class="info-icon" title="累计已批 I-140 中国大陆申请人,影响 PD 密度">i</span></span>
+        <span class="value-display"><span id="v-pool">8500</span> 件</span>
+      </div>
+      <input type="range" id="pool" min="5500" max="13000" value="8500" step="500">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>FY 末退化风险<span class="info-icon" title="9 月前 cutoff 临时退化的概率">i</span></span>
+        <span class="value-display"><span id="v-retro">20</span>%</span>
+      </div>
+      <input type="range" id="retro" min="0" max="50" value="20" step="5">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>禁令被推翻的概率<span class="info-icon" title="法院禁令使 75 国签证恢复,溢出乘数消失">i</span></span>
+        <span class="value-display"><span id="v-litigation">25</span>%</span>
+      </div>
+      <input type="range" id="litigation" min="0" max="80" value="25" step="5">
+    </div>
+    
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">机制贡献拆分 (基准情景下)</div>
+  <div id="mechanism-display" class="mechanism-grid">
+    <!-- 动态生成 -->
+  </div>
+</div>
+
+<div class="footnote">
+  <strong>模型核心改进 (V2):</strong> 新增三个机制 — (1) 75 国冻结导致家庭类未用完,溢出到 EB 类,中国按 7% 分配,2027 财年起影响最大;(2) 财年末"开口吸收",其他国家未用完时中国大批吸收,是 cutoff 跳跃的主要来源;(3) 诉讼风险概率模型,法院推翻禁令的可能性按贝叶斯加权进入预测。基础数据:EB-1 China FY24 申请量 7,160 件,中位历史推进 6.4 天/月,新财年 10 月跳跃中位 60-90 天。
+</div>
+
+</div>
+
+<script>
+const YOUR_PD = new Date('2024-06-20');
+const TODAY = new Date('2026-05-23');
+const CURRENT_CUTOFF = new Date('2023-04-01');
+
+// 历史数据
+const HISTORY = [
+  ['2023-04', '2022-02-15'],
+  ['2023-10', '2022-04-01'],
+  ['2024-04', '2022-07-15'],
+  ['2024-10', '2022-11-08'],
+  ['2025-04', '2022-11-08'],
+  ['2025-10', '2022-12-22'],
+  ['2025-12', '2023-01-22'],
+  ['2026-01', '2023-02-01'],
+  ['2026-03', '2023-03-15'],
+  ['2026-04', '2023-04-01'],
+  ['2026-05', '2023-04-01'],
+  ['2026-06', '2023-04-01'],
+];
+
+function getParams() {
+  return {
+    quota: +document.getElementById('quota').value,
+    overflow: +document.getElementById('overflow').value / 100,
+    yearend: +document.getElementById('yearend').value,
+    aos: +document.getElementById('aos').value,
+    pool: +document.getElementById('pool').value,
+    retro: +document.getElementById('retro').value,
+    litigation: +document.getElementById('litigation').value / 100,
+  };
+}
+
+function updateLabels() {
+  const p = getParams();
+  document.getElementById('v-quota').textContent = p.quota;
+  document.getElementById('v-overflow').textContent = p.overflow.toFixed(2);
+  document.getElementById('v-yearend').textContent = p.yearend;
+  document.getElementById('v-aos').textContent = p.aos;
+  document.getElementById('v-pool').textContent = p.pool;
+  document.getElementById('v-retro').textContent = p.retro;
+  document.getElementById('v-litigation').textContent = Math.round(p.litigation * 100);
+}
+
+// ============================================
+// 核心模拟函数
+// ============================================
+function simulate(params, scenarioBias = 0) {
+  const months = 60;
+  const result = [];
+  let cutoff = new Date(CURRENT_CUTOFF);
+  
+  // 诉讼风险按比例减弱溢出效应
+  const effectiveOverflow = 1 + (params.overflow - 1) * (1 - params.litigation);
+  
+  // 境外占比
+  const overseasShare = 1 - params.aos / 100;
+  
+  // 每月基础配额 (扣除年末开口部分)
+  const yearMonthlyBase = params.quota * effectiveOverflow * overseasShare / 12;
+  
+  // 积压池密度
+  const dailyDensity = params.pool / (36 * 30);
+  
+  for (let i = 0; i < months; i++) {
+    const monthDate = new Date(TODAY);
+    monthDate.setMonth(monthDate.getMonth() + i);
+    const m = monthDate.getMonth();
+    
+    // 月度噪声
+    const noise = (Math.random() + Math.random() + Math.random() - 1.5) * 0.35;
+    let monthlyVisas = yearMonthlyBase * (1 + noise + scenarioBias * 0.2);
+    
+    // 财年末 (7,8,9 月) 开口吸收
+    if (m === 6 || m === 7 || m === 8) {
+      // 把年末开口量分到这三个月,带额外噪声
+      monthlyVisas += (params.yearend / 3) * (1 + noise * 0.5) * (1 - params.litigation);
+    }
+    
+    // 退化风险 (主要在 8-9 月)
+    if ((m === 7 || m === 8) && Math.random() * 100 < params.retro) {
+      monthlyVisas = -Math.abs(monthlyVisas) * 0.8;
+    }
+    
+    // 新财年 10 月跳跃 (历史规律,带溢出加成)
+    if (m === 9 && i > 0) {
+      monthlyVisas *= (2.0 + (effectiveOverflow - 1) * 2);
+    }
+    
+    const advanceDays = monthlyVisas / dailyDensity;
+    cutoff = new Date(cutoff.getTime() + advanceDays * 24 * 3600 * 1000);
+    result.push({ x: monthDate, y: cutoff });
+    
+    if (cutoff > new Date(YOUR_PD.getTime() + 365 * 24 * 3600 * 1000)) break;
+  }
+  
+  return result;
+}
+
+function findCrossing(curve) {
+  for (let i = 0; i < curve.length; i++) {
+    if (curve[i].y >= YOUR_PD) {
+      return curve[i].x;
+    }
+  }
+  return null;
+}
+
+function formatMonthsAway(date) {
+  if (!date) return '5年+';
+  const diff = (date - TODAY) / (1000 * 3600 * 24 * 30.44);
+  if (diff < 1) return '<1月';
+  if (diff < 12) return Math.round(diff) + '月';
+  const y = Math.floor(diff / 12);
+  const m = Math.round(diff - y * 12);
+  return y + '年' + (m > 0 ? m + '月' : '');
+}
+
+function formatTargetDate(date) {
+  if (!date) return '';
+  return ' (≈' + date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + ')';
+}
+
+// ============================================
+// 渲染图表
+// ============================================
+const ctx = document.getElementById('chart').getContext('2d');
+let chart;
+
+function render() {
+  updateLabels();
+  const params = getParams();
+  
+  const histData = HISTORY.map(([m, d]) => ({
+    x: new Date(m + '-15'),
+    y: new Date(d)
+  }));
+  
+  const runs = { opt: [], base: [], pess: [] };
+  for (let i = 0; i < 15; i++) {
+    runs.opt.push(simulate(params, 1));
+    runs.base.push(simulate(params, 0));
+    runs.pess.push(simulate(params, -1));
+  }
+  
+  function median(curves) {
+    const maxLen = Math.max(...curves.map(c => c.length));
+    const out = [];
+    for (let i = 0; i < maxLen; i++) {
+      const vals = curves.filter(c => c[i]).map(c => c[i].y.getTime()).sort((a,b) => a-b);
+      if (vals.length === 0) break;
+      const med = vals[Math.floor(vals.length / 2)];
+      out.push({ x: curves[0][i].x, y: new Date(med) });
+    }
+    return out;
+  }
+  
+  const optCurve = median(runs.opt);
+  const baseCurve = median(runs.base);
+  const pessCurve = median(runs.pess);
+  
+  const optDate = findCrossing(optCurve);
+  const baseDate = findCrossing(baseCurve);
+  const pessDate = findCrossing(pessCurve);
+  
+  document.getElementById('r-opt').innerHTML = 
+    formatMonthsAway(optDate) + '<div style="font-size:9px;color:#6b7390;margin-top:2px">' + 
+    (optDate ? optDate.getFullYear() + '-' + String(optDate.getMonth() + 1).padStart(2, '0') : '') + '</div>';
+  document.getElementById('r-base').innerHTML = 
+    formatMonthsAway(baseDate) + '<div style="font-size:9px;color:#6b7390;margin-top:2px">' + 
+    (baseDate ? baseDate.getFullYear() + '-' + String(baseDate.getMonth() + 1).padStart(2, '0') : '') + '</div>';
+  document.getElementById('r-pess').innerHTML = 
+    formatMonthsAway(pessDate) + '<div style="font-size:9px;color:#6b7390;margin-top:2px">' + 
+    (pessDate ? pessDate.getFullYear() + '-' + String(pessDate.getMonth() + 1).padStart(2, '0') : '') + '</div>';
+  
+  const allDates = [...histData, ...baseCurve].map(p => p.x);
+  const minX = new Date(Math.min(...allDates.map(d => d.getTime())));
+  const maxX = new Date(Math.max(...allDates.map(d => d.getTime())));
+  
+  const pdLine = [
+    { x: minX, y: YOUR_PD },
+    { x: maxX, y: YOUR_PD }
+  ];
+  
+  if (chart) chart.destroy();
+  
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: '历史 cutoff',
+          data: histData,
+          borderColor: '#8b92a8',
+          backgroundColor: '#8b92a8',
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.1,
+        },
+        {
+          label: '乐观',
+          data: optCurve,
+          borderColor: '#4ade80',
+          backgroundColor: 'rgba(74,222,128,0.05)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: '+1',
+        },
+        {
+          label: '基准',
+          data: baseCurve,
+          borderColor: '#60a5fa',
+          backgroundColor: '#60a5fa',
+          borderWidth: 2.5,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+        {
+          label: '悲观',
+          data: pessCurve,
+          borderColor: '#f87171',
+          backgroundColor: 'rgba(248,113,113,0.05)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: '-1',
+        },
+        {
+          label: 'Your PD',
+          data: pdLine,
+          borderColor: '#ffd166',
+          borderWidth: 1.5,
+          borderDash: [6, 4],
+          pointRadius: 0,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 400 },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'year', displayFormats: { year: 'YYYY' } },
+          grid: { color: '#1f2640' },
+          ticks: { color: '#8b92a8', font: { size: 10 } }
+        },
+        y: {
+          type: 'time',
+          time: { unit: 'year', displayFormats: { year: 'YYYY' } },
+          grid: { color: '#1f2640' },
+          ticks: { color: '#8b92a8', font: { size: 10 } },
+          title: { display: true, text: 'cutoff date', color: '#8b92a8', font: { size: 10 } }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            color: '#b4bcd0',
+            font: { size: 10 },
+            boxWidth: 12,
+            padding: 8,
+            filter: (item) => item.text !== 'Your PD'
+          }
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const d = new Date(items[0].parsed.x);
+              return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+            },
+            label: (item) => {
+              const d = new Date(item.parsed.y);
+              return item.dataset.label + ': ' + d.toISOString().slice(0,10);
+            }
+          }
+        }
+      }
+    }
+  });
+  
+  // 机制贡献拆分
+  renderMechanisms(params);
+}
+
+function renderMechanisms(params) {
+  const effectiveOverflow = 1 + (params.overflow - 1) * (1 - params.litigation);
+  const overseasShare = 1 - params.aos / 100;
+  const baseYearly = params.quota;
+  const overflowGain = baseYearly * (effectiveOverflow - 1);
+  const overseasYearly = baseYearly * effectiveOverflow * overseasShare;
+  const yearendGain = params.yearend * (1 - params.litigation);
+  
+  document.getElementById('mechanism-display').innerHTML = `
+    <div class="mech-cell">
+      <div class="mech-label">基础配额 (China 7%)</div>
+      <div class="mech-val">${baseYearly} 张/年</div>
+    </div>
+    <div class="mech-cell">
+      <div class="mech-label">75 国溢出加成 (净增)</div>
+      <div class="mech-val">+${Math.round(overflowGain)} 张/年</div>
+    </div>
+    <div class="mech-cell">
+      <div class="mech-label">境外通道有效配额</div>
+      <div class="mech-val">${Math.round(overseasYearly)} 张/年</div>
+    </div>
+    <div class="mech-cell">
+      <div class="mech-label">财年末"开口"吸收</div>
+      <div class="mech-val">+${Math.round(yearendGain)} 张</div>
+    </div>
+    <div class="mech-cell neg">
+      <div class="mech-label">诉讼推翻概率</div>
+      <div class="mech-val">${Math.round(params.litigation * 100)}%</div>
+    </div>
+    <div class="mech-cell">
+      <div class="mech-label">PD 密度</div>
+      <div class="mech-val">${(params.pool/(36*30)).toFixed(1)} 案/天</div>
+    </div>
+  `;
+}
+
+// ============================================
+// 预设
+// ============================================
+const PRESETS = {
+  'pre-2026': {
+    // 75 国禁令前的世界
+    quota: 2800, overflow: 100, yearend: 600, aos: 30, pool: 8500, retro: 25, litigation: 0
+  },
+  'current': {
+    // 当前现实
+    quota: 2800, overflow: 120, yearend: 800, aos: 60, pool: 8500, retro: 20, litigation: 25
+  },
+  'best-case': {
+    // 最佳:禁令持续 + 名额释放 + 积压小
+    quota: 3000, overflow: 140, yearend: 1400, aos: 70, pool: 6500, retro: 10, litigation: 10
+  },
+  'worst-case': {
+    // 最坏:禁令被推翻 + 退化 + 积压大
+    quota: 2400, overflow: 105, yearend: 400, aos: 35, pool: 11000, retro: 40, litigation: 70
+  }
+};
+
+function applyPreset(name) {
+  const p = PRESETS[name];
+  document.getElementById('quota').value = p.quota;
+  document.getElementById('overflow').value = p.overflow;
+  document.getElementById('yearend').value = p.yearend;
+  document.getElementById('aos').value = p.aos;
+  document.getElementById('pool').value = p.pool;
+  document.getElementById('retro').value = p.retro;
+  document.getElementById('litigation').value = p.litigation;
+  
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-preset="${name}"]`).classList.add('active');
+  render();
+}
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+});
+
+document.querySelectorAll('input[type="range"]').forEach(input => {
+  input.addEventListener('input', render);
+});
+
+applyPreset('best-case');
+</script>
+
+</body>
+</html>

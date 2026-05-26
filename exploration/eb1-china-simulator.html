@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EB-1 China 排期推进模拟器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0a0e1a;
+    color: #e8eaf0;
+    padding: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 6px; font-weight: 600; }
+  .subtitle { color: #8b92a8; font-size: 13px; margin-bottom: 20px; }
+  
+  .card {
+    background: #131829;
+    border: 1px solid #1f2640;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  
+  .pd-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #1e293b, #2a3654);
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #3b4870;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .pd-badge strong { color: #ffd166; }
+  
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .result-cell {
+    background: #0f1424;
+    border: 1px solid #1f2640;
+    border-radius: 8px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .result-cell .label { font-size: 11px; color: #8b92a8; margin-bottom: 4px; }
+  .result-cell .value { font-size: 18px; font-weight: 600; }
+  .result-cell.optimistic .value { color: #4ade80; }
+  .result-cell.base .value { color: #60a5fa; }
+  .result-cell.pessimistic .value { color: #f87171; }
+  
+  .controls { display: flex; flex-direction: column; gap: 14px; }
+  .control-row { display: flex; flex-direction: column; gap: 6px; }
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #b4bcd0;
+  }
+  .control-label .value-display {
+    color: #60a5fa;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 24px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    background: #1f2640;
+    border-radius: 2px;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    background: #1f2640;
+    border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #60a5fa;
+    border-radius: 50%;
+    margin-top: -7px;
+    box-shadow: 0 0 0 4px rgba(96,165,250,0.15);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: #60a5fa;
+    border-radius: 50%;
+    border: 0;
+    box-shadow: 0 0 0 4px rgba(96,165,250,0.15);
+  }
+  
+  .chart-wrap {
+    background: #0f1424;
+    border-radius: 8px;
+    padding: 12px 8px 8px;
+    position: relative;
+    height: 320px;
+  }
+  
+  .play-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  button {
+    flex: 1;
+    background: #1e293b;
+    border: 1px solid #3b4870;
+    color: #e8eaf0;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  button:hover { background: #2a3654; }
+  button.primary {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    border-color: #3b82f6;
+  }
+  button.primary:hover { background: linear-gradient(135deg, #1d4ed8, #1e40af); }
+  
+  .preset-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .preset-btn {
+    padding: 8px;
+    font-size: 12px;
+    background: #0f1424;
+    border: 1px solid #1f2640;
+  }
+  .preset-btn.active {
+    background: #1e293b;
+    border-color: #60a5fa;
+    color: #60a5fa;
+  }
+  
+  .legend-note {
+    font-size: 11px;
+    color: #6b7390;
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+  
+  .section-title {
+    font-size: 13px;
+    color: #b4bcd0;
+    margin-bottom: 10px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title::before {
+    content: '';
+    width: 3px;
+    height: 12px;
+    background: #60a5fa;
+    border-radius: 2px;
+  }
+  
+  .info-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2a3654;
+    color: #8b92a8;
+    text-align: center;
+    line-height: 14px;
+    font-size: 10px;
+    cursor: help;
+    margin-left: 4px;
+  }
+  
+  .footnote {
+    font-size: 10px;
+    color: #5a6280;
+    margin-top: 16px;
+    padding: 10px;
+    background: #0a0e1a;
+    border-left: 2px solid #1f2640;
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>EB-1 China 排期推进模拟</h1>
+<div class="subtitle">基于 FY2023–FY2026 月度排期数据 + PM-602-0199 政策影响建模</div>
+
+<div class="card">
+  <div class="pd-badge">
+    <span>你的 PD:</span>
+    <strong>2024-06-20</strong>
+    <span style="color:#6b7390">·</span>
+    <span>距 cutoff (2023-04-01)</span>
+    <strong>+447 天</strong>
+  </div>
+  
+  <div class="result-grid">
+    <div class="result-cell optimistic">
+      <div class="label">乐观情景</div>
+      <div class="value" id="r-opt">—</div>
+    </div>
+    <div class="result-cell base">
+      <div class="label">基准情景</div>
+      <div class="value" id="r-base">—</div>
+    </div>
+    <div class="result-cell pessimistic">
+      <div class="label">悲观情景</div>
+      <div class="value" id="r-pess">—</div>
+    </div>
+  </div>
+  
+  <div class="chart-wrap">
+    <canvas id="chart"></canvas>
+  </div>
+  
+  <div class="legend-note">
+    虚线 = 你的 PD (2024-06-20)。三条曲线穿越虚线的时间点 = 排期推进到你的预测时刻。
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">情景预设</div>
+  <div class="preset-row">
+    <button class="preset-btn" data-preset="status-quo">维持现状</button>
+    <button class="preset-btn active" data-preset="memo-impact">PM-0199 生效</button>
+    <button class="preset-btn" data-preset="litigation">诉讼禁令</button>
+  </div>
+  
+  <div class="section-title">关键参数</div>
+  <div class="controls">
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>FY2026 EB-1 China 年度名额<span class="info-icon" title="法定 EB-1 全球 28.6%，再按 7% 单国上限分配">i</span></span>
+        <span class="value-display"><span id="v-quota">2800</span> 张</span>
+      </div>
+      <input type="range" id="quota" min="2000" max="4500" value="2800" step="100">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>境内 AOS 消化比例<span class="info-icon" title="过去约 65-75% 名额由 AOS 消化；PM-0199 后预期下降到 35-45%">i</span></span>
+        <span class="value-display"><span id="v-aos">40</span>%</span>
+      </div>
+      <input type="range" id="aos" min="20" max="80" value="40" step="5">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>领事程序月吞吐量<span class="info-icon" title="广州领馆移民签证面签能力，受 PM-0199 后涌入冲击">i</span></span>
+        <span class="value-display"><span id="v-cp">180</span> 件/月</span>
+      </div>
+      <input type="range" id="cp" min="100" max="350" value="180" step="10">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>积压案件池<span class="info-icon" title="2023-04 至今积压的 EB-1 China 已批 I-140 总数估算">i</span></span>
+        <span class="value-display"><span id="v-pool">8500</span> 件</span>
+      </div>
+      <input type="range" id="pool" min="5000" max="15000" value="8500" step="500">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>名额回收乘数<span class="info-icon" title="未用尽家庭类名额会下沉到就业类，历史均值约 1.0-1.3 倍">i</span></span>
+        <span class="value-display"><span id="v-recap">1.15</span>×</span>
+      </div>
+      <input type="range" id="recap" min="100" max="150" value="115" step="5">
+    </div>
+    
+    <div class="control-row">
+      <div class="control-label">
+        <span>退化风险概率<span class="info-icon" title="财年末 (7-9月) 临时退化排期的可能性">i</span></span>
+        <span class="value-display"><span id="v-retro">25</span>%</span>
+      </div>
+      <input type="range" id="retro" min="0" max="60" value="25" step="5">
+    </div>
+    
+  </div>
+  
+  <div class="play-row">
+    <button class="primary" id="btn-play">▶ 播放动态推演</button>
+    <button id="btn-reset">重置</button>
+  </div>
+</div>
+
+<div class="footnote">
+  <strong>模型说明:</strong> 排期推进速度 ≈ (年度名额 × 回收乘数 × 境外比例) ÷ (积压池 × 月平均 PD 密度)。基准回归基于 2023-04 至 2026-05 的 38 个月历史 cutoff 数据 (期间累计推进约 245 天，月均约 6.4 天)。PM-0199 将境内 AOS 比例从约 70% 压低至 35-45%，理论上释放更多名额到境外通道，但领事面签吞吐瓶颈会形成新约束。蒙特卡洛在每月推进上叠加 ±40% 高斯噪声以模拟月度波动。模型不构成法律或移民建议，仅供策略参考。
+</div>
+
+</div>
+
+<script>
+// ============================================
+// 基础数据
+// ============================================
+const YOUR_PD = new Date('2024-06-20');
+const TODAY = new Date('2026-05-23');
+const CURRENT_CUTOFF = new Date('2023-04-01');
+
+// EB-1 China Final Action Date 历史数据 (月份 → cutoff 日期)
+// 来源: 2023-04 至 2026-06 visa bulletin
+const HISTORY = [
+  ['2023-04', '2022-02-15'],
+  ['2023-10', '2022-04-01'],
+  ['2024-04', '2022-07-15'],
+  ['2024-10', '2022-11-08'],
+  ['2025-04', '2022-11-08'],
+  ['2025-10', '2022-12-22'],
+  ['2025-12', '2023-01-22'],
+  ['2026-01', '2023-02-01'],
+  ['2026-03', '2023-03-15'],
+  ['2026-04', '2023-04-01'],
+  ['2026-05', '2023-04-01'],
+  ['2026-06', '2023-04-01'],
+];
+
+// ============================================
+// 推演模型
+// ============================================
+function simulate(params, scenarioBias = 0) {
+  // scenarioBias: -1 悲观, 0 基准, +1 乐观
+  const months = 60; // 推演 5 年
+  const result = [];
+  let cutoff = new Date(CURRENT_CUTOFF);
+  
+  // 每月名额 = 年度 × 回收 × 境外比例 / 12
+  const overseasShare = 1 - params.aos / 100;
+  const monthlyVisas = (params.quota * params.recap * overseasShare) / 12;
+  
+  // 领事程序月吞吐限制
+  const monthlyThroughput = Math.min(monthlyVisas, params.cp);
+  
+  // 积压池中每月 PD 密度: 假设积压在过去约 36 个月内均匀分布
+  // 即每天约 pool / (36*30) 个案件
+  const dailyDensity = params.pool / (36 * 30);
+  
+  // 每月可推进天数 = 月吞吐 / 日密度
+  const baseAdvancePerMonth = monthlyThroughput / dailyDensity;
+  
+  for (let i = 0; i < months; i++) {
+    const monthDate = new Date(TODAY);
+    monthDate.setMonth(monthDate.getMonth() + i);
+    
+    // 噪声 (高斯近似)
+    const noise = (Math.random() + Math.random() + Math.random() - 1.5) * 0.4;
+    let advance = baseAdvancePerMonth * (1 + noise + scenarioBias * 0.25);
+    
+    // 财年末退化风险 (7-9 月)
+    const m = monthDate.getMonth();
+    if ((m === 6 || m === 7 || m === 8) && Math.random() * 100 < params.retro) {
+      advance = -Math.abs(advance) * 1.5; // 退化
+    }
+    
+    // 新财年 10 月跳跃 (历史模式)
+    if (m === 9 && i > 0) {
+      advance *= 2.2; // 新财年配额释放
+    }
+    
+    cutoff = new Date(cutoff.getTime() + advance * 24 * 3600 * 1000);
+    result.push({ x: monthDate, y: cutoff });
+    
+    // 如果已经超过 PD 半年以上，停止
+    if (cutoff > new Date(YOUR_PD.getTime() + 365 * 24 * 3600 * 1000)) break;
+  }
+  
+  return result;
+}
+
+function findCrossing(curve) {
+  for (let i = 0; i < curve.length; i++) {
+    if (curve[i].y >= YOUR_PD) {
+      return curve[i].x;
+    }
+  }
+  return null;
+}
+
+function formatMonthsAway(date) {
+  if (!date) return '5 年+';
+  const diff = (date - TODAY) / (1000 * 3600 * 24 * 30.44);
+  if (diff < 1) return '<1 月';
+  if (diff < 12) return Math.round(diff) + ' 月';
+  const y = Math.floor(diff / 12);
+  const m = Math.round(diff - y * 12);
+  return y + '年' + (m > 0 ? m + '月' : '');
+}
+
+// ============================================
+// 渲染
+// ============================================
+const ctx = document.getElementById('chart').getContext('2d');
+let chart;
+
+function getParams() {
+  return {
+    quota: +document.getElementById('quota').value,
+    aos: +document.getElementById('aos').value,
+    cp: +document.getElementById('cp').value,
+    pool: +document.getElementById('pool').value,
+    recap: +document.getElementById('recap').value / 100,
+    retro: +document.getElementById('retro').value,
+  };
+}
+
+function updateLabels() {
+  const p = getParams();
+  document.getElementById('v-quota').textContent = p.quota;
+  document.getElementById('v-aos').textContent = p.aos;
+  document.getElementById('v-cp').textContent = p.cp;
+  document.getElementById('v-pool').textContent = p.pool;
+  document.getElementById('v-recap').textContent = p.recap.toFixed(2);
+  document.getElementById('v-retro').textContent = p.retro;
+}
+
+function render() {
+  updateLabels();
+  const params = getParams();
+  
+  // 历史曲线
+  const histData = HISTORY.map(([m, d]) => ({
+    x: new Date(m + '-15'),
+    y: new Date(d)
+  }));
+  
+  // 运行三种情景 (各跑 10 次取中位数)
+  const runs = { opt: [], base: [], pess: [] };
+  for (let i = 0; i < 10; i++) {
+    runs.opt.push(simulate(params, 1));
+    runs.base.push(simulate(params, 0));
+    runs.pess.push(simulate(params, -1));
+  }
+  
+  function median(curves) {
+    const maxLen = Math.max(...curves.map(c => c.length));
+    const out = [];
+    for (let i = 0; i < maxLen; i++) {
+      const vals = curves.filter(c => c[i]).map(c => c[i].y.getTime()).sort((a,b) => a-b);
+      if (vals.length === 0) break;
+      const med = vals[Math.floor(vals.length / 2)];
+      out.push({ x: curves[0][i].x, y: new Date(med) });
+    }
+    return out;
+  }
+  
+  const optCurve = median(runs.opt);
+  const baseCurve = median(runs.base);
+  const pessCurve = median(runs.pess);
+  
+  // 更新结果
+  document.getElementById('r-opt').textContent = formatMonthsAway(findCrossing(optCurve));
+  document.getElementById('r-base').textContent = formatMonthsAway(findCrossing(baseCurve));
+  document.getElementById('r-pess').textContent = formatMonthsAway(findCrossing(pessCurve));
+  
+  // PD 水平线数据
+  const allDates = [...histData, ...baseCurve].map(p => p.x);
+  const minX = new Date(Math.min(...allDates.map(d => d.getTime())));
+  const maxX = new Date(Math.max(...allDates.map(d => d.getTime())));
+  
+  const pdLine = [
+    { x: minX, y: YOUR_PD },
+    { x: maxX, y: YOUR_PD }
+  ];
+  
+  const todayLine = [
+    { x: TODAY, y: new Date('2021-01-01') },
+    { x: TODAY, y: new Date('2026-01-01') }
+  ];
+  
+  if (chart) chart.destroy();
+  
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: '历史 cutoff',
+          data: histData,
+          borderColor: '#8b92a8',
+          backgroundColor: '#8b92a8',
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.1,
+        },
+        {
+          label: '乐观',
+          data: optCurve,
+          borderColor: '#4ade80',
+          backgroundColor: 'rgba(74,222,128,0.05)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: '+1',
+        },
+        {
+          label: '基准',
+          data: baseCurve,
+          borderColor: '#60a5fa',
+          backgroundColor: '#60a5fa',
+          borderWidth: 2.5,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+        {
+          label: '悲观',
+          data: pessCurve,
+          borderColor: '#f87171',
+          backgroundColor: 'rgba(248,113,113,0.05)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: '-1',
+        },
+        {
+          label: 'Your PD',
+          data: pdLine,
+          borderColor: '#ffd166',
+          borderWidth: 1.5,
+          borderDash: [6, 4],
+          pointRadius: 0,
+        },
+        {
+          label: '今天',
+          data: todayLine,
+          borderColor: '#6b7390',
+          borderWidth: 1,
+          borderDash: [2, 3],
+          pointRadius: 0,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 400 },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'year', displayFormats: { year: 'YYYY' } },
+          grid: { color: '#1f2640' },
+          ticks: { color: '#8b92a8', font: { size: 10 } }
+        },
+        y: {
+          type: 'time',
+          time: { unit: 'year', displayFormats: { year: 'YYYY' } },
+          grid: { color: '#1f2640' },
+          ticks: { color: '#8b92a8', font: { size: 10 } },
+          title: { display: true, text: 'cutoff date', color: '#8b92a8', font: { size: 10 } }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            color: '#b4bcd0',
+            font: { size: 10 },
+            boxWidth: 12,
+            padding: 8,
+            filter: (item) => !['Your PD', '今天'].includes(item.text)
+          }
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const d = new Date(items[0].parsed.x);
+              return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+            },
+            label: (item) => {
+              const d = new Date(item.parsed.y);
+              return item.dataset.label + ': ' + d.toISOString().slice(0,10);
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ============================================
+// 预设场景
+// ============================================
+const PRESETS = {
+  'status-quo': {
+    quota: 2800, aos: 70, cp: 180, pool: 8500, recap: 115, retro: 25
+  },
+  'memo-impact': {
+    quota: 2800, aos: 40, cp: 180, pool: 8500, recap: 115, retro: 25
+  },
+  'litigation': {
+    quota: 2800, aos: 65, cp: 220, pool: 8500, recap: 120, retro: 15
+  }
+};
+
+function applyPreset(name) {
+  const p = PRESETS[name];
+  document.getElementById('quota').value = p.quota;
+  document.getElementById('aos').value = p.aos;
+  document.getElementById('cp').value = p.cp;
+  document.getElementById('pool').value = p.pool;
+  document.getElementById('recap').value = p.recap;
+  document.getElementById('retro').value = p.retro;
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-preset="${name}"]`).classList.add('active');
+  render();
+}
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+});
+
+// ============================================
+// 动态播放
+// ============================================
+let playInterval = null;
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (playInterval) {
+    clearInterval(playInterval);
+    playInterval = null;
+    document.getElementById('btn-play').textContent = '▶ 播放动态推演';
+    return;
+  }
+  document.getElementById('btn-play').textContent = '⏸ 暂停';
+  playInterval = setInterval(render, 800);
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (playInterval) { clearInterval(playInterval); playInterval = null; }
+  document.getElementById('btn-play').textContent = '▶ 播放动态推演';
+  applyPreset('memo-impact');
+});
+
+// ============================================
+// 滑块事件
+// ============================================
+document.querySelectorAll('input[type="range"]').forEach(input => {
+  input.addEventListener('input', render);
+});
+
+// 初始渲染
+applyPreset('memo-impact');
+</script>
+
+</body>
+</html>

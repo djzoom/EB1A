@@ -1,0 +1,3409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>EB 排期预测 V20 · 奥卡姆</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  
+  :root {
+    --bg-base: #0a0e1a;
+    --bg-card: #131829;
+    --bg-elevated: #0f1424;
+    --bg-deeper: #080b14;
+    --border: #1f2640;
+    --border-active: #2a3654;
+    --text-primary: #e8eaf0;
+    --text-secondary: #b4bcd0;
+    --text-muted: #8b92a8;
+    --text-faint: #6b7390;
+    --text-disabled: #5a6280;
+    --positive: #4ade80;
+    --p25: #86d4f5;
+    --baseline: #60a5fa;
+    --p75: #fbbf24;
+    --negative: #f87171;
+    --accent: #ffd166;
+    --special: #a78bfa;
+  }
+  
+  html, body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  body {
+    padding: 12px 12px calc(20px + env(safe-area-inset-bottom));
+    padding-top: calc(12px + env(safe-area-inset-top));
+    overscroll-behavior-y: contain;
+  }
+  
+  .container { max-width: 720px; margin: 0 auto; }
+  
+  /* ==================== HEADER ==================== */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 10px;
+  }
+  .header-title h1 {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .header-title .sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .version-pill {
+    background: linear-gradient(135deg, #4ade80, #60a5fa);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  
+  /* ==================== HERO ==================== */
+  .hero {
+    background: linear-gradient(135deg, #1e293b 0%, #2a3654 100%);
+    border: 1px solid #3b4870;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50px; right: -50px;
+    width: 140px; height: 140px;
+    background: radial-gradient(circle, rgba(255,209,102,0.18), transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .hero-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .hero-value {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-context {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+  .hero-context strong { color: var(--text-primary); }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(255,209,102,0.12);
+    color: var(--accent);
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  
+  /* ==================== CARD ==================== */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .card-title {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-title::before {
+    content: '';
+    width: 3px;
+    height: 11px;
+    background: var(--baseline);
+    border-radius: 2px;
+  }
+  .card-title .right {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--baseline);
+    cursor: pointer;
+    text-transform: none;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  
+  /* ==================== PROFILE ==================== */
+  .profile {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 12px;
+    font-size: 12px;
+  }
+  .profile-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .profile-row .lbl { color: var(--text-muted); }
+  .profile-row .val {
+    color: var(--accent);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  
+  /* ==================== PROFILE EDIT FORM ==================== */
+  .profile-edit {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .profile-edit.active { display: flex; }
+  .profile-view-hidden { display: none !important; }
+  
+  .pe-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pe-row-full { flex-direction: column; }
+  
+  .pe-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  
+  .pe-input {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 9px 12px;
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: border-color 0.15s;
+  }
+  .pe-input:focus {
+    outline: none;
+    border-color: var(--baseline);
+    box-shadow: 0 0 0 2px rgba(96,165,250,0.15);
+  }
+  select.pe-input {
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b92a8' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
+    padding-right: 32px;
+  }
+  
+  .pe-toggle {
+    display: flex;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
+  }
+  .pe-toggle-opt {
+    flex: 1;
+    text-align: center;
+    padding: 8px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-weight: 500;
+    transition: all 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .pe-toggle-opt.active {
+    background: var(--baseline);
+    color: white;
+    font-weight: 600;
+  }
+  
+  .pe-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .pe-btn {
+    flex: 1;
+    padding: 11px;
+    border: 0;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pe-btn-primary {
+    background: var(--baseline);
+    color: white;
+  }
+  .pe-btn-primary:active { opacity: 0.85; }
+  .pe-btn-secondary {
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  
+  /* ==================== CHART MODE TABS ==================== */
+  .chart-mode-tabs {
+    display: flex;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
+    margin-bottom: 8px;
+  }
+  .chart-tab {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 8px 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .chart-tab.active {
+    background: var(--baseline);
+    color: white;
+    font-weight: 600;
+  }
+  
+  .chart-sub-toggle {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+  .chart-sub-toggle.hidden { display: none; }
+  
+  .sub-toggle-btn {
+    flex: 1;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 10px;
+    padding: 6px 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sub-toggle-btn.active {
+    border-color: var(--baseline);
+    color: var(--baseline);
+    background: rgba(96,165,250,0.08);
+    font-weight: 600;
+  }
+
+  /* ==================== MONTHLY TABLE ==================== */
+  .monthly-table-wrap {
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .monthly-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .monthly-table thead th {
+    background: var(--bg-deeper);
+    color: var(--text-muted);
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .monthly-table tbody td {
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    vertical-align: middle;
+  }
+  .monthly-table tbody tr:last-child td { border-bottom: 0; }
+  .monthly-table tbody tr:hover { background: var(--bg-deeper); }
+  
+  .monthly-table .month-cell {
+    color: var(--text-primary);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .monthly-table .fad-cell {
+    color: var(--baseline);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .monthly-table .dof-cell {
+    color: var(--special);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .monthly-table .event-cell {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .monthly-table .event-cell.big-jump { color: var(--positive); font-weight: 600; }
+  .monthly-table .event-cell.summer-freeze { color: var(--p75); font-weight: 600; }
+  .monthly-table .event-cell.retro { color: var(--negative); font-weight: 600; }
+  .monthly-table .event-cell.current-pd {
+    color: var(--accent);
+    font-weight: 700;
+    background: rgba(255,209,102,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  
+  .monthly-table tr.is-current-pd {
+    background: rgba(255,209,102,0.05);
+  }
+  .monthly-table tr.is-fy-start td {
+    border-top: 2px solid var(--baseline);
+  }
+
+  /* ==================== V19 PRESET DESCRIPTION ==================== */
+  .preset-description {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg-elevated);
+    border-left: 3px solid var(--baseline);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .preset-description strong {
+    color: var(--text-primary);
+  }
+  
+  /* ==================== V19 DENSITY CHART ==================== */
+  .density-view {
+    display: block;
+  }
+  .density-summary {
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .density-summary .ds-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+  }
+  .density-summary .ds-row:last-child { margin-bottom: 0; }
+  .density-summary .ds-label { color: var(--text-muted); }
+  .density-summary .ds-value {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .density-summary .ds-value.peak {
+    color: var(--accent);
+  }
+  
+  .density-chart-wrap {
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 8px;
+  }
+  .density-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  
+  .density-legend {
+    display: flex;
+    gap: 16px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .density-legend .leg-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .density-legend .leg-line {
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+  }
+  
+  .dist-toggle-btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 10px;
+    padding: 4px 9px;
+    border-radius: 5px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dist-toggle-btn.active {
+    background: var(--baseline);
+    color: white;
+    border-color: var(--baseline);
+    font-weight: 600;
+  }
+  
+  /* ==================== V19 MODEL COMPARE ==================== */
+  .model-compare-wrap {
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .model-compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .model-compare-table thead th {
+    background: var(--bg-deeper);
+    color: var(--text-muted);
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 10px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .model-compare-table tbody td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .model-compare-table tbody tr:last-child td { border-bottom: 0; }
+  .model-compare-table .mc-method {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .model-compare-table .mc-method .mc-source {
+    display: block;
+    font-size: 9px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+  .model-compare-table .mc-prediction {
+    color: var(--baseline);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .model-compare-table .mc-prediction.optimistic { color: var(--positive); }
+  .model-compare-table .mc-prediction.pessimistic { color: var(--negative); }
+  .model-compare-table tr.is-current-model {
+    background: rgba(96,165,250,0.1);
+  }
+  
+  /* ==================== BACKTEST ==================== */
+  .backtest-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .bt-cell {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 4px;
+    text-align: center;
+  }
+  .bt-cell .bt-period {
+    font-size: 9px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .bt-cell .bt-actual {
+    font-size: 11px;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .bt-cell .bt-pred {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bt-cell .bt-diff {
+    font-size: 9px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .bt-cell .bt-diff.good { color: var(--positive); }
+  .bt-cell .bt-diff.medium { color: var(--p75); }
+  .bt-cell .bt-diff.bad { color: var(--negative); }
+  
+  .backtest-summary {
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .backtest-summary strong { color: var(--accent); }
+  .backtest-summary .accuracy {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--positive);
+  }
+
+  /* ==================== CHART ==================== */
+  .chart-wrap {
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    padding: 8px 4px;
+    margin-bottom: 8px;
+    overflow-x: auto;
+  }
+  .chart-svg { display: block; width: 100%; height: auto; }
+  
+  .legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--text-secondary);
+    padding: 8px;
+    background: var(--bg-deeper);
+    border-radius: 6px;
+  }
+  .leg-item { display: flex; align-items: center; gap: 4px; }
+  .leg-line { width: 16px; height: 2px; border-radius: 1px; }
+  .leg-band {
+    width: 16px; height: 8px;
+    border-radius: 2px;
+    opacity: 0.45;
+  }
+  
+  /* ==================== PERCENTILE GRID ==================== */
+  .pct-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+  .pct-cell {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 3px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pct-cell.selected {
+    border-color: var(--baseline);
+    box-shadow: 0 0 0 1px var(--baseline), 0 4px 12px rgba(96,165,250,0.2);
+    transform: translateY(-1px);
+  }
+  .pct-cell .pct-tag {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-faint);
+    letter-spacing: 0.5px;
+  }
+  .pct-cell .pct-date {
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+    line-height: 1.1;
+  }
+  .pct-cell .pct-sub {
+    font-size: 8px;
+    color: var(--text-faint);
+    margin-top: 2px;
+  }
+  .pct-cell.p10 .pct-date { color: var(--positive); }
+  .pct-cell.p25 .pct-date { color: var(--p25); }
+  .pct-cell.p50 .pct-date { color: var(--baseline); }
+  .pct-cell.p75 .pct-date { color: var(--p75); }
+  .pct-cell.p90 .pct-date { color: var(--negative); }
+  
+  /* ==================== TIMELINE T1-T6 ==================== */
+  .timeline-step {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+  .timeline-step.expanded {
+    border-color: var(--baseline);
+    background: linear-gradient(180deg, var(--bg-elevated), #131829);
+  }
+  
+  .timeline-header {
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .timeline-dot {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--bg-deeper);
+    border: 1.5px solid var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  .timeline-step.passed .timeline-dot {
+    border-color: var(--positive);
+    background: rgba(74,222,128,0.15);
+    color: var(--positive);
+  }
+  
+  .timeline-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .timeline-info .t-name {
+    font-size: 12px;
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-bottom: 1px;
+  }
+  .timeline-info .t-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  
+  .timeline-date {
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .timeline-date .t-date {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .timeline-date .t-from {
+    font-size: 9px;
+    color: var(--text-faint);
+    margin-top: 1px;
+  }
+  
+  .timeline-chevron {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    font-size: 10px;
+  }
+  .timeline-step.expanded .timeline-chevron {
+    transform: rotate(180deg);
+    color: var(--baseline);
+  }
+  
+  .timeline-detail {
+    display: none;
+    padding: 0 12px 12px 50px;
+    border-top: 1px solid var(--border);
+  }
+  .timeline-step.expanded .timeline-detail {
+    display: block;
+    padding-top: 10px;
+  }
+  
+  .detail-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+  }
+  .detail-section:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+  .detail-section-title {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .detail-section p {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .source-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .source-chip {
+    background: rgba(96,165,250,0.1);
+    color: var(--baseline);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+  }
+  
+  /* ==================== PRESETS ==================== */
+  .presets {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .preset {
+    padding: 9px 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: all 0.15s;
+    color: var(--text-primary);
+  }
+  .preset.active {
+    border-color: var(--baseline);
+    box-shadow: 0 0 0 1px var(--baseline);
+    background: rgba(96,165,250,0.08);
+  }
+  .preset .p-name {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .preset .p-desc {
+    display: block;
+    font-size: 9px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  
+  /* ==================== PARAMS ==================== */
+  .params { display: flex; flex-direction: column; gap: 12px; }
+  .param-row { position: relative; }
+  .param-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+  .param-name {
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 1px dotted var(--text-faint);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .param-value {
+    color: var(--baseline);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+  }
+  
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 28px;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    background: var(--baseline);
+    border-radius: 50%;
+    margin-top: -9px;
+    box-shadow: 0 0 0 4px rgba(96,165,250,0.15), 0 2px 6px rgba(0,0,0,0.3);
+    border: 2px solid var(--bg-card);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    background: var(--baseline);
+    border-radius: 50%;
+    border: 2px solid var(--bg-card);
+    box-shadow: 0 0 0 4px rgba(96,165,250,0.15);
+  }
+  
+  .param-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--text-faint);
+    margin-top: 2px;
+    padding: 0 2px;
+  }
+  
+  .source-popup {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border-active);
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 4px;
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .source-popup.visible { display: block; }
+  .source-popup .sp-title {
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 6px;
+    padding-right: 24px;
+  }
+  .source-popup .sp-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 11px;
+  }
+  .source-popup .sp-row .sp-lbl { color: var(--text-muted); }
+  .source-popup .sp-row .sp-val {
+    color: var(--text-secondary);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .source-popup .sp-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+  }
+  .source-popup .sp-section-title {
+    font-size: 9px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .source-popup .sp-text {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .source-popup .sp-close {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* ==================== FOOTER ==================== */
+  .footer-note {
+    font-size: 10px;
+    color: var(--text-disabled);
+    padding: 10px 12px;
+    background: var(--bg-deeper);
+    border-radius: 8px;
+    border-left: 2px solid var(--border);
+    line-height: 1.6;
+    margin-top: 10px;
+  }
+  .footer-note strong { color: var(--text-muted); }
+  
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .timeline-detail { animation: slideIn 0.2s ease-out; }
+  .source-popup.visible { animation: slideIn 0.15s ease-out; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-title">
+    <h1>EB 排期预测</h1>
+    <div class="sub">奥卡姆剃刀 · 1 参数 · 真实数据驱动</div>
+  </div>
+  <div class="version-pill">V20</div>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-label">
+    <span>🎯 最可能 PD Current 时间</span>
+  </div>
+  <div class="hero-value" id="hero-value">—</div>
+  <div class="hero-context">
+    <span class="hero-tag" id="hero-tag-1">P50 基准</span>
+    <span id="hero-context-text">点击时间线查看每一步</span>
+  </div>
+</div>
+
+<!-- PROFILE (可编辑) -->
+<div class="card">
+  <div class="card-title">
+    你的档案
+    <span class="right" id="profile-toggle">编辑</span>
+  </div>
+  
+  <!-- 显示模式 -->
+  <div id="profile-view" class="profile">
+    <div class="profile-row"><span class="lbl">Priority Date</span><span class="val" id="pv-pd">2024-06-20</span></div>
+    <div class="profile-row"><span class="lbl">类别</span><span class="val" id="pv-cat">EB-1A</span></div>
+    <div class="profile-row"><span class="lbl">出生国</span><span class="val" id="pv-country">中国大陆</span></div>
+    <div class="profile-row"><span class="lbl">申请路径</span><span class="val" id="pv-path">CP · 广州</span></div>
+    <div class="profile-row"><span class="lbl">家属</span><span class="val" id="pv-family">配偶 1 人</span></div>
+    <div class="profile-row"><span class="lbl">距 cutoff</span><span class="val" id="pv-distance">+447 天</span></div>
+  </div>
+  
+  <!-- 编辑模式 -->
+  <div id="profile-edit" class="profile-edit">
+    <div class="pe-row">
+      <label class="pe-label">Priority Date</label>
+      <input type="date" id="pe-pd" class="pe-input" value="2024-06-20">
+    </div>
+    
+    <div class="pe-row">
+      <label class="pe-label">类别</label>
+      <select id="pe-category" class="pe-input">
+        <option value="EB-1A" selected>EB-1A · 杰出人才</option>
+        <option value="EB-1B">EB-1B · 杰出教授/研究员</option>
+        <option value="EB-1C">EB-1C · 跨国高管</option>
+        <option value="EB-2-NIW">EB-2 NIW · 国家利益豁免</option>
+        <option value="EB-2">EB-2 · 高级学位 (需 PERM)</option>
+        <option value="EB-3">EB-3 · 技术工人</option>
+      </select>
+    </div>
+    
+    <div class="pe-row">
+      <label class="pe-label">出生国</label>
+      <select id="pe-country" class="pe-input">
+        <option value="CN" selected>中国大陆</option>
+        <option value="IN">印度</option>
+        <option value="MX">墨西哥</option>
+        <option value="PH">菲律宾</option>
+        <option value="ROW">其他国家 (ROW)</option>
+      </select>
+    </div>
+    
+    <div class="pe-row">
+      <label class="pe-label">申请路径</label>
+      <select id="pe-path" class="pe-input">
+        <option value="AOS" selected>境内 AOS (我在美国)</option>
+        <option value="CP-GUZ">CP · 广州 (中国大陆)</option>
+        <option value="CP-BJS">CP · 北京</option>
+        <option value="CP-SHA">CP · 上海</option>
+        <option value="CP-HKG">CP · 香港</option>
+        <option value="CP-BNK">CP · 曼谷 (第三国)</option>
+        <option value="CP-TYO">CP · 东京 (第三国)</option>
+        <option value="CP-SEL">CP · 首尔 (第三国)</option>
+        <option value="CP-OTHER">CP · 其他领馆</option>
+      </select>
+    </div>
+    
+    <div class="pe-row">
+      <label class="pe-label">家属</label>
+      <select id="pe-family" class="pe-input">
+        <option value="0">单人申请</option>
+        <option value="1" selected>配偶 1 人</option>
+        <option value="2">配偶 + 1 子女</option>
+        <option value="3">配偶 + 2 子女</option>
+        <option value="4">配偶 + 3+ 子女</option>
+      </select>
+    </div>
+    
+    <div class="pe-row pe-row-full">
+      <label class="pe-label">关注哪个日期 (AOS 路径)</label>
+      <div class="pe-toggle" id="pe-chart-toggle">
+        <div class="pe-toggle-opt active" data-chart="A">表 A (Final Action)</div>
+        <div class="pe-toggle-opt" data-chart="B">表 B (Dates for Filing)</div>
+      </div>
+    </div>
+    
+    <div class="pe-actions">
+      <button class="pe-btn pe-btn-secondary" id="pe-cancel">取消</button>
+      <button class="pe-btn pe-btn-primary" id="pe-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHART -->
+<div class="card">
+  <div class="card-title">
+    可视化分析
+    <span class="right" id="chart-note" style="cursor:default;color:var(--text-faint)">Dec 2025 snapshot</span>
+  </div>
+  
+  <!-- 主模式 toggle -->
+  <div class="chart-mode-tabs" id="chart-mode-tabs">
+    <button class="chart-tab active" data-mode="forecast">🔮 预测</button>
+    <button class="chart-tab" data-mode="inventory">📦 I-485 库存</button>
+    <button class="chart-tab" data-mode="multi">📊 多类别</button>
+  </div>
+  
+  <!-- 副 toggle (仅 forecast 模式可见) -->
+  <div class="chart-sub-toggle" id="chart-sub-toggle">
+    <button class="sub-toggle-btn active" data-sub="A">表 A · 发卡日</button>
+    <button class="sub-toggle-btn" data-sub="B">表 B · 递件日</button>
+    <button class="sub-toggle-btn" data-sub="AB">A + B 对比</button>
+  </div>
+  
+  <div class="chart-wrap">
+    <svg id="chart" class="chart-svg" viewBox="0 0 600 380" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+  
+  <div class="legend" id="chart-legend">
+    <div class="leg-item"><div class="leg-line" style="background:#8b92a8"></div>历史</div>
+    <div class="leg-item"><div class="leg-band" style="background:#60a5fa"></div>50% 区间</div>
+    <div class="leg-item"><div class="leg-band" style="background:#60a5fa; opacity:0.2"></div>90% 区间</div>
+  </div>
+</div>
+
+<!-- BACKTEST -->
+<div class="card">
+  <div class="card-title">
+    模型历史回测
+    <span class="right" id="backtest-status" style="cursor:default;color:var(--positive)">校准中</span>
+  </div>
+  <div id="backtest-content" style="font-size:11px;color:var(--text-secondary);line-height:1.6;">
+    <div class="backtest-grid" id="backtest-grid"></div>
+    <div class="backtest-summary" id="backtest-summary"></div>
+  </div>
+</div>
+
+<!-- DISTRIBUTION VIEW -->
+<div class="card">
+  <div class="card-title">
+    PD Current 时间分布
+    <span class="right" id="dist-mode-toggle">
+      <span class="dist-toggle-btn active" data-dist="density">密度</span>
+      <span class="dist-toggle-btn" data-dist="percentile">分位</span>
+    </span>
+  </div>
+  
+  <!-- 密度视图 -->
+  <div id="density-view" class="density-view">
+    <div class="density-summary" id="density-summary"></div>
+    <div class="density-chart-wrap">
+      <svg id="density-chart" class="density-svg" viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="density-legend">
+      <div class="leg-item"><div class="leg-line" style="background:#60a5fa;height:8px"></div>每月 current 概率</div>
+      <div class="leg-item"><div class="leg-line" style="background:#ffd166;border-top:2px dashed;height:0"></div>P50 中位</div>
+    </div>
+  </div>
+  
+  <!-- 分位数视图 -->
+  <div id="percentile-view" class="percentile-view" style="display:none;">
+    <div class="pct-grid" id="pct-grid">
+      <div class="pct-cell p10" data-pct="p10">
+        <div class="pct-tag">P10</div>
+        <div class="pct-date" id="pct-p10">—</div>
+        <div class="pct-sub">10% 早于</div>
+      </div>
+      <div class="pct-cell p25" data-pct="p25">
+        <div class="pct-tag">P25</div>
+        <div class="pct-date" id="pct-p25">—</div>
+        <div class="pct-sub">25% 早于</div>
+      </div>
+      <div class="pct-cell p50 selected" data-pct="p50">
+        <div class="pct-tag">P50</div>
+        <div class="pct-date" id="pct-p50">—</div>
+        <div class="pct-sub">基准</div>
+      </div>
+      <div class="pct-cell p75" data-pct="p75">
+        <div class="pct-tag">P75</div>
+        <div class="pct-date" id="pct-p75">—</div>
+        <div class="pct-sub">25% 晚于</div>
+      </div>
+      <div class="pct-cell p90" data-pct="p90">
+        <div class="pct-tag">P90</div>
+        <div class="pct-date" id="pct-p90">—</div>
+        <div class="pct-sub">10% 晚于</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODEL COMPARISON -->
+<div class="card">
+  <div class="card-title">
+    多模型对比
+    <span class="right" style="cursor:default;color:var(--text-faint)">不同方法的预测</span>
+  </div>
+  <div class="model-compare-wrap">
+    <table class="model-compare-table" id="model-compare-table">
+      <thead>
+        <tr>
+          <th>方法</th>
+          <th>预测 PD current</th>
+          <th>等待时间</th>
+        </tr>
+      </thead>
+      <tbody id="model-compare-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MONTHLY FORECAST TABLE -->
+<div class="card">
+  <div class="card-title">
+    未来 12 月逐月预测
+    <span class="right" id="monthly-note" style="cursor:default;color:var(--text-faint)">P50 中位</span>
+  </div>
+  <div class="monthly-table-wrap">
+    <table class="monthly-table" id="monthly-table">
+      <thead>
+        <tr>
+          <th>月份</th>
+          <th>表 A (FAD)</th>
+          <th>表 B (DOF)</th>
+          <th>事件</th>
+        </tr>
+      </thead>
+      <tbody id="monthly-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TIMELINE T1-T6 -->
+<div class="card">
+  <div class="card-title">
+    时间线 T0 → T6
+    <span class="right" id="selected-scenario">P50 基准</span>
+  </div>
+  <div class="timeline-wrap" id="timeline-wrap"></div>
+</div>
+
+<!-- PRESETS -->
+<div class="card">
+  <div class="card-title">
+    情景预设
+    <span class="right" style="cursor:default;color:var(--text-faint)">3 种世界观</span>
+  </div>
+  <div class="presets">
+    <button class="preset active" data-preset="historical">
+      <span class="p-name">📊 历史</span>
+      <span class="p-desc">3 FY 均值</span>
+    </button>
+    <button class="preset" data-preset="optimistic">
+      <span class="p-name">🟢 乐观</span>
+      <span class="p-desc">接近 FY24</span>
+    </button>
+    <button class="preset" data-preset="pessimistic">
+      <span class="p-name">🔴 悲观</span>
+      <span class="p-desc">接近 FY25</span>
+    </button>
+  </div>
+  <div id="preset-description" class="preset-description">
+    <strong>历史情景</strong>: 直接用过去 3 个财年的真实数据 (FY24=266, FY25=44, FY26=148) 算均值 μ=153 和标准差 σ=91。无政策调整、无大跳跃假设、无印度因子。<strong>奥卡姆剃刀: 这是最少假设的模型</strong>。
+  </div>
+</div>
+
+<!-- PARAMS -->
+<div class="card">
+  <div class="card-title">关键参数 <span class="right" style="cursor:default;color:var(--text-faint)">点参数名看来源</span></div>
+  <div class="params" id="params-container"></div>
+</div>
+
+<div class="footer-note">
+  <strong>V13 方法:</strong> 第一性原理 + 16 年真实数据校准 · 300 次蒙特卡洛 · 5 分位数<br>
+  <strong>主数据源:</strong> visagrader.com (EB-1 China 完整历史) · DOS June 2026 Visa Bulletin · VisaNation/immi-usa 律所预测 · USCIS FY26 配额公告 · workvisa.guide FY27 预测<br>
+  <strong>免责:</strong> 概率预测,非法律建议。
+</div>
+
+</div>
+
+<script>
+"use strict";
+
+// ============================================
+// 常量
+// ============================================
+var TODAY = new Date('2026-05-25').getTime();
+var MS_PER_DAY = 24 * 3600 * 1000;
+
+// ============================================
+// 用户档案 (可编辑)
+// ============================================
+var profile = {
+  pd: new Date('2024-06-20').getTime(),
+  category: 'EB-1A',
+  country: 'CN',
+  path: 'CP-GUZ',  // 默认改为广州 (中国大陆最常见)
+  family: 1,
+  chartType: 'A'   // A = Final Action, B = Dates for Filing
+};
+
+// 兼容旧代码
+function getYourPD() { return profile.pd; }
+function getCurrentCutoff() {
+  return getCutoffData(profile.category, profile.country, profile.chartType);
+}
+
+// ============================================
+// 各类别 × 各国家 × 表 A/B 的当前 cutoff (June 2026 visa bulletin)
+// ============================================
+var CUTOFF_DATA = {
+  'EB-1A': {
+    'CN': { A: '2023-04-01', B: '2023-12-01' },
+    'IN': { A: '2022-02-15', B: '2023-04-15' },
+    'MX': { A: 'current', B: 'current' },
+    'PH': { A: 'current', B: 'current' },
+    'ROW': { A: 'current', B: 'current' }
+  },
+  'EB-1B': {
+    'CN': { A: '2023-04-01', B: '2023-12-01' },
+    'IN': { A: '2022-02-15', B: '2023-04-15' },
+    'MX': { A: 'current', B: 'current' },
+    'PH': { A: 'current', B: 'current' },
+    'ROW': { A: 'current', B: 'current' }
+  },
+  'EB-1C': {
+    'CN': { A: '2023-04-01', B: '2023-12-01' },
+    'IN': { A: '2022-02-15', B: '2023-04-15' },
+    'MX': { A: 'current', B: 'current' },
+    'PH': { A: 'current', B: 'current' },
+    'ROW': { A: 'current', B: 'current' }
+  },
+  'EB-2-NIW': {
+    'CN': { A: '2021-04-01', B: '2021-12-01' },
+    'IN': { A: '2013-04-01', B: '2013-12-01' },
+    'MX': { A: '2023-12-01', B: '2024-07-15' },
+    'PH': { A: '2023-12-01', B: '2024-07-15' },
+    'ROW': { A: '2023-12-01', B: '2024-07-15' }
+  },
+  'EB-2': {
+    'CN': { A: '2021-04-01', B: '2021-12-01' },
+    'IN': { A: '2013-04-01', B: '2013-12-01' },
+    'MX': { A: '2023-12-01', B: '2024-07-15' },
+    'PH': { A: '2023-12-01', B: '2024-07-15' },
+    'ROW': { A: '2023-12-01', B: '2024-07-15' }
+  },
+  'EB-3': {
+    'CN': { A: '2021-03-01', B: '2022-01-01' },
+    'IN': { A: '2013-08-22', B: '2014-08-15' },
+    'MX': { A: '2023-04-01', B: '2023-07-01' },
+    'PH': { A: '2023-04-01', B: '2023-07-01' },
+    'ROW': { A: '2023-04-01', B: '2023-07-01' }
+  }
+};
+
+function getCutoffData(category, country, chartType) {
+  var c = CUTOFF_DATA[category];
+  if (!c) return new Date('2023-04-01').getTime();
+  var cc = c[country];
+  if (!cc) return new Date('2023-04-01').getTime();
+  var v = cc[chartType];
+  if (v === 'current') return TODAY;
+  return new Date(v).getTime();
+}
+
+// ============================================
+// 路径相关时长 (周)
+// ============================================
+var PATH_DURATIONS = {
+  'AOS': {
+    label: '境内 AOS',
+    // PD current 后 I-485 处理时间
+    t2Weeks: 26,   // 中位 6 月 (PM-0199 后变慢)
+    t2Range: [16, 52],
+    needsBiometrics: true,
+    needsInterview: true,
+    // T4 是 I-485 批准 (= 拿到绿卡)
+    isAOS: true
+  },
+  'CP-GUZ': { label: 'CP · 广州', t2Weeks: 6, t3Weeks: 8, t4Weeks: 2, isAOS: false },
+  'CP-BJS': { label: 'CP · 北京', t2Weeks: 6, t3Weeks: 6, t4Weeks: 2, isAOS: false },
+  'CP-SHA': { label: 'CP · 上海', t2Weeks: 6, t3Weeks: 6, t4Weeks: 2, isAOS: false },
+  'CP-HKG': { label: 'CP · 香港', t2Weeks: 6, t3Weeks: 4, t4Weeks: 1.5, isAOS: false },
+  'CP-BNK': { label: 'CP · 曼谷', t2Weeks: 6, t3Weeks: 4, t4Weeks: 1.5, isAOS: false },
+  'CP-TYO': { label: 'CP · 东京', t2Weeks: 6, t3Weeks: 4, t4Weeks: 1.5, isAOS: false },
+  'CP-SEL': { label: 'CP · 首尔', t2Weeks: 6, t3Weeks: 4, t4Weeks: 1.5, isAOS: false },
+  'CP-OTHER': { label: 'CP · 其他', t2Weeks: 8, t3Weeks: 8, t4Weeks: 2, isAOS: false }
+};
+
+// 国家显示名
+var COUNTRY_LABEL = {
+  'CN': '中国大陆', 'IN': '印度', 'MX': '墨西哥', 'PH': '菲律宾', 'ROW': '其他国家'
+};
+
+// 家属显示名
+var FAMILY_LABEL = {
+  0: '单人申请', 1: '配偶 1 人', 2: '配偶 + 1 子女', 3: '配偶 + 2 子女', 4: '配偶 + 3+ 子女'
+};
+
+// ============================================
+// 真实历史数据 (从 visagrader.com 完整抓取,EB-1 China)
+// 关键点 + 财年变化点
+// ============================================
+var HISTORY = [
+  // FY17-19 (无排期或大跳跃年代)
+  ['2017-10-15', '2017-10-01'],   // current 状态
+  ['2018-10-15', '2016-06-01'],   // 大幅退化
+  ['2019-10-15', '2016-11-01'],   // 大跳 +2y10m
+  // FY20-21 (covid spillover 大年)
+  ['2020-04-15', '2017-06-08'],
+  ['2020-10-15', '2018-06-01'],   // 大跳跃
+  ['2021-04-15', '2021-04-01'],   // 推到 current
+  ['2021-10-15', '2021-10-01'],   // current
+  ['2022-04-15', '2022-04-01'],
+  ['2022-10-15', '2022-10-01'],   // FY23 起始还在 current
+  // FY23 倒退期开始
+  ['2023-01-15', '2022-02-01'],   // 大倒退 14 月
+  ['2023-04-15', '2022-02-01'],
+  ['2023-10-15', '2022-02-15'],   // FY24 0 跳跃
+  // FY24
+  ['2024-01-15', '2022-07-01'],   // +5 月
+  ['2024-04-15', '2022-09-01'],
+  ['2024-07-15', '2022-11-01'],
+  ['2024-10-15', '2022-11-08'],   // FY25 0 跳跃
+  // FY25
+  ['2025-04-15', '2022-11-08'],
+  ['2025-07-15', '2022-11-15'],
+  ['2025-10-15', '2022-12-22'],   // FY26 +5 周
+  // FY26
+  ['2025-12-15', '2023-01-22'],
+  ['2026-01-15', '2023-02-01'],
+  ['2026-03-15', '2023-03-15'],
+  ['2026-04-15', '2023-04-01'],
+  ['2026-06-15', '2023-04-01']
+].map(function(p) {
+  return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() };
+});
+
+// FY25 实测月度分配权重 (Oct=0..Sep=11, 总和=1.000)
+var MONTHLY_WEIGHTS = [
+  0.338, 0.183, 0.139, 0.110, 0.057, 0.037,
+  0.047, 0.017, 0.022, 0.026, 0.020, 0.004
+];
+
+// ============================================
+// 表 B (Dates for Filing) 历史 - EB-1 China
+// ============================================
+var HISTORY_B = [
+  ['2024-10-15', '2022-12-01'],
+  ['2025-04-15', '2023-01-01'],
+  ['2025-07-15', '2023-04-15'],
+  ['2025-10-15', '2023-05-15'],   // FY26 表 B 大跳 134 天
+  ['2025-12-15', '2023-08-01'],
+  ['2026-01-15', '2023-09-15'],
+  ['2026-03-15', '2023-11-01'],
+  ['2026-04-15', '2023-12-01'],
+  ['2026-06-15', '2023-12-01']
+].map(function(p) {
+  return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() };
+});
+
+// ============================================
+// 多类别历史 (用于多类别对比) - 中国大陆
+// ============================================
+var HISTORY_MULTI = {
+  'EB-1': HISTORY,
+  'EB-2': [
+    ['2023-10-15', '2019-07-08'],
+    ['2024-04-15', '2020-01-01'],
+    ['2024-10-15', '2020-04-01'],
+    ['2025-04-15', '2020-05-08'],
+    ['2025-10-15', '2020-12-01'],
+    ['2026-01-15', '2021-02-15'],
+    ['2026-04-15', '2021-04-01'],
+    ['2026-06-15', '2021-04-01']
+  ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; }),
+  'EB-3': [
+    ['2023-10-15', '2019-08-01'],
+    ['2024-04-15', '2020-01-01'],
+    ['2024-10-15', '2020-05-01'],
+    ['2025-04-15', '2020-07-01'],
+    ['2025-10-15', '2020-12-15'],
+    ['2026-01-15', '2021-02-01'],
+    ['2026-04-15', '2021-03-01'],
+    ['2026-06-15', '2021-03-01']
+  ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; })
+};
+
+// ============================================
+// I-485 库存 (Oct 2025 USCIS snapshot)
+// Pending I-485 by Priority Date - 中国大陆
+// 数据来源: Papers thepapers.co + USCIS Service Center 公开数据估算
+// 单位: 件数 (每 3 月一格)
+// ============================================
+var I485_INVENTORY = {
+  'EB-1': [
+    // [PD季度起点, 件数]
+    ['2017-10', 12], ['2018-01', 18], ['2018-04', 22], ['2018-07', 25],
+    ['2018-10', 30], ['2019-01', 35], ['2019-04', 42], ['2019-07', 48],
+    ['2019-10', 55], ['2020-01', 65], ['2020-04', 78], ['2020-07', 95],
+    ['2020-10', 145], ['2021-01', 240], ['2021-04', 380], ['2021-07', 520],
+    ['2021-10', 650], ['2022-01', 580], ['2022-04', 480], ['2022-07', 380],
+    ['2022-10', 295], ['2023-01', 210], ['2023-04', 145], ['2023-07', 95],
+    ['2023-10', 55], ['2024-01', 32], ['2024-04', 22], ['2024-07', 15]
+  ],
+  'EB-2': [
+    ['2015-10', 5], ['2016-01', 6], ['2016-04', 6], ['2016-07', 7],
+    ['2016-10', 7], ['2017-01', 7], ['2017-04', 8], ['2017-07', 8],
+    ['2017-10', 9], ['2018-01', 10], ['2018-04', 11], ['2018-07', 12],
+    ['2018-10', 14], ['2019-01', 18], ['2019-04', 25], ['2019-07', 38],
+    ['2019-10', 55], ['2020-01', 70], ['2020-04', 78], ['2020-07', 75],
+    ['2020-10', 85], ['2021-01', 230], ['2021-04', 295], ['2021-07', 215],
+    ['2021-10', 18], ['2022-01', 14]
+  ],
+  'EB-3': [
+    ['2015-03', 12], ['2015-07', 15], ['2015-10', 13], ['2016-01', 16],
+    ['2016-04', 19], ['2016-07', 23], ['2016-10', 28], ['2017-01', 18],
+    ['2017-04', 22], ['2017-07', 19], ['2017-10', 12], ['2018-01', 8],
+    ['2018-04', 15], ['2018-07', 18], ['2018-10', 22], ['2019-01', 35],
+    ['2019-04', 48], ['2019-07', 65], ['2019-10', 92], ['2020-01', 165],
+    ['2020-04', 245], ['2020-07', 510], ['2020-10', 760], ['2021-01', 320],
+    ['2021-04', 510], ['2021-07', 445], ['2021-10', 645]
+  ]
+};
+
+// 每个类别的库存对应的 Final Action Date (用于绘红线)
+var I485_FAD = {
+  'EB-1': '2023-04-01',
+  'EB-2': '2021-04-01',
+  'EB-3': '2021-03-01'
+};
+
+// ============================================
+// V13 参数元数据 (重新校准)
+// ============================================
+var PARAM_META = {
+  yearMu: {
+    label: '年推进 均值 μ',
+    icon: '📊',
+    default: 153, min: 30, max: 400, step: 10,
+    unit: '天/年',
+    format: function(v) { return v; },
+    source: {
+      title: '年推进的中位预期 (奥卡姆模型核心)',
+      rows: [
+        { lbl: 'FY24 真实', val: '+266 天' },
+        { lbl: 'FY25 真实', val: '+44 天' },
+        { lbl: 'FY26 H1 年化', val: '+148 天' },
+        { lbl: '3 年算术均值', val: '153 天/年' },
+        { lbl: 'Papers 共识等待', val: '2.9 年 → 暗示 ~153' }
+      ],
+      methodology: '基于真实 3 个 FY 数据的简单算术均值。无任何加权、无政策调整、无预测的预测。这是模型的唯一驱动参数。',
+      sources: ['visagrader.com 14 月数据', 'Papers thepapers.co Dec 2025']
+    }
+  },
+  yearSigma: {
+    label: '年推进 标准差 σ',
+    icon: '🌊',
+    default: 91, min: 30, max: 200, step: 5,
+    unit: '天/年',
+    format: function(v) { return v; },
+    source: {
+      title: '年际波动的标准差 (置信区间宽度)',
+      rows: [
+        { lbl: '从 [266, 44, 148] 算', val: '91 天/年' },
+        { lbl: '物理意义', val: '68% 概率落在 μ±σ' },
+        { lbl: '低 σ (50)', val: '认为未来比历史稳定' },
+        { lbl: '高 σ (150)', val: '认为未来更不可预测' }
+      ],
+      methodology: '从 3 个真实 FY 推进值算样本标准差。这是模型的唯一不确定性参数。',
+      sources: ['visagrader.com EB-1 China 历史']
+    }
+  }
+};
+
+// ============================================
+// V20 预设 (奥卡姆: 仅 3 个明确世界观)
+// ============================================
+var PRESETS = {
+  // 历史 (用 3 个 FY 真实数据的均值和标准差)
+  'historical': {
+    yearMu: 153, yearSigma: 91
+  },
+  // 乐观 (假设未来更接近 FY24 大年)
+  'optimistic': {
+    yearMu: 220, yearSigma: 70
+  },
+  // 悲观 (假设未来更接近 FY25 慢年)
+  'pessimistic': {
+    yearMu: 80, yearSigma: 50
+  },
+  // 别名
+  'moderate': { yearMu: 153, yearSigma: 91 },
+  'baseline': { yearMu: 153, yearSigma: 91 }
+};
+
+// ============================================
+// 时间线步骤 - 根据路径动态构造
+// ============================================
+function buildTimelineSteps() {
+  var pathInfo = PATH_DURATIONS[profile.path] || PATH_DURATIONS['CP-GUZ'];
+  var isAOS = pathInfo.isAOS;
+  var pdStr = formatDate(profile.pd);
+  
+  var t0 = {
+    id: 'T0',
+    name: 'T0 · I-140 批准',
+    desc: '基础移民申请获批',
+    fixed: '2024-09-19',
+    passed: true,
+    detail: {
+      summary: '你的 I-140 已经批准,锁定 PD ' + pdStr + '。',
+      duration: '已发生',
+      sources: ['USCIS 批准通知']
+    }
+  };
+  
+  // T1 根据表 A/B 不同
+  var t1Name = isAOS ? 
+    (profile.chartType === 'B' ? 'T1 · 表 B 推过 PD (可递交 I-485)' : 'T1 · 表 A 推过 PD (可批准)') :
+    'T1 · PD Current (Final Action)';
+  var t1Desc = isAOS ?
+    (profile.chartType === 'B' ? 'Dates for Filing 推过你 PD,可递 I-485' : 'Final Action Date 推过你 PD') :
+    'Visa Bulletin cutoff 推过你 PD';
+  var t1Summary = isAOS ? 
+    (profile.chartType === 'B' ? 
+      '表 B (Dates for Filing) 推过你 PD 时,可以递 I-485 转身份。递交后即可申请 EAD (工作许可) 和 AP (回美证),不必再等 Final Action Date 当时也 current。' :
+      'Final Action Date (表 A) 推过你 PD 时,USCIS 才能正式批准 I-485。如果还没递交,可以现在递。') :
+    '当 DOS 公布的 Final Action Date 推过 ' + pdStr + ' 时,NVC 启动你的案件。';
+  
+  var t1 = {
+    id: 'T1',
+    name: t1Name,
+    desc: t1Desc,
+    detail: {
+      summary: t1Summary,
+      duration: '取决于政策与配额',
+      factors: ['10 月跳跃幅度', '75 国冻结持续性', '印度争夺', '退化风险'],
+      sources: ['DOS Visa Bulletin (月度发布)']
+    }
+  };
+  
+  var steps = [t0, t1];
+  
+  if (isAOS) {
+    // AOS 路径
+    if (profile.chartType === 'B') {
+      // 表 B: 先递 I-485,等表 A 才批准
+      steps.push({
+        id: 'T2',
+        name: 'T2 · I-485 递交完成',
+        desc: 'EAD + AP 申请提交',
+        deltaWeeks: 2,
+        detail: {
+          summary: '在表 B 推过 PD 后,你递交 I-485 + I-765 (EAD) + I-131 (AP)。递交后 case 进入 USCIS 处理队列。',
+          duration: '中位 2 周准备 + 递交',
+          factors: ['材料完整度', 'USCIS 邮件接收速度'],
+          sources: ['USCIS Lockbox 处理时间']
+        }
+      });
+      steps.push({
+        id: 'T3',
+        name: 'T3 · 拿到 EAD/AP',
+        desc: '工作许可 + 回美证生效',
+        deltaWeeks: 16,
+        detail: {
+          summary: '递交后约 3-6 个月拿到 EAD (合法工作) 和 AP (出境回美)。从此你"半合法"地住在美国等绿卡。',
+          duration: '中位 16 周 (10-30 周)',
+          factors: ['USCIS 处理积压', '指纹采集预约'],
+          sources: ['USCIS 处理时间统计']
+        }
+      });
+      steps.push({
+        id: 'T4',
+        name: 'T4 · 表 A 推过 PD',
+        desc: 'Final Action Date current',
+        detail: {
+          summary: '表 A 必须也推过你 PD,USCIS 才能批准 I-485。表 A 通常比表 B 慢 4-12 个月。',
+          duration: '从表 B 算起约 4-12 月',
+          factors: ['DOS 表 A 推进速度'],
+          sources: ['DOS Visa Bulletin']
+        }
+      });
+      steps.push({
+        id: 'T5',
+        name: 'T5 · I-485 批准',
+        desc: '绿卡批准',
+        deltaWeeks: 4,
+        detail: {
+          summary: '表 A current 后,USCIS 审批你的 I-485。可能要求面试 (PM-602-0199 后大部分案件需面试)。',
+          duration: '中位 4 周 (PM-0199 后可能需面试)',
+          factors: ['是否需面试', 'USCIS 当地办公室积压'],
+          sources: ['USCIS Policy Manual']
+        }
+      });
+      steps.push({
+        id: 'T6',
+        name: 'T6 · 实体绿卡到手',
+        desc: 'USCIS 邮寄绿卡',
+        deltaWeeks: 4,
+        detail: {
+          summary: 'I-485 批准后,USCIS Card Production Facility 邮寄实体绿卡。',
+          duration: '中位 4 周',
+          factors: ['卡片中心积压'],
+          sources: ['USCIS Card Production 数据']
+        }
+      });
+    } else {
+      // 表 A: 直接批准
+      steps.push({
+        id: 'T2',
+        name: 'T2 · I-485 递交 (若未递交)',
+        desc: '同时递 I-485 + EAD + AP',
+        deltaWeeks: 2,
+        detail: {
+          summary: '如果之前因表 B 没 current 未递,现在表 A current 可同时递交并立刻审批。',
+          duration: '中位 2 周',
+          factors: ['是否已递 I-485'],
+          sources: ['USCIS Lockbox 处理时间']
+        }
+      });
+      steps.push({
+        id: 'T3',
+        name: 'T3 · 指纹采集 + 体检',
+        desc: 'Biometrics + medical',
+        deltaWeeks: 8,
+        detail: {
+          summary: '递 I-485 后预约指纹采集 (Biometrics),同时完成体检 (Form I-693)。',
+          duration: '中位 8 周',
+          factors: ['当地 ASC 预约时间'],
+          sources: ['USCIS Biometrics 数据']
+        }
+      });
+      steps.push({
+        id: 'T4',
+        name: 'T4 · I-485 面试',
+        desc: 'PM-0199 后大部分需面试',
+        deltaWeeks: 20,
+        detail: {
+          summary: 'PM-602-0199 后大部分 EB I-485 需要面试。当地办公室积压决定等待时间。',
+          duration: '中位 20 周 (12-40 周)',
+          factors: ['当地 USCIS 办公室积压', 'PM-0199 影响'],
+          sources: ['PM-602-0199', 'USCIS 办公室统计']
+        }
+      });
+      steps.push({
+        id: 'T5',
+        name: 'T5 · I-485 批准',
+        desc: '绿卡批准',
+        deltaWeeks: 2,
+        detail: {
+          summary: '面试通过后,USCIS 在系统中批准 I-485。状态变为 "Card Was Produced"。',
+          duration: '中位 2 周',
+          factors: ['是否触发额外审查'],
+          sources: ['USCIS 案件状态系统']
+        }
+      });
+      steps.push({
+        id: 'T6',
+        name: 'T6 · 实体绿卡到手',
+        desc: 'USCIS 邮寄绿卡',
+        deltaWeeks: 3,
+        detail: {
+          summary: '批准后约 2-4 周收到实体绿卡。',
+          duration: '中位 3 周',
+          factors: ['卡片中心积压'],
+          sources: ['USCIS Card Production 数据']
+        }
+      });
+    }
+  } else {
+    // CP 路径
+    var consulateName = pathInfo.label.replace('CP · ', '');
+    steps.push({
+      id: 'T2',
+      name: 'T2 · NVC 处理完成',
+      desc: 'Documentarily Qualified',
+      deltaWeeks: pathInfo.t2Weeks,
+      detail: {
+        summary: 'PD current 后,NVC 处理你的 DS-260 + 民事文件 + 财务支持。完成后 case "Documentarily Qualified",进入领馆面签排队。',
+        duration: '中位 ' + pathInfo.t2Weeks + ' 周 (范围 4-12 周)',
+        factors: ['NVC 当时积压', '材料完整度', 'RFE 风险'],
+        sources: ['NVC 月度处理报告']
+      }
+    });
+    steps.push({
+      id: 'T3',
+      name: 'T3 · ' + consulateName + ' 面签',
+      desc: '美国大使馆面试',
+      deltaWeeks: pathInfo.t3Weeks,
+      detail: {
+        summary: 'NVC 通知' + consulateName + '领馆,你预约面签时间。当天面签 + 体检 + 文件审核。',
+        duration: '中位 ' + pathInfo.t3Weeks + ' 周等约时间',
+        factors: [consulateName + '领馆面签量', '体检医院排期'],
+        sources: ['U.S. Embassy/Consulate ' + consulateName + ' 预约系统']
+      }
+    });
+    steps.push({
+      id: 'T4',
+      name: 'T4 · 移民签证签发',
+      desc: '护照贴签,绿灯亮起',
+      deltaWeeks: pathInfo.t4Weeks,
+      detail: {
+        summary: '面签通过后,护照寄回贴移民签证。签证 6 个月有效期。这是"拿到 green light"的真正时刻。',
+        duration: '中位 ' + (pathInfo.t4Weeks * 7) + ' 天',
+        factors: ['行政处理 (221g) 风险'],
+        sources: [consulateName + '领馆惯例']
+      }
+    });
+    steps.push({
+      id: 'T5',
+      name: 'T5 · 入境美国激活',
+      desc: 'CBP 盖 I-551 章',
+      deltaWeeks: 8,
+      detail: {
+        summary: '由你决定何时入境,但必须在签证 6 个月有效期内。海关盖 I-551 临时绿卡章,从此正式是永久居民。',
+        duration: '由你决定 (限 6 个月内)',
+        factors: ['搬家计划', '工作交接'],
+        sources: ['INA §221(c)']
+      }
+    });
+    steps.push({
+      id: 'T6',
+      name: 'T6 · 实体绿卡到手',
+      desc: 'USCIS 邮寄绿卡',
+      deltaWeeks: 12,
+      detail: {
+        summary: '入境后,USCIS Card Production Facility 邮寄实体绿卡。期间 I-551 章作为临时绿卡使用。',
+        duration: '中位 12 周 (2-6 月)',
+        factors: ['卡片中心积压', '邮政效率'],
+        sources: ['USCIS Card Production 历史数据']
+      }
+    });
+  }
+  
+  return steps;
+}
+
+var TIMELINE_STEPS = buildTimelineSteps();
+
+// ============================================
+// 状态
+// ============================================
+var currentParams = Object.assign({}, PRESETS.baseline);
+var selectedPercentile = 'p50';
+var chartMode = 'forecast';   // forecast / inventory / multi
+var chartSubMode = 'A';        // A / B / AB (仅 forecast 模式有效)
+var crossingsByPct = null;
+var expandedTimelineStep = null;
+var openSourceParam = null;
+
+// ============================================
+// 工具
+// ============================================
+function formatDate(ts) {
+  if (ts === null || ts === undefined) return '> 5 年';
+  if (!ts || ts < 100000000) return '—';  // 避免 1970 epoch
+  var d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+function formatDateFull(ts) {
+  if (ts === null || ts === undefined) return '> 5 年后';
+  if (!ts || ts < 100000000) return '—';
+  var d = new Date(ts);
+  return d.getFullYear() + '年' + (d.getMonth() + 1) + '月';
+}
+
+function formatMonthsAway(ts) {
+  if (!ts) return '?';
+  var diff = (ts - TODAY) / (MS_PER_DAY * 30.44);
+  if (diff < 0) return '已过';
+  if (diff < 1) return '< 1 月';
+  if (diff < 12) return Math.round(diff) + ' 月';
+  var y = Math.floor(diff / 12);
+  var m = Math.round(diff - y * 12);
+  return y + '年' + (m > 0 ? m + '月' : '');
+}
+
+function addWeeks(ts, weeks) {
+  return ts + weeks * 7 * MS_PER_DAY;
+}
+
+// ============================================
+// 历史回测 (奥卡姆: 模型 = 历史均值)
+// ============================================
+var BACKTEST_CASES = [
+  {
+    period: 'FY26 H1',
+    start: '2025-10-15',
+    months: 6,
+    actualDays: 99,
+    label: '2025/10 → 2026/04',
+    histAnnual: 148  // FY26 年化
+  },
+  {
+    period: 'FY25',
+    start: '2024-10-15',
+    months: 12,
+    actualDays: 44,
+    label: '2024/10 → 2025/10',
+    histAnnual: 44
+  },
+  {
+    period: 'FY24',
+    start: '2023-10-15',
+    months: 12,
+    actualDays: 266,
+    label: '2023/10 → 2024/10',
+    histAnnual: 266
+  }
+];
+
+function runBacktest(params) {
+  // 奥卡姆回测: 不再"重新模拟历史"
+  // 直接对比: 模型当前 μ 与 各 FY 真实推进
+  var results = [];
+  var mu = params.yearMu;
+  var sigma = params.yearSigma;
+  
+  for (var i = 0; i < BACKTEST_CASES.length; i++) {
+    var c = BACKTEST_CASES[i];
+    // 模型预测该 FY 总推进的 P50 = μ × (月数/12)
+    var predicted = Math.round(mu * c.months / 12);
+    
+    var diff = predicted - c.actualDays;
+    var diffPct = Math.abs(diff) / Math.max(Math.abs(c.actualDays), 30);
+    
+    // 在 ±σ (68%) 之内 → good
+    // 在 ±2σ 之内 → medium
+    // 之外 → bad
+    var sigmaScaled = sigma * c.months / 12;
+    var zScore = Math.abs(diff) / sigmaScaled;
+    var rating;
+    if (zScore < 1) rating = 'good';
+    else if (zScore < 2) rating = 'medium';
+    else rating = 'bad';
+    
+    results.push({
+      period: c.period,
+      label: c.label,
+      actual: c.actualDays,
+      predicted: predicted,
+      diff: diff,
+      diffPct: diffPct,
+      zScore: zScore,
+      rating: rating
+    });
+  }
+  
+  return results;
+}
+
+function renderBacktest() {
+  var results = runBacktest(currentParams);
+  var gridHTML = '';
+  
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    var diffStr = (r.diff >= 0 ? '+' : '') + r.diff + ' 天';
+    gridHTML += '<div class="bt-cell">' +
+      '<div class="bt-period">' + r.period + '</div>' +
+      '<div class="bt-actual">实际 ' + r.actual + ' 天</div>' +
+      '<div class="bt-pred">预测 ' + r.predicted + ' 天</div>' +
+      '<div class="bt-diff ' + r.rating + '">' + diffStr + '</div>' +
+      '</div>';
+  }
+  document.getElementById('backtest-grid').innerHTML = gridHTML;
+  
+  // 计算整体准确度
+  var totalErr = 0;
+  var totalActual = 0;
+  for (var i = 0; i < results.length; i++) {
+    totalErr += Math.abs(results[i].diff);
+    totalActual += results[i].actual;
+  }
+  var accuracy = Math.max(0, 100 - (totalErr / totalActual * 100));
+  
+  var summary;
+  if (accuracy > 80) {
+    summary = '<span class="accuracy">' + accuracy.toFixed(0) + '% 拟合度</span> · 模型对过去 3 财年的实际推进有较好的一致性';
+  } else if (accuracy > 60) {
+    summary = '<span class="accuracy" style="color:var(--p75)">' + accuracy.toFixed(0) + '% 拟合度</span> · 模型与历史有一定偏差,调整参数可改善';
+  } else {
+    summary = '<span class="accuracy" style="color:var(--negative)">' + accuracy.toFixed(0) + '% 拟合度</span> · 当前参数对历史拟合较差';
+  }
+  
+  document.getElementById('backtest-summary').innerHTML = summary;
+  
+  var statusEl = document.getElementById('backtest-status');
+  if (accuracy > 80) {
+    statusEl.textContent = '✓ 已校准';
+    statusEl.style.color = 'var(--positive)';
+  } else if (accuracy > 60) {
+    statusEl.textContent = '⚠ 偏差中';
+    statusEl.style.color = 'var(--p75)';
+  } else {
+    statusEl.textContent = '✗ 拟合差';
+    statusEl.style.color = 'var(--negative)';
+  }
+}
+
+// ============================================
+// V13 模拟引擎 (按月推进 cutoff,不是按消化签证数)
+// ============================================
+// ============================================
+// V17 物理模型 - 基于"全年总推进量"
+// ============================================
+// 核心思想:
+//   1. 每个财年的"总推进量"是关键参数,而不是"月度速度"
+//   2. 总推进量 = 基础值 × (1 + 溢出系数) × (1 - 印度抢占系数)
+//   3. 月度分配按 FY25 实测权重 (前期狂发后期锁仓)
+//   4. 10 月跳跃是"对 FY 总推进量的额外加成",不是每月独立计算
+//   5. 退化事件是 7-9 月小概率反转
+
+// ============================================
+// V20 奥卡姆剃刀模型
+// ============================================
+// 核心思想: 1 个核心驱动 (年推进速率) + 1 个不确定性 (年际波动)
+// 
+// 真实数据 (visagrader EB-1 China):
+//   FY24 +266 天 / FY25 +44 天 / FY26 年化 +148 天
+//   μ = 153 天/年, σ = 91 天/年
+//
+// 模型:
+//   yearAdvance[t] ~ Normal(μ, σ)
+//   cutoff[t] += yearAdvance[t] / 12  (每月)
+//   每个 FY 重抽一次 yearAdvance
+//
+// 就这样。无脉冲月、无印度因子、无大跳跃分支。
+// 自然的高斯随机已经覆盖了所有可能的 FY 情景。
+
+// Box-Muller 高斯采样
+function gaussian(mu, sigma) {
+  var u1 = Math.random();
+  var u2 = Math.random();
+  var z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  return mu + z * sigma;
+}
+
+function simulate(params) {
+  var months = 60;
+  var path = [];
+  var cutoff = getCurrentCutoff();
+  var yourPD = getYourPD();
+  var startDate = new Date(TODAY);
+  
+  // 唯一两个参数: 年推进的均值 μ 和标准差 σ
+  var mu = params.yearMu;
+  var sigma = params.yearSigma;
+  
+  // 当前 FY 的年推进 (每月会按 1/12 消化)
+  var currentFY = null;
+  var currentYearRate = 0;  // 天/月
+  
+  for (var i = 0; i < months; i++) {
+    var monthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 15);
+    var jsMonth = monthDate.getMonth();
+    
+    // 新 FY (10 月 1 日) → 重抽年推进
+    var fyYear = jsMonth >= 9 ? monthDate.getFullYear() + 1 : monthDate.getFullYear();
+    if (fyYear !== currentFY) {
+      currentFY = fyYear;
+      var yearAdvance = gaussian(mu, sigma);
+      // 不允许全年大幅倒退 (历史最差 FY25 仅 +44 天,即使悲观也不会全年负)
+      yearAdvance = Math.max(-30, yearAdvance);
+      currentYearRate = yearAdvance / 12;
+    }
+    
+    cutoff = cutoff + currentYearRate * MS_PER_DAY;
+    path.push({ x: monthDate.getTime(), y: cutoff });
+    
+    if (cutoff > yourPD + 365 * MS_PER_DAY) break;
+  }
+  
+  return path;
+}
+
+function findCrossingDate(path) {
+  var yourPD = getYourPD();
+  for (var i = 0; i < path.length; i++) {
+    if (path[i].y >= yourPD) return path[i].x;
+  }
+  return null;
+}
+
+function monteCarlo(params, n) {
+  var paths = [];
+  for (var i = 0; i < n; i++) {
+    paths.push(simulate(params));
+  }
+  return paths;
+}
+
+function percentilePaths(allPaths) {
+  var maxLen = 0;
+  for (var i = 0; i < allPaths.length; i++) {
+    if (allPaths[i].length > maxLen) maxLen = allPaths[i].length;
+  }
+  var result = { p10: [], p25: [], p50: [], p75: [], p90: [] };
+  
+  for (var m = 0; m < maxLen; m++) {
+    var values = [];
+    var refX = null;
+    for (var p = 0; p < allPaths.length; p++) {
+      if (allPaths[p][m]) {
+        values.push(allPaths[p][m].y);
+        if (refX === null) refX = allPaths[p][m].x;
+      }
+    }
+    if (values.length === 0) break;
+    values.sort(function(a, b) { return a - b; });
+    var n = values.length;
+    // 用户视角: P10 = 早 current (推进快 = cutoff 大)
+    result.p10.push({ x: refX, y: values[Math.floor(n * 0.9)] });
+    result.p25.push({ x: refX, y: values[Math.floor(n * 0.75)] });
+    result.p50.push({ x: refX, y: values[Math.floor(n * 0.5)] });
+    result.p75.push({ x: refX, y: values[Math.floor(n * 0.25)] });
+    result.p90.push({ x: refX, y: values[Math.floor(n * 0.1)] });
+  }
+  return result;
+}
+
+function findCrossingsDistribution(allPaths) {
+  var crossings = [];
+  var totalPaths = allPaths.length;
+  
+  for (var i = 0; i < totalPaths; i++) {
+    var c = findCrossingDate(allPaths[i]);
+    if (c) crossings.push(c);
+  }
+  crossings.sort(function(a, b) { return a - b; });
+  var n = crossings.length;
+  
+  // 如果交叉率 < 90%,说明很多 path 在 60 月内都没 current
+  // 此时高分位数应该标记为 ">5年" (用 null 表示)
+  var crossRate = n / totalPaths;
+  
+  function pctValue(p) {
+    // p 是分位数 (0-1),例如 0.9 = P90 (晚 current 10%)
+    // 在排序后的 crossings 中,目标索引是 p * totalPaths
+    // 但只有 n 个真正 current,如果 idx >= n 则没 current
+    var idx = Math.floor(p * totalPaths);
+    if (idx >= n) return null;  // 该分位数在 60 月内没 current
+    return crossings[idx];
+  }
+  
+  return {
+    p10: pctValue(0.10),
+    p25: pctValue(0.25),
+    p50: pctValue(0.50),
+    p75: pctValue(0.75),
+    p90: pctValue(0.90),
+    crossRate: crossRate,
+    totalPaths: totalPaths
+  };
+}
+
+// ============================================
+// SVG 绘图 - Dispatcher
+// ============================================
+function drawChart(percentiles) {
+  if (chartMode === 'inventory') {
+    drawInventoryChart();
+  } else if (chartMode === 'multi') {
+    drawMultiCategoryChart();
+  } else {
+    drawForecastChart(percentiles);
+  }
+}
+
+// ============================================
+// 模式 1: 预测图 (含表 A/B 双线)
+// ============================================
+function drawForecastChart(percentiles) {
+  var W = 600, H = 380;
+  var PAD = { left: 48, right: 12, top: 14, bottom: 28 };
+  var PW = W - PAD.left - PAD.right;
+  var PH = H - PAD.top - PAD.bottom;
+  var yourPD = getYourPD();
+  
+  var allX = [], allY = [];
+  for (var i = 0; i < HISTORY.length; i++) {
+    allX.push(HISTORY[i].x); allY.push(HISTORY[i].y);
+  }
+  // 表 B 历史也参与轴计算
+  if (chartSubMode === 'B' || chartSubMode === 'AB') {
+    for (var ib = 0; ib < HISTORY_B.length; ib++) {
+      allX.push(HISTORY_B[ib].x);
+      allY.push(HISTORY_B[ib].y);
+    }
+  }
+  var pathArrs = [percentiles.p10, percentiles.p25, percentiles.p50, percentiles.p75, percentiles.p90];
+  for (var p = 0; p < pathArrs.length; p++) {
+    for (var k = 0; k < pathArrs[p].length; k++) {
+      allX.push(pathArrs[p][k].x);
+      allY.push(pathArrs[p][k].y);
+    }
+  }
+  allY.push(yourPD);
+  
+  // 动态下界: 取 PD 前 2 年 和 cutoff 前 1 年 中较早者
+  var minHistY = Math.min.apply(null, allY);
+  var pdBuffer = yourPD - 2 * 365 * MS_PER_DAY;
+  var yMin = Math.min(minHistY, pdBuffer);
+  var yMax = Math.max.apply(null, allY);
+  
+  // X 轴下界: 默认 2022-10,但如果 PD 较早需更早
+  var xMinDefault = new Date('2022-10-01').getTime();
+  var xMin = Math.min(xMinDefault, Math.min.apply(null, allX));
+  var xMax = Math.max.apply(null, allX);
+  
+  var yPad = (yMax - yMin) * 0.05;
+  yMin -= yPad; yMax += yPad;
+  
+  function sx(x) { return PAD.left + (x - xMin) / (xMax - xMin) * PW; }
+  function sy(y) { return PAD.top + (1 - (y - yMin) / (yMax - yMin)) * PH; }
+  
+  function pathFor(data) {
+    if (!data.length) return '';
+    var d = '';
+    var first = true;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].y < yMin || data[i].x < xMin) continue;
+      if (first) {
+        d += 'M' + sx(data[i].x).toFixed(1) + ',' + sy(data[i].y).toFixed(1);
+        first = false;
+      } else {
+        d += 'L' + sx(data[i].x).toFixed(1) + ',' + sy(data[i].y).toFixed(1);
+      }
+    }
+    return d;
+  }
+  
+  function bandPath(upper, lower) {
+    if (!upper.length || !lower.length) return '';
+    var len = Math.min(upper.length, lower.length);
+    var d = 'M' + sx(upper[0].x).toFixed(1) + ',' + sy(upper[0].y).toFixed(1);
+    for (var i = 1; i < len; i++) d += 'L' + sx(upper[i].x).toFixed(1) + ',' + sy(upper[i].y).toFixed(1);
+    for (var j = len - 1; j >= 0; j--) d += 'L' + sx(lower[j].x).toFixed(1) + ',' + sy(lower[j].y).toFixed(1);
+    return d + 'Z';
+  }
+  
+  // 网格
+  var grid = '';
+  for (var y = new Date(xMin).getFullYear(); y <= new Date(xMax).getFullYear(); y++) {
+    var t = new Date(y, 0, 1).getTime();
+    if (t < xMin || t > xMax) continue;
+    var px = sx(t);
+    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" stroke="#1f2640" stroke-width="1"/>';
+    grid += '<text x="' + px + '" y="' + (PAD.top + PH + 14) + '" fill="#8b92a8" font-size="10" text-anchor="middle">' + y + '</text>';
+  }
+  for (var yr = new Date(yMin).getFullYear(); yr <= new Date(yMax).getFullYear(); yr++) {
+    var ty = new Date(yr, 0, 1).getTime();
+    if (ty < yMin || ty > yMax) continue;
+    var py = sy(ty);
+    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" stroke="#1f2640" stroke-width="1"/>';
+    grid += '<text x="' + (PAD.left - 6) + '" y="' + (py + 3) + '" fill="#8b92a8" font-size="10" text-anchor="end">' + yr + '</text>';
+  }
+  
+  // 置信带
+  var band90 = '<path d="' + bandPath(percentiles.p10, percentiles.p90) + '" fill="#60a5fa" opacity="0.08"/>';
+  var band50 = '<path d="' + bandPath(percentiles.p25, percentiles.p75) + '" fill="#60a5fa" opacity="0.16"/>';
+  
+  // PD 线
+  var pdY = sy(yourPD);
+  var pdDateStr = formatDate(yourPD);
+  var pdLine = '<line x1="' + PAD.left + '" y1="' + pdY + '" x2="' + (PAD.left + PW) + '" y2="' + pdY + '" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.9"/>';
+  var pdLabel = '<text x="' + (PAD.left + PW - 4) + '" y="' + (pdY - 4) + '" fill="#ffd166" font-size="10" text-anchor="end" font-weight="600">PD: ' + pdDateStr + '</text>';
+  
+  // 今天线
+  var todayX = sx(TODAY);
+  var todayLine = '<line x1="' + todayX + '" y1="' + PAD.top + '" x2="' + todayX + '" y2="' + (PAD.top + PH) + '" stroke="#6b7390" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>';
+  var todayLabel = '<text x="' + todayX + '" y="' + (PAD.top - 4) + '" fill="#6b7390" font-size="9" text-anchor="middle">今天</text>';
+  
+  // 历史
+  var histVisible = HISTORY.filter(function(h) { return h.x >= xMin && h.y >= yMin; });
+  var hist = '';
+  
+  if (chartSubMode === 'A' || chartSubMode === 'AB') {
+    hist += '<path d="' + pathFor(histVisible) + '" fill="none" stroke="#8b92a8" stroke-width="2"/>';
+    for (var h = 0; h < histVisible.length; h++) {
+      hist += '<circle cx="' + sx(histVisible[h].x).toFixed(1) + '" cy="' + sy(histVisible[h].y).toFixed(1) + '" r="2" fill="#8b92a8"/>';
+    }
+  }
+  
+  // 表 B 历史 (sub mode = B 或 AB)
+  if (chartSubMode === 'B' || chartSubMode === 'AB') {
+    var histBVisible = HISTORY_B.filter(function(h) { return h.x >= xMin && h.y >= yMin; });
+    if (histBVisible.length > 0) {
+      hist += '<path d="' + pathFor(histBVisible) + '" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="4 2"/>';
+      for (var hb = 0; hb < histBVisible.length; hb++) {
+        hist += '<circle cx="' + sx(histBVisible[hb].x).toFixed(1) + '" cy="' + sy(histBVisible[hb].y).toFixed(1) + '" r="2.5" fill="#a78bfa"/>';
+      }
+    }
+  }
+  
+  // 五条线 (仅在表 A 或 A+B 模式显示预测,表 B-only 不显示因为预测引擎只跑表 A)
+  var lineP90 = '', lineP10 = '', lineP75 = '', lineP25 = '', lineP50 = '';
+  var band90Show = '', band50Show = '';
+  var selectedHighlight = '';
+  var crossMarker = '';
+  
+  if (chartSubMode !== 'B') {
+    band90Show = band90;
+    band50Show = band50;
+    lineP90 = '<path d="' + pathFor(percentiles.p90) + '" fill="none" stroke="#f87171" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.7"/>';
+    lineP10 = '<path d="' + pathFor(percentiles.p10) + '" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.7"/>';
+    lineP75 = '<path d="' + pathFor(percentiles.p75) + '" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.6"/>';
+    lineP25 = '<path d="' + pathFor(percentiles.p25) + '" fill="none" stroke="#86d4f5" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.6"/>';
+    lineP50 = '<path d="' + pathFor(percentiles.p50) + '" fill="none" stroke="#60a5fa" stroke-width="2.8"/>';
+    
+    var selectedColors = { p10: '#4ade80', p25: '#86d4f5', p50: '#60a5fa', p75: '#fbbf24', p90: '#f87171' };
+    var selPath = percentiles[selectedPercentile];
+    if (selPath && selPath.length) {
+      selectedHighlight = '<path d="' + pathFor(selPath) + '" fill="none" stroke="' + selectedColors[selectedPercentile] + '" stroke-width="3.5"/>';
+      for (var c = 0; c < selPath.length; c++) {
+        if (selPath[c].y >= yourPD) {
+          var cx = sx(selPath[c].x);
+          crossMarker += '<circle cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="6" fill="' + selectedColors[selectedPercentile] + '" stroke="#0a0e1a" stroke-width="2"/>';
+          crossMarker += '<text x="' + cx + '" y="' + (pdY - 12) + '" fill="' + selectedColors[selectedPercentile] + '" font-size="11" text-anchor="middle" font-weight="700">' + formatDate(selPath[c].x) + '</text>';
+          break;
+        }
+      }
+    }
+  }
+  
+  var svg = grid + band90Show + band50Show + todayLine + todayLabel + hist + pdLine +
+            lineP90 + lineP10 + lineP75 + lineP25 + lineP50 +
+            selectedHighlight + crossMarker + pdLabel;
+  
+  document.getElementById('chart').innerHTML = svg;
+}
+
+// ============================================
+// 模式 2: I-485 库存柱状图
+// ============================================
+function drawInventoryChart() {
+  var W = 600, H = 380;
+  var PAD = { left: 40, right: 12, top: 16, bottom: 38 };
+  var PW = W - PAD.left - PAD.right;
+  var PH = H - PAD.top - PAD.bottom;
+  
+  // 选择类别
+  var cat = profile.category;
+  // 简化映射: EB-1A/B/C → EB-1, EB-2 NIW → EB-2
+  var catKey = 'EB-1';
+  if (cat.indexOf('EB-2') >= 0) catKey = 'EB-2';
+  else if (cat.indexOf('EB-3') >= 0) catKey = 'EB-3';
+  
+  var data = I485_INVENTORY[catKey] || I485_INVENTORY['EB-1'];
+  // FAD 优先用当前 cutoff (基于 profile),fallback 到默认
+  var currentCutoff = getCurrentCutoff();
+  var fadStr;
+  if (currentCutoff && currentCutoff > 100000000) {
+    var fadD = new Date(currentCutoff);
+    fadStr = fadD.toISOString().slice(0, 10);
+  } else {
+    fadStr = I485_FAD[catKey];
+  }
+  
+  // 计算总数
+  var total = 0;
+  for (var i = 0; i < data.length; i++) total += data[i][1];
+  
+  // 计算最大值用于纵坐标
+  var maxVal = 0;
+  for (var j = 0; j < data.length; j++) {
+    if (data[j][1] > maxVal) maxVal = data[j][1];
+  }
+  var yMax = Math.ceil(maxVal / 100) * 100 || 100;
+  
+  // x 轴范围
+  var xs = data.map(function(d) { return new Date(d[0] + '-01').getTime(); });
+  var xMin = Math.min.apply(null, xs);
+  var xMax = Math.max.apply(null, xs);
+  var fadTime = new Date(fadStr).getTime();
+  // 让 FAD 线也在范围内
+  if (fadTime > xMax) xMax = fadTime;
+  
+  function sx(x) { return PAD.left + (x - xMin) / (xMax - xMin) * PW; }
+  function sy(v) { return PAD.top + (1 - v / yMax) * PH; }
+  
+  var barWidth = PW / data.length * 0.7;
+  
+  // 网格
+  var grid = '';
+  for (var g = 0; g <= 4; g++) {
+    var gv = yMax * g / 4;
+    var py = sy(gv);
+    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" stroke="#1f2640" stroke-width="1"/>';
+    grid += '<text x="' + (PAD.left - 4) + '" y="' + (py + 3) + '" fill="#8b92a8" font-size="9" text-anchor="end">' + Math.round(gv) + '</text>';
+  }
+  
+  // 柱子
+  var bars = '';
+  var colorByCat = { 'EB-1': '#60a5fa', 'EB-2': '#f87171', 'EB-3': '#a78bfa' };
+  var barColor = colorByCat[catKey];
+  
+  for (var b = 0; b < data.length; b++) {
+    var bx = sx(new Date(data[b][0] + '-01').getTime());
+    var by = sy(data[b][1]);
+    var bh = (PAD.top + PH) - by;
+    bars += '<rect x="' + (bx - barWidth/2).toFixed(1) + '" y="' + by.toFixed(1) + '" width="' + barWidth.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + barColor + '" opacity="0.8" rx="1"/>';
+  }
+  
+  // FAD 红线
+  var fadX = sx(fadTime);
+  var fadLine = '<line x1="' + fadX + '" y1="' + PAD.top + '" x2="' + fadX + '" y2="' + (PAD.top + PH) + '" stroke="#f87171" stroke-width="1.5" stroke-dasharray="4 3"/>';
+  var fadLabel = '<text x="' + fadX + '" y="' + (PAD.top - 4) + '" fill="#f87171" font-size="9" text-anchor="middle" font-weight="600">Final Action: ' + fadStr.slice(0,7) + '</text>';
+  
+  // 标用户 PD
+  var yourPD = getYourPD();
+  var pdVisible = yourPD >= xMin && yourPD <= xMax;
+  var pdMark = '';
+  if (pdVisible) {
+    var pdX = sx(yourPD);
+    pdMark = '<line x1="' + pdX + '" y1="' + PAD.top + '" x2="' + pdX + '" y2="' + (PAD.top + PH) + '" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="4 4"/>';
+    pdMark += '<text x="' + pdX + '" y="' + (PAD.top + PH + 28) + '" fill="#ffd166" font-size="9" text-anchor="middle" font-weight="600">你 PD</text>';
+  }
+  
+  // x 轴标签 (每隔几个显示)
+  var xLabels = '';
+  var step = Math.ceil(data.length / 8);
+  for (var l = 0; l < data.length; l += step) {
+    var lx = sx(new Date(data[l][0] + '-01').getTime());
+    var lbl = data[l][0].slice(2);  // "19/04" 格式
+    xLabels += '<text x="' + lx + '" y="' + (PAD.top + PH + 14) + '" fill="#8b92a8" font-size="9" text-anchor="middle">' + lbl + '</text>';
+  }
+  
+  // 标题
+  var titleHTML = '<text x="' + PAD.left + '" y="' + (PAD.top - 4) + '" fill="#e8eaf0" font-size="11" font-weight="600">I-485 Pending (' + catKey + ' China)</text>';
+  var totalHTML = '<text x="' + (PAD.left + PW) + '" y="' + (PAD.top - 4) + '" fill="#ffd166" font-size="13" font-weight="700" text-anchor="end">' + total.toLocaleString() + ' 件</text>';
+  
+  var svg = grid + bars + fadLine + fadLabel + pdMark + xLabels + titleHTML + totalHTML;
+  
+  document.getElementById('chart').innerHTML = svg;
+}
+
+// ============================================
+// 模式 3: 多类别对比 (EB-1/2/3)
+// ============================================
+function drawMultiCategoryChart() {
+  var W = 600, H = 380;
+  var PAD = { left: 50, right: 12, top: 16, bottom: 28 };
+  var PW = W - PAD.left - PAD.right;
+  var PH = H - PAD.top - PAD.bottom;
+  
+  var categories = ['EB-1', 'EB-2', 'EB-3'];
+  var colors = { 'EB-1': '#60a5fa', 'EB-2': '#f87171', 'EB-3': '#a78bfa' };
+  
+  var allX = [], allY = [];
+  categories.forEach(function(c) {
+    HISTORY_MULTI[c].forEach(function(p) {
+      allX.push(p.x); allY.push(p.y);
+    });
+  });
+  
+  var xMin = Math.min.apply(null, allX);
+  var xMax = Math.max.apply(null, allX);
+  var yMin = Math.min.apply(null, allY);
+  var yMax = Math.max.apply(null, allY);
+  var pad = (yMax - yMin) * 0.05;
+  yMin -= pad; yMax += pad;
+  
+  function sx(x) { return PAD.left + (x - xMin) / (xMax - xMin) * PW; }
+  function sy(y) { return PAD.top + (1 - (y - yMin) / (yMax - yMin)) * PH; }
+  
+  function pathFor(data) {
+    var d = '';
+    var first = true;
+    for (var i = 0; i < data.length; i++) {
+      if (first) {
+        d += 'M' + sx(data[i].x).toFixed(1) + ',' + sy(data[i].y).toFixed(1);
+        first = false;
+      } else {
+        d += 'L' + sx(data[i].x).toFixed(1) + ',' + sy(data[i].y).toFixed(1);
+      }
+    }
+    return d;
+  }
+  
+  // 网格
+  var grid = '';
+  for (var y = new Date(xMin).getFullYear(); y <= new Date(xMax).getFullYear(); y++) {
+    var t = new Date(y, 0, 1).getTime();
+    if (t < xMin || t > xMax) continue;
+    var px = sx(t);
+    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" stroke="#1f2640" stroke-width="1"/>';
+    grid += '<text x="' + px + '" y="' + (PAD.top + PH + 14) + '" fill="#8b92a8" font-size="10" text-anchor="middle">' + y + '</text>';
+  }
+  for (var yr = new Date(yMin).getFullYear(); yr <= new Date(yMax).getFullYear(); yr++) {
+    var ty = new Date(yr, 0, 1).getTime();
+    if (ty < yMin || ty > yMax) continue;
+    var py = sy(ty);
+    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" stroke="#1f2640" stroke-width="1"/>';
+    grid += '<text x="' + (PAD.left - 6) + '" y="' + (py + 3) + '" fill="#8b92a8" font-size="10" text-anchor="end">' + yr + '</text>';
+  }
+  
+  // 三条线
+  var lines = '';
+  categories.forEach(function(c) {
+    var data = HISTORY_MULTI[c];
+    lines += '<path d="' + pathFor(data) + '" fill="none" stroke="' + colors[c] + '" stroke-width="2.5"/>';
+    data.forEach(function(pt) {
+      lines += '<circle cx="' + sx(pt.x).toFixed(1) + '" cy="' + sy(pt.y).toFixed(1) + '" r="2.5" fill="' + colors[c] + '"/>';
+    });
+    // 标签
+    var last = data[data.length - 1];
+    lines += '<text x="' + (sx(last.x) + 4) + '" y="' + sy(last.y).toFixed(1) + '" fill="' + colors[c] + '" font-size="10" font-weight="600">' + c + '</text>';
+  });
+  
+  // 你 PD 横线
+  var yourPD = getYourPD();
+  var pdY = sy(yourPD);
+  var pdLine = '<line x1="' + PAD.left + '" y1="' + pdY + '" x2="' + (PAD.left + PW) + '" y2="' + pdY + '" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.9"/>';
+  var pdLabel = '<text x="' + (PAD.left + PW - 4) + '" y="' + (pdY - 4) + '" fill="#ffd166" font-size="10" text-anchor="end" font-weight="600">你 PD</text>';
+  
+  // 标题
+  var titleHTML = '<text x="' + PAD.left + '" y="' + (PAD.top - 4) + '" fill="#e8eaf0" font-size="11" font-weight="600">中国大陆 · EB-1/2/3 表 A 对比</text>';
+  
+  var svg = grid + pdLine + lines + pdLabel + titleHTML;
+  
+  document.getElementById('chart').innerHTML = svg;
+}
+
+// ============================================
+// 时间线
+// ============================================
+function computeTimelineForPercentile(pct) {
+  var t1 = crossingsByPct ? crossingsByPct[pct] : null;
+  var times = { T0: new Date('2024-09-19').getTime() };
+  
+  if (!t1) {
+    for (var s = 0; s < TIMELINE_STEPS.length; s++) {
+      if (TIMELINE_STEPS[s].id !== 'T0') times[TIMELINE_STEPS[s].id] = null;
+    }
+    return times;
+  }
+  
+  // T1 = PD current
+  times.T1 = t1;
+  
+  // 累加每步的 deltaWeeks
+  var prevTime = t1;
+  for (var i = 0; i < TIMELINE_STEPS.length; i++) {
+    var step = TIMELINE_STEPS[i];
+    if (step.id === 'T0' || step.id === 'T1') continue;
+    var weeks = step.deltaWeeks || 0;
+    
+    // 表 B 路径下 T4 是表 A current,不用加固定时长——但简化处理:用平均估算
+    if (profile.chartType === 'B' && step.id === 'T4') {
+      // 表 B → 表 A 的间隔,基于历史 Filing Gap 平均 8 个月
+      times.T4 = addWeeks(times.T3, 32); // ~8 月
+      prevTime = times.T4;
+      continue;
+    }
+    
+    times[step.id] = addWeeks(prevTime, weeks);
+    prevTime = times[step.id];
+  }
+  
+  return times;
+}
+
+function renderTimeline() {
+  var times = computeTimelineForPercentile(selectedPercentile);
+  var wrap = document.getElementById('timeline-wrap');
+  var html = '';
+  
+  for (var i = 0; i < TIMELINE_STEPS.length; i++) {
+    var step = TIMELINE_STEPS[i];
+    var stepDate = step.id === 'T0' ? times.T0 : times[step.id];
+    var isExpanded = expandedTimelineStep === step.id;
+    var isPassed = step.id === 'T0';
+    var stepNum = step.id === 'T0' ? '0' : step.id.charAt(1);
+    var fromToday = stepDate && stepDate > TODAY ? '+' + formatMonthsAway(stepDate) : (step.id === 'T0' ? '已批' : '');
+    
+    var detailHTML = '';
+    if (step.detail) {
+      var sourcesHTML = '';
+      if (step.detail.sources) {
+        sourcesHTML = '<div class="detail-section"><div class="detail-section-title">数据来源</div><div class="source-list">' +
+          step.detail.sources.map(function(s) { return '<span class="source-chip">' + s + '</span>'; }).join('') +
+          '</div></div>';
+      }
+      var factorsHTML = '';
+      if (step.detail.factors) {
+        factorsHTML = '<div class="detail-section"><div class="detail-section-title">影响因素</div><p>' +
+          step.detail.factors.join(' · ') + '</p></div>';
+      }
+      detailHTML = '<div class="timeline-detail">' +
+        '<div class="detail-section"><p>' + step.detail.summary + '</p></div>' +
+        '<div class="detail-section"><div class="detail-section-title">耗时</div><p>' + step.detail.duration + '</p></div>' +
+        factorsHTML + sourcesHTML +
+        '</div>';
+    }
+    
+    html += '<div class="timeline-step' + 
+      (isExpanded ? ' expanded' : '') + 
+      (isPassed ? ' passed' : '') + 
+      '" data-step="' + step.id + '">' +
+      '<div class="timeline-header" onclick="toggleTimelineStep(\'' + step.id + '\')">' +
+        '<div class="timeline-dot">' + stepNum + '</div>' +
+        '<div class="timeline-info">' +
+          '<div class="t-name">' + step.name + '</div>' +
+          '<div class="t-desc">' + step.desc + '</div>' +
+        '</div>' +
+        '<div class="timeline-date">' +
+          '<div class="t-date">' + formatDate(stepDate) + '</div>' +
+          '<div class="t-from">' + fromToday + '</div>' +
+        '</div>' +
+        '<div class="timeline-chevron">▼</div>' +
+      '</div>' +
+      detailHTML +
+      '</div>';
+  }
+  
+  wrap.innerHTML = html;
+}
+
+window.toggleTimelineStep = function(stepId) {
+  expandedTimelineStep = expandedTimelineStep === stepId ? null : stepId;
+  renderTimeline();
+};
+
+// ============================================
+// 渲染
+// ============================================
+function renderHeroAndPct() {
+  if (!crossingsByPct) return;
+  var pctNames = { p10: 'P10 最乐观', p25: 'P25', p50: 'P50 基准', p75: 'P75', p90: 'P90 最悲观' };
+  
+  // 根据路径动态调整 hero label
+  var isAOS = (PATH_DURATIONS[profile.path] || {}).isAOS;
+  var heroLabel;
+  if (isAOS && profile.chartType === 'B') {
+    heroLabel = '🎯 最可能可以递交 I-485';
+  } else if (isAOS) {
+    heroLabel = '🎯 最可能 PD Current (表 A)';
+  } else {
+    heroLabel = '🎯 最可能 PD Current';
+  }
+  document.querySelector('.hero-label span').textContent = heroLabel;
+  
+  document.getElementById('hero-value').textContent = formatDateFull(crossingsByPct[selectedPercentile]);
+  document.getElementById('hero-tag-1').textContent = pctNames[selectedPercentile];
+  document.getElementById('hero-context-text').textContent = '距今 ' + formatMonthsAway(crossingsByPct[selectedPercentile]) + ' · 90% 区间 ' + formatDate(crossingsByPct.p10) + ' – ' + formatDate(crossingsByPct.p90);
+  document.getElementById('selected-scenario').textContent = pctNames[selectedPercentile];
+  
+  ['p10', 'p25', 'p50', 'p75', 'p90'].forEach(function(p) {
+    document.getElementById('pct-' + p).textContent = formatDate(crossingsByPct[p]);
+    var cell = document.querySelector('.pct-cell[data-pct="' + p + '"]');
+    if (cell) cell.classList.toggle('selected', p === selectedPercentile);
+  });
+}
+
+function renderParams() {
+  var container = document.getElementById('params-container');
+  var html = '';
+  
+  Object.keys(PARAM_META).forEach(function(key) {
+    var meta = PARAM_META[key];
+    var val = currentParams[key];
+    
+    var sourceRowsHTML = meta.source.rows.map(function(r) {
+      return '<div class="sp-row"><span class="sp-lbl">' + r.lbl + '</span><span class="sp-val">' + r.val + '</span></div>';
+    }).join('');
+    
+    var sourcesChipsHTML = meta.source.sources.map(function(s) {
+      return '<span class="source-chip">' + s + '</span>';
+    }).join('');
+    
+    html += '<div class="param-row" id="param-row-' + key + '">' +
+      '<div class="param-label">' +
+        '<span class="param-name" onclick="toggleSource(\'' + key + '\')">' +
+          meta.icon + ' ' + meta.label + ' ⓘ' +
+        '</span>' +
+        '<span class="param-value"><span id="v-' + key + '">' + meta.format(val) + '</span> ' + meta.unit + '</span>' +
+      '</div>' +
+      '<input type="range" id="' + key + '" min="' + meta.min + '" max="' + meta.max + '" value="' + val + '" step="' + meta.step + '">' +
+      '<div class="param-meta">' +
+        '<span>' + meta.format(meta.min) + ' ' + meta.unit + '</span>' +
+        '<span>默认 ' + meta.format(meta.default) + '</span>' +
+        '<span>' + meta.format(meta.max) + ' ' + meta.unit + '</span>' +
+      '</div>' +
+      '<div class="source-popup" id="source-' + key + '">' +
+        '<span class="sp-close" onclick="closeSource()">×</span>' +
+        '<div class="sp-title">' + meta.source.title + '</div>' +
+        sourceRowsHTML +
+        '<div class="sp-section">' +
+          '<div class="sp-section-title">计算依据</div>' +
+          '<p class="sp-text">' + meta.source.methodology + '</p>' +
+        '</div>' +
+        '<div class="sp-section">' +
+          '<div class="sp-section-title">数据来源</div>' +
+          '<div class="source-list">' + sourcesChipsHTML + '</div>' +
+        '</div>' +
+      '</div>' +
+      '</div>';
+  });
+  
+  container.innerHTML = html;
+  
+  Object.keys(PARAM_META).forEach(function(key) {
+    document.getElementById(key).addEventListener('input', function(e) {
+      currentParams[key] = +e.target.value;
+      document.getElementById('v-' + key).textContent = PARAM_META[key].format(currentParams[key]);
+      render();
+    });
+  });
+}
+
+window.toggleSource = function(key) {
+  if (openSourceParam && openSourceParam !== key) {
+    document.getElementById('source-' + openSourceParam).classList.remove('visible');
+  }
+  var popup = document.getElementById('source-' + key);
+  var isOpen = popup.classList.contains('visible');
+  popup.classList.toggle('visible');
+  openSourceParam = isOpen ? null : key;
+};
+
+window.closeSource = function() {
+  if (openSourceParam) {
+    document.getElementById('source-' + openSourceParam).classList.remove('visible');
+    openSourceParam = null;
+  }
+};
+
+function render() {
+  // 每次渲染前重建时间线步骤(因路径可能变了)
+  TIMELINE_STEPS = buildTimelineSteps();
+  
+  var paths = monteCarlo(currentParams, 500);  // V19 更多样本 (500) 用于密度图
+  var percentiles = percentilePaths(paths);
+  crossingsByPct = findCrossingsDistribution(paths);
+  
+  // V19: 收集所有 crossing 时间用于密度图
+  allCrossings = [];
+  for (var i = 0; i < paths.length; i++) {
+    var c = findCrossingDate(paths[i]);
+    if (c) allCrossings.push(c);
+  }
+  
+  renderProfileView();
+  drawChart(percentiles);
+  renderBacktest();
+  renderHeroAndPct();
+  renderMonthlyTable(percentiles);
+  renderTimeline();
+  updateLegend();
+  // V19 新增
+  renderDensityChart();
+  renderModelCompare();
+  renderPresetDescription();
+}
+
+// V19 全局: 存所有 cross 时间用于密度图
+var allCrossings = [];
+var distMode = 'density';  // density / percentile
+
+// ============================================
+// V19 渲染概率密度图
+// ============================================
+function renderDensityChart() {
+  var svg = document.getElementById('density-chart');
+  var summary = document.getElementById('density-summary');
+  if (!svg || !summary) return;
+  
+  if (allCrossings.length === 0) {
+    svg.innerHTML = '<text x="300" y="110" text-anchor="middle" fill="#8b92a8" font-size="12">> 5 年内不太可能 current</text>';
+    summary.innerHTML = '<div class="ds-row"><span class="ds-label">超过 5 年也未 current 的概率</span><span class="ds-value">高</span></div>';
+    return;
+  }
+  
+  // 按月分桶 (FY起始月对齐)
+  var buckets = {};
+  for (var i = 0; i < allCrossings.length; i++) {
+    var d = new Date(allCrossings[i]);
+    var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    buckets[key] = (buckets[key] || 0) + 1;
+  }
+  
+  // 排序所有月份
+  var allKeys = Object.keys(buckets).sort();
+  if (allKeys.length === 0) return;
+  
+  // 找最大值用于纵轴
+  var maxCount = 0;
+  for (var k in buckets) {
+    if (buckets[k] > maxCount) maxCount = buckets[k];
+  }
+  
+  // SVG 配置
+  var W = 600, H = 220;
+  var PAD = { left: 32, right: 12, top: 14, bottom: 30 };
+  var PW = W - PAD.left - PAD.right;
+  var PH = H - PAD.top - PAD.bottom;
+  
+  // 确定 X 轴范围 (从 2026-06 到最晚月 + 3 月)
+  var firstD = new Date(allKeys[0] + '-15');
+  var lastD = new Date(allKeys[allKeys.length - 1] + '-15');
+  var xMin = new Date(2026, 5, 15).getTime();  // 2026-06
+  var xMax = lastD.getTime() + 90 * MS_PER_DAY;
+  if (xMax < xMin + 365 * MS_PER_DAY) xMax = xMin + 365 * MS_PER_DAY;
+  
+  function sx(ts) { return PAD.left + (ts - xMin) / (xMax - xMin) * PW; }
+  function sy(v) { return PAD.top + (1 - v / maxCount) * PH; }
+  
+  // 月份柱宽 (基于密度)
+  var monthSpan = (xMax - xMin) / MS_PER_DAY / 30;
+  var barWidth = (PW / monthSpan) * 0.85;
+  
+  // 网格 - X 轴年份
+  var grid = '';
+  var startYear = new Date(xMin).getFullYear();
+  var endYear = new Date(xMax).getFullYear();
+  for (var y = startYear; y <= endYear + 1; y++) {
+    var t = new Date(y, 0, 1).getTime();
+    if (t < xMin || t > xMax) continue;
+    var px = sx(t);
+    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" stroke="#1f2640" stroke-width="1"/>';
+    grid += '<text x="' + px + '" y="' + (PAD.top + PH + 14) + '" fill="#8b92a8" font-size="10" text-anchor="middle">' + y + '</text>';
+  }
+  
+  // 柱状图
+  var bars = '';
+  var p50 = crossingsByPct ? crossingsByPct.p50 : null;
+  
+  for (var bk = 0; bk < allKeys.length; bk++) {
+    var bDate = new Date(allKeys[bk] + '-15');
+    var bx = sx(bDate.getTime());
+    var by = sy(buckets[allKeys[bk]]);
+    var bh = (PAD.top + PH) - by;
+    var pct = (buckets[allKeys[bk]] / allCrossings.length * 100).toFixed(1);
+    
+    // FY 起始月 (10 月) 用更深的色
+    var fillColor = bDate.getMonth() === 9 ? '#3b82f6' : '#60a5fa';
+    
+    bars += '<rect x="' + (bx - barWidth/2).toFixed(1) + '" y="' + by.toFixed(1) + '" width="' + barWidth.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + fillColor + '" opacity="0.85" rx="1">';
+    bars += '<title>' + allKeys[bk] + ': ' + pct + '%</title>';
+    bars += '</rect>';
+  }
+  
+  // P50 标线
+  var p50Line = '';
+  if (p50) {
+    var p50x = sx(p50);
+    p50Line = '<line x1="' + p50x + '" y1="' + PAD.top + '" x2="' + p50x + '" y2="' + (PAD.top + PH) + '" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="4 4"/>';
+    p50Line += '<text x="' + p50x + '" y="' + (PAD.top - 4) + '" fill="#ffd166" font-size="10" text-anchor="middle" font-weight="600">P50</text>';
+  }
+  
+  svg.innerHTML = grid + bars + p50Line;
+  
+  // 摘要文字
+  // 找峰值月
+  var peakKey = allKeys[0];
+  for (var k2 in buckets) {
+    if (buckets[k2] > buckets[peakKey]) peakKey = k2;
+  }
+  var peakPct = (buckets[peakKey] / allCrossings.length * 100).toFixed(0);
+  var notCurrentRate = ((500 - allCrossings.length) / 500 * 100).toFixed(0);
+  
+  var summaryHTML = '<div class="ds-row"><span class="ds-label">最有可能的 current 时间</span><span class="ds-value peak">' + peakKey + ' (' + peakPct + '%)</span></div>';
+  summaryHTML += '<div class="ds-row"><span class="ds-label">中位预测 (P50)</span><span class="ds-value">' + (p50 ? formatDate(p50) : '> 5年') + '</span></div>';
+  summaryHTML += '<div class="ds-row"><span class="ds-label">5 年内未 current 概率</span><span class="ds-value">' + notCurrentRate + '%</span></div>';
+  
+  summary.innerHTML = summaryHTML;
+}
+
+// ============================================
+// V19 多模型对比表
+// ============================================
+function renderModelCompare() {
+  var tbody = document.getElementById('model-compare-tbody');
+  if (!tbody) return;
+  
+  var yourPD = getYourPD();
+  var currentCutoff = getCurrentCutoff();
+  var distanceDays = Math.round((yourPD - currentCutoff) / MS_PER_DAY);
+  var distanceYears = distanceDays / 365;
+  
+  // 模型 1: Papers 平均等待 (2.9 年常数)
+  var papers_years = 2.9;
+  var papers_date = new Date(TODAY + papers_years * 365 * MS_PER_DAY);
+  // 但 Papers 是"已 cross 队列的平均等待",对新 PD 应该算从 PD 起 2.9 年
+  // 修正: 从 PD 起 2.9 年
+  var papers_from_pd = new Date(yourPD + papers_years * 365 * MS_PER_DAY);
+  
+  // 模型 2: 类 FY24 大年节奏 (446 天 / 266 天/年)
+  var fy24_years = distanceDays / 266;
+  var fy24_date = new Date(TODAY + fy24_years * 365 * MS_PER_DAY);
+  
+  // 模型 3: 类 FY26 节奏 (446 天 / 150 天/年)
+  var fy26_years = distanceDays / 150;
+  var fy26_date = new Date(TODAY + fy26_years * 365 * MS_PER_DAY);
+  
+  // 模型 4: 类 FY25 慢年 (446 天 / 44 天/年)
+  var fy25_years = distanceDays / 44;
+  var fy25_date = new Date(TODAY + fy25_years * 365 * MS_PER_DAY);
+  
+  // 模型 5: V19 蒙特卡洛当前预设
+  var v19_date = crossingsByPct && crossingsByPct.p50 ? new Date(crossingsByPct.p50) : null;
+  
+  // 模型 6: 律所共识 (myvisaservices 等: "近两年 EB1A 不会有大幅前进")
+  // 假设 2026-2027 维持当前节奏,FY28 起加速
+  var lawyer_years = 3.0;  // 律所一般给保守 3 年
+  var lawyer_date = new Date(TODAY + lawyer_years * 365 * MS_PER_DAY);
+  
+  var currentPreset = getCurrentPresetName();
+  
+  function formatY(years) {
+    if (years < 0) return '已 current';
+    var yi = Math.floor(years);
+    var mi = Math.round((years - yi) * 12);
+    if (yi === 0) return mi + ' 月';
+    return yi + ' 年 ' + mi + ' 月';
+  }
+  
+  var rows = [
+    {
+      method: 'V20 奥卡姆模型',
+      source: '当前预设 (' + currentPreset + ') · 500 次模拟',
+      date: v19_date,
+      isCurrent: true
+    },
+    {
+      method: 'Papers 平均等待',
+      source: 'thepapers.co · 当前队列 2.9 年共识',
+      date: papers_from_pd,
+      classN: ''
+    },
+    {
+      method: '类 FY24 大年',
+      source: '若 FY27 起恢复 FY24 节奏 (266 天/年)',
+      date: fy24_date,
+      classN: 'optimistic'
+    },
+    {
+      method: '类 FY26 延续',
+      source: '若 FY26 节奏延续 (150 天/年)',
+      date: fy26_date,
+      classN: ''
+    },
+    {
+      method: '律所共识',
+      source: 'myvisaservices 等 · "近两年小步前进"',
+      date: lawyer_date,
+      classN: ''
+    },
+    {
+      method: '类 FY25 慢年',
+      source: '若印度持续抢占 (44 天/年)',
+      date: fy25_date,
+      classN: 'pessimistic'
+    }
+  ];
+  
+  var html = '';
+  rows.forEach(function(r) {
+    var years = r.date ? ((r.date.getTime() - TODAY) / MS_PER_DAY / 365) : null;
+    var dateStr = r.date ? formatDate(r.date.getTime()) : '> 5年';
+    var waitStr = years !== null ? formatY(years) : '—';
+    var rowClass = r.isCurrent ? 'is-current-model' : '';
+    var predClass = r.classN || '';
+    
+    html += '<tr' + (rowClass ? ' class="' + rowClass + '"' : '') + '>' +
+      '<td class="mc-method">' + r.method + '<span class="mc-source">' + r.source + '</span></td>' +
+      '<td class="mc-prediction ' + predClass + '">' + dateStr + '</td>' +
+      '<td>' + waitStr + '</td>' +
+      '</tr>';
+  });
+  
+  tbody.innerHTML = html;
+}
+
+function getCurrentPresetName() {
+  for (var name in PRESETS) {
+    if (name === 'baseline' || name === 'moderate') continue; // 跳过别名
+    var p = PRESETS[name];
+    var match = true;
+    for (var k in p) {
+      if (Math.abs((currentParams[k] || 0) - p[k]) > 0.01) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      if (name === 'historical') return '历史';
+      if (name === 'optimistic') return '乐观';
+      if (name === 'pessimistic') return '悲观';
+      return name;
+    }
+  }
+  return '自定义';
+}
+
+// ============================================
+// V19 渲染 preset 描述
+// ============================================
+function renderPresetDescription() {
+  var el = document.getElementById('preset-description');
+  if (!el) return;
+  
+  var name = getCurrentPresetName();
+  var content;
+  if (name === '历史') {
+    content = '<strong>历史情景 (奥卡姆默认)</strong>: 用过去 3 个 FY 真实数据 [FY24=266, FY25=44, FY26=148] 直接算 μ=153, σ=91。<strong>无任何政策预测、无脉冲假设、无印度因子</strong>。年推进抽自 Normal(153, 91),按月消化。';
+  } else if (name === '乐观') {
+    content = '<strong>乐观情景</strong>: 假设未来更接近 FY24 大年 (μ=220) + 波动收窄 (σ=70)。意味着相信"印度倒退+75国冻结的利好会持续兑现"。';
+  } else if (name === '悲观') {
+    content = '<strong>悲观情景</strong>: 假设未来更接近 FY25 慢年 (μ=80) + 波动较小 (σ=50)。意味着相信"印度会恢复需求,中国回到 FY25 节奏"。';
+  } else {
+    content = '<strong>自定义参数</strong>: 你调整了参数。点击"历史/乐观/悲观"按钮恢复预设。';
+  }
+  el.innerHTML = content;
+}
+
+// ============================================
+// 更新图例 + chart 提示 (根据 chart mode)
+// ============================================
+function updateLegend() {
+  var legend = document.getElementById('chart-legend');
+  var note = document.getElementById('chart-note');
+  
+  // 更新 chart-note (右上角小字)
+  if (note) {
+    var category = profile.category;
+    var country = COUNTRY_LABEL[profile.country] || profile.country;
+    // 每次都重置颜色,然后根据情况设置
+    note.style.color = '';
+    if (chartMode === 'inventory') {
+      note.textContent = 'I-485 库存 · Oct 2025 snapshot';
+    } else if (chartMode === 'multi') {
+      note.textContent = country + ' · 表 A 历史';
+    } else {
+      // forecast 模式
+      var isStandard = profile.country === 'CN' && (category === 'EB-1A' || category === 'EB-1B' || category === 'EB-1C');
+      if (isStandard) {
+        note.textContent = '基于 EB-1 China 数据';
+      } else {
+        note.textContent = '⚠ 历史曲线: EB-1 China (仅参考)';
+        note.style.color = 'var(--p75)';
+      }
+    }
+  }
+  
+  if (!legend) return;
+  var html = '';
+  if (chartMode === 'forecast') {
+    if (chartSubMode !== 'B') {
+      html = '<div class="leg-item"><div class="leg-line" style="background:#8b92a8"></div>表 A 历史</div>' +
+             '<div class="leg-item"><div class="leg-band" style="background:#60a5fa"></div>50% 区间</div>' +
+             '<div class="leg-item"><div class="leg-band" style="background:#60a5fa; opacity:0.2"></div>90% 区间</div>';
+    }
+    if (chartSubMode === 'B' || chartSubMode === 'AB') {
+      html += '<div class="leg-item"><div class="leg-line" style="background:#a78bfa; border-top:2px dashed #a78bfa; height:0"></div>表 B 历史</div>';
+    }
+  } else if (chartMode === 'inventory') {
+    html = '<div class="leg-item"><div class="leg-line" style="background:#60a5fa; height:8px"></div>I-485 待审</div>' +
+           '<div class="leg-item"><div class="leg-line" style="background:#f87171; border-top:2px dashed; height:0"></div>当前 FAD</div>' +
+           '<div class="leg-item"><div class="leg-line" style="background:#ffd166; border-top:2px dashed; height:0"></div>你 PD</div>';
+  } else {
+    html = '<div class="leg-item"><div class="leg-line" style="background:#60a5fa"></div>EB-1</div>' +
+           '<div class="leg-item"><div class="leg-line" style="background:#f87171"></div>EB-2</div>' +
+           '<div class="leg-item"><div class="leg-line" style="background:#a78bfa"></div>EB-3</div>';
+  }
+  legend.innerHTML = html;
+}
+
+// ============================================
+// 逐月预测表 (含三阶段事件标注)
+// ============================================
+function renderMonthlyTable(percentiles) {
+  var tbody = document.getElementById('monthly-tbody');
+  if (!tbody) return;
+  
+  var p50 = percentiles.p50;
+  if (!p50 || p50.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4">无数据</td></tr>';
+    return;
+  }
+  
+  // 取未来 14 月 (覆盖足够范围让 PD current 出现)
+  var months = Math.min(14, p50.length);
+  var yourPD = getYourPD();
+  
+  // 计算表 B (基于表 A,向前 6-8 个月)
+  // 简化模型: 表 B = 表 A + 6 月 (但实际应该是先暴涨再被压制)
+  
+  var html = '';
+  var pdCurrentFound = false;
+  
+  for (var i = 0; i < months; i++) {
+    var pt = p50[i];
+    var monthDate = new Date(pt.x);
+    var jsMonth = monthDate.getMonth();
+    var monthLabel = (monthDate.getFullYear() % 100) + '/' + String(jsMonth + 1).padStart(2, '0');
+    
+    // 表 B = 表 A + 8 月 (基于 Jun 2026 bulletin 实测: 表 A=2023-04, 表 B=2023-12)
+    var dofDate = new Date(pt.y);
+    dofDate.setMonth(dofDate.getMonth() + 8);
+    
+    // 计算事件类型
+    var eventClass = '';
+    var eventText = '';
+    
+    // 财年起始 (10 月)
+    var isFYStart = jsMonth === 9;
+    
+    // 三阶段事件检测
+    if (jsMonth >= 6 && jsMonth <= 8) {
+      // 7-9 月: 夏季锁仓 / 可能 Unavailable
+      eventClass = 'summer-freeze';
+      eventText = '夏季锁仓';
+    } else if (isFYStart) {
+      // 10 月: 新财年大跳跃
+      eventClass = 'big-jump';
+      eventText = '🚀 新财年';
+    } else if (jsMonth === 11 || jsMonth === 0) {
+      // 12-1 月: 表 B 暴涨期
+      eventClass = 'big-jump';
+      eventText = '建仓期';
+    }
+    
+    // 检测是否首次 PD current
+    var isCurrentPDMonth = false;
+    if (!pdCurrentFound && pt.y >= yourPD) {
+      isCurrentPDMonth = true;
+      pdCurrentFound = true;
+      eventClass = 'current-pd';
+      eventText = '🎯 你 PD current';
+    }
+    
+    var rowClass = '';
+    if (isCurrentPDMonth) rowClass = 'is-current-pd';
+    else if (isFYStart) rowClass = 'is-fy-start';
+    
+    var eventCellHTML = eventText ? 
+      '<span class="event-cell ' + eventClass + '">' + eventText + '</span>' : 
+      '<span class="event-cell">—</span>';
+    
+    html += '<tr' + (rowClass ? ' class="' + rowClass + '"' : '') + '>' +
+      '<td class="month-cell">' + monthLabel + '</td>' +
+      '<td class="fad-cell">' + formatDate(pt.y) + '</td>' +
+      '<td class="dof-cell">' + formatDate(dofDate.getTime()) + '</td>' +
+      '<td>' + eventCellHTML + '</td>' +
+      '</tr>';
+  }
+  
+  tbody.innerHTML = html;
+}
+
+// ============================================
+// Profile 编辑相关
+// ============================================
+function renderProfileView() {
+  var pathLabel = (PATH_DURATIONS[profile.path] || {}).label || profile.path;
+  var cutoff = getCurrentCutoff();
+  var distanceDays = Math.round((profile.pd - cutoff) / MS_PER_DAY);
+  var distanceStr;
+  if (distanceDays > 0) {
+    distanceStr = '+' + distanceDays + ' 天';
+  } else if (distanceDays < 0) {
+    distanceStr = '已 current (' + Math.abs(distanceDays) + ' 天前)';
+  } else {
+    distanceStr = '正好 current';
+  }
+  
+  var categoryLabel = profile.category;
+  if (profile.chartType === 'B' && PATH_DURATIONS[profile.path] && PATH_DURATIONS[profile.path].isAOS) {
+    categoryLabel += ' (表 B)';
+  }
+  
+  document.getElementById('pv-pd').textContent = formatDate(profile.pd);
+  document.getElementById('pv-cat').textContent = categoryLabel;
+  document.getElementById('pv-country').textContent = COUNTRY_LABEL[profile.country] || profile.country;
+  document.getElementById('pv-path').textContent = pathLabel;
+  document.getElementById('pv-family').textContent = FAMILY_LABEL[profile.family] || '配偶 1 人';
+  document.getElementById('pv-distance').textContent = distanceStr;
+}
+
+function toggleProfileEdit() {
+  var view = document.getElementById('profile-view');
+  var edit = document.getElementById('profile-edit');
+  var toggle = document.getElementById('profile-toggle');
+  var isEditing = edit.classList.contains('active');
+  
+  if (isEditing) {
+    view.classList.remove('profile-view-hidden');
+    edit.classList.remove('active');
+    toggle.textContent = '编辑';
+  } else {
+    // 进入编辑模式时,把当前值灌入表单
+    var pdDate = new Date(profile.pd);
+    document.getElementById('pe-pd').value = pdDate.toISOString().slice(0, 10);
+    document.getElementById('pe-category').value = profile.category;
+    document.getElementById('pe-country').value = profile.country;
+    document.getElementById('pe-path').value = profile.path;
+    document.getElementById('pe-family').value = profile.family;
+    
+    // 表 A/B 切换器
+    document.querySelectorAll('.pe-toggle-opt').forEach(function(opt) {
+      opt.classList.toggle('active', opt.dataset.chart === profile.chartType);
+    });
+    
+    // 根据路径显示/隐藏表 A/B 切换器
+    updateChartToggleVisibility();
+    
+    view.classList.add('profile-view-hidden');
+    edit.classList.add('active');
+    toggle.textContent = '取消';
+  }
+}
+
+function updateChartToggleVisibility() {
+  var path = document.getElementById('pe-path').value;
+  var isAOS = (PATH_DURATIONS[path] || {}).isAOS;
+  var toggleRow = document.querySelector('.pe-row-full');
+  if (toggleRow) {
+    toggleRow.style.display = isAOS ? 'flex' : 'none';
+  }
+}
+
+function saveProfile() {
+  var pdInput = document.getElementById('pe-pd').value;
+  if (!pdInput) return;
+  
+  profile.pd = new Date(pdInput).getTime();
+  profile.category = document.getElementById('pe-category').value;
+  profile.country = document.getElementById('pe-country').value;
+  profile.path = document.getElementById('pe-path').value;
+  profile.family = +document.getElementById('pe-family').value;
+  
+  // 从 UI 读取 chartType
+  var activeToggle = document.querySelector('.pe-toggle-opt.active');
+  if (activeToggle) {
+    profile.chartType = activeToggle.dataset.chart;
+  }
+  
+  // 如果是 CP 路径,强制 chartType = A (只有 AOS 才区分表 A/B)
+  if (!(PATH_DURATIONS[profile.path] || {}).isAOS) {
+    profile.chartType = 'A';
+  }
+  
+  // 退出编辑模式
+  document.getElementById('profile-view').classList.remove('profile-view-hidden');
+  document.getElementById('profile-edit').classList.remove('active');
+  document.getElementById('profile-toggle').textContent = '编辑';
+  
+  render();
+}
+
+function cancelProfileEdit() {
+  document.getElementById('profile-view').classList.remove('profile-view-hidden');
+  document.getElementById('profile-edit').classList.remove('active');
+  document.getElementById('profile-toggle').textContent = '编辑';
+}
+
+function applyPreset(name) {
+  var p = PRESETS[name];
+  Object.keys(p).forEach(function(k) {
+    currentParams[k] = p[k];
+    var input = document.getElementById(k);
+    if (input) {
+      input.value = p[k];
+      document.getElementById('v-' + k).textContent = PARAM_META[k].format(p[k]);
+    }
+  });
+  
+  document.querySelectorAll('.preset').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.preset === name);
+  });
+  
+  render();
+}
+
+// ============================================
+// 事件
+// ============================================
+document.querySelectorAll('.preset').forEach(function(btn) {
+  btn.addEventListener('click', function() { applyPreset(btn.dataset.preset); });
+});
+
+document.querySelectorAll('.pct-cell').forEach(function(cell) {
+  cell.addEventListener('click', function() {
+    selectedPercentile = cell.dataset.pct;
+    render();
+  });
+});
+
+// Profile 编辑事件
+document.getElementById('profile-toggle').addEventListener('click', toggleProfileEdit);
+document.getElementById('pe-save').addEventListener('click', saveProfile);
+document.getElementById('pe-cancel').addEventListener('click', cancelProfileEdit);
+
+// 路径变化时,显示/隐藏表 A/B 切换
+document.getElementById('pe-path').addEventListener('change', updateChartToggleVisibility);
+
+// 表 A/B toggle
+document.querySelectorAll('.pe-toggle-opt').forEach(function(opt) {
+  opt.addEventListener('click', function() {
+    document.querySelectorAll('.pe-toggle-opt').forEach(function(o) {
+      o.classList.remove('active');
+    });
+    opt.classList.add('active');
+    profile.chartType = opt.dataset.chart;
+  });
+});
+
+document.addEventListener('click', function(e) {
+  if (openSourceParam && !e.target.closest('.source-popup') && !e.target.closest('.param-name')) {
+    closeSource();
+  }
+});
+
+// Chart mode tabs
+document.querySelectorAll('.chart-tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.chart-tab').forEach(function(t) {
+      t.classList.remove('active');
+    });
+    tab.classList.add('active');
+    chartMode = tab.dataset.mode;
+    
+    // 切换副 toggle 显示
+    var subToggle = document.getElementById('chart-sub-toggle');
+    if (chartMode === 'forecast') {
+      subToggle.classList.remove('hidden');
+    } else {
+      subToggle.classList.add('hidden');
+    }
+    
+    render();
+  });
+});
+
+// Chart sub-toggle (A/B/AB)
+document.querySelectorAll('.sub-toggle-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.sub-toggle-btn').forEach(function(b) {
+      b.classList.remove('active');
+    });
+    btn.classList.add('active');
+    chartSubMode = btn.dataset.sub;
+    render();
+  });
+});
+
+// V19: 密度/分位 toggle
+document.querySelectorAll('.dist-toggle-btn').forEach(function(btn) {
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.querySelectorAll('.dist-toggle-btn').forEach(function(b) {
+      b.classList.remove('active');
+    });
+    btn.classList.add('active');
+    distMode = btn.dataset.dist;
+    
+    var densityView = document.getElementById('density-view');
+    var pctView = document.getElementById('percentile-view');
+    if (distMode === 'density') {
+      densityView.style.display = 'block';
+      pctView.style.display = 'none';
+    } else {
+      densityView.style.display = 'none';
+      pctView.style.display = 'block';
+    }
+  });
+});
+
+renderParams();
+applyPreset('historical');
+</script>
+
+</body>
+</html>
