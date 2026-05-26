@@ -23,7 +23,7 @@
 ### V5: eb1-china-simulator-v5.html
 - 完善预设系统 (baseline/optimistic/pessimistic)
 - 加入参数源说明卡片
-- 加入 Garfield 完整时间线 T0-T6 (garfield-timeline.html)
+- 加入完整时间线 T0-T6 (garfield-timeline.html)
 - 加入因素总览 (garfield-factors-overview.html)
 - 加入糖果店比喻教学 (candy-store-explainer.html)
 
