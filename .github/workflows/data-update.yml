@@ -1,0 +1,36 @@
+name: Check Data Updates
+
+on:
+  schedule:
+    - cron: '0 12 1,15 * *'  # 1st and 15th of each month, noon UTC
+  workflow_dispatch:           # manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check for new data
+        id: check
+        run: python scripts/check_data_updates.py
+
+      - name: Commit and push if new files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/raw/
+          if git diff --cached --quiet; then
+            echo "No new data files"
+          else
+            git commit -m "Auto-update: new USCIS/DOS data $(date +%Y-%m-%d)"
+            git push
+          fi
