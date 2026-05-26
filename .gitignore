@@ -23,17 +23,12 @@ venv/
 node_modules/
 package-lock.json
 
-# Data (large files, will be re-downloaded)
-data/raw/uscis/*.xlsx
-data/raw/dos/*.pdf
-data/raw/dos/*.xlsx
-data/raw/community/*.csv
+# Data (processed/derived are regenerated)
 *.parquet
+data/processed/
+data/derived/
 
 # Build
 dist/
 build/
 *.log
-
-# 但保留 data 目录结构 + README
-!data/README.md
