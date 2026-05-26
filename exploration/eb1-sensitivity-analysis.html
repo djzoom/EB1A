@@ -207,7 +207,7 @@
 <div class="container">
 
 <h1>双变量敏感性分析</h1>
-<div class="subtitle">"积压案件池" × "境内 AOS 比例" — 对你 PD 2024-06-20 到 current 时间的影响极限</div>
+<div class="subtitle">"积压案件池" × "境内 AOS 比例" — 对示例 PD 2024-06 到 current 时间的影响极限</div>
 
 <div class="anchor-card">
   <strong>真实数据锚点 (USCIS FY2025Q2 报告):</strong>
@@ -394,7 +394,7 @@
 </div>
 
 <script>
-const YOUR_PD = new Date('2024-06-20');
+const YOUR_PD = new Date('2024-06-01');
 const CURRENT_CUTOFF = new Date('2023-04-01');
 const DAYS_TO_PD = (YOUR_PD - CURRENT_CUTOFF) / (1000 * 3600 * 24); // 447 days
 const TODAY = new Date('2026-05-23');
