@@ -113,6 +113,7 @@
   .explain-content .step { font-weight: 700; color: var(--blue); }
   .explain-content .explain-note { font-size: 11px; color: var(--text3); border-top: 1px solid var(--border); padding-top: 6px; margin-top: 2px; }
   .settings-content { padding: 10px 12px; }
+  .settings-hint { font-size: 11px; color: var(--text3); margin-bottom: 10px; line-height: 1.5; }
   .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
   .preset { padding: 6px; background: #f9fafb; border: 1.5px solid var(--border); border-radius: 8px; cursor: pointer; font-family: inherit; text-align: center; transition: all 0.15s; color: var(--text); }
   .preset:hover { border-color: var(--blue); }
@@ -208,7 +209,7 @@
 <div class="modal-overlay" id="welcome-modal">
   <div class="modal-box">
     <h2>EB 排期预测</h2>
-    <div class="modal-sub">输入你的优先日期，看看绿卡大概什么时候排到你</div>
+    <div class="modal-sub">EB-1A · 中国大陆。输入你的优先日期，看看绿卡大概什么时候排到你</div>
     <div class="field">
       <label>Priority Date (优先日) *</label>
       <div class="date-group" id="wf-pd-group">
@@ -219,24 +220,6 @@
         <input type="text" class="dg-day" id="wf-pd-d" maxlength="2" placeholder="日" inputmode="numeric">
       </div>
       <div class="wheel-date" id="wf-pd-wheel"></div>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>类别</label>
-        <select id="wf-category">
-          <option value="EB-1A" selected>EB-1A</option><option value="EB-1B">EB-1B</option>
-          <option value="EB-1C">EB-1C</option><option value="EB-2-NIW">EB-2 NIW</option>
-          <option value="EB-2">EB-2</option><option value="EB-3">EB-3</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>出生国</label>
-        <select id="wf-country">
-          <option value="CN" selected>中国大陆</option><option value="IN">印度</option>
-          <option value="MX">墨西哥</option><option value="PH">菲律宾</option>
-          <option value="ROW">其他</option>
-        </select>
-      </div>
     </div>
     <button class="start-btn" id="wf-start" disabled>开始预测</button>
     <div class="hint">随时可以修改</div>
@@ -266,22 +249,6 @@
           <input type="text" class="dg-day" id="pe-pd-d" maxlength="2" placeholder="日" inputmode="numeric">
         </div>
         <div class="wheel-date" id="pe-pd-wheel"></div>
-      </div>
-      <div>
-        <label class="pe-label">类别</label>
-        <select id="pe-category" class="pe-input">
-          <option value="EB-1A">EB-1A</option><option value="EB-1B">EB-1B</option>
-          <option value="EB-1C">EB-1C</option><option value="EB-2-NIW">EB-2 NIW</option>
-          <option value="EB-2">EB-2</option><option value="EB-3">EB-3</option>
-        </select>
-      </div>
-      <div>
-        <label class="pe-label">出生国</label>
-        <select id="pe-country" class="pe-input">
-          <option value="CN">中国大陆</option><option value="IN">印度</option>
-          <option value="MX">墨西哥</option><option value="PH">菲律宾</option>
-          <option value="ROW">其他</option>
-        </select>
       </div>
       <div class="pe-actions">
         <button class="pe-btn pe-btn-secondary" id="pe-cancel">取消</button>
@@ -338,11 +305,7 @@
     <details class="btm-detail" id="settings-card">
       <summary>高级设置</summary>
       <div class="settings-content">
-        <div class="presets" id="presets-container">
-          <button class="preset active" data-preset="realistic"><span class="p-name">现实</span><span class="p-desc">当前推算</span></button>
-          <button class="preset" data-preset="optimistic"><span class="p-name">乐观</span><span class="p-desc">配额增加</span></button>
-          <button class="preset" data-preset="pessimistic"><span class="p-name">悲观</span><span class="p-desc">配额减少</span></button>
-        </div>
+        <div class="settings-hint">默认参数基于公开数据估算，可手动微调看不同假设下的结果。</div>
         <div class="params" id="params-container"></div>
       </div>
     </details>
@@ -371,6 +334,9 @@ function persistProfile() {
 }
 var savedProfile = loadProfile();
 var profile = savedProfile || JSON.parse(JSON.stringify(DEFAULT_PROFILE));
+// 工具只支持 EB-1A 中国大陆，强制归一（覆盖任何旧的保存值）
+profile.category = 'EB-1A';
+profile.country = 'CN';
 
 function getYourPD() { return profile.pd; }
 function getCurrentCutoff() { return getCutoffData(profile.category, profile.country, profile.chartType); }
@@ -1478,7 +1444,7 @@ function renderExplanation() {
       queueAhead.toLocaleString() + ' 人 ÷ ' + mainPerYear.toLocaleString() + ' 人/年 ≈ <b>' + yearsEst +
       ' 年</b>，这是一个粗略的中心估计。</p>' +
     '<p><span class="step">④ 加入真实节奏与不确定性</span><br>' +
-      '实际发放并不匀速：财年前几个月发得猛、后段收紧；每年 10 月新财年配额释放时，排期常出现"跳进"（约四分之一的年份是大跳）；再叠加随机波动。工具据此跑 <b>500 次蒙特卡洛模拟</b>，记录每条路径里排期追上你 PD 的时间，取这些时间的分布，得到 <b>快(P10) / 中(P50) / 慢(P90)</b> 三档预测与置信区间。</p>' +
+      '实际发放并不匀速：财年前几个月发得猛、后段收紧；每年 10 月新财年配额释放时，排期常出现"跳进"（约四分之一的年份是大跳）；再叠加随机波动。工具据此跑 <b>500 次蒙特卡洛模拟</b>，记录每条路径里排期追上你 PD 的时间，取这些时间的分布，得到 <b>快 / 中 / 慢</b> 三档预测与置信区间。</p>' +
     '<p class="explain-note">以上为基于公开数据的统计估算，非官方、非法律意见。配额政策、行政命令或申请人行为变化都会改变真实结果。</p>';
 }
 
@@ -1557,8 +1523,6 @@ document.getElementById('profile-toggle').addEventListener('click', function() {
   if (edit.classList.contains('active')) {
     view.classList.remove('hidden'); edit.classList.remove('active'); btn.textContent = '编辑';
   } else {
-    document.getElementById('pe-category').value = profile.category;
-    document.getElementById('pe-country').value = profile.country;
     view.classList.add('hidden'); edit.classList.add('active'); btn.textContent = '取消';
     // sync after the panel is visible so the wheels can apply their scroll position
     writeDateGroup('pe-pd', profile.pd);
@@ -1569,8 +1533,6 @@ document.getElementById('pe-save').addEventListener('click', function() {
   var pd = readDateGroup('pe-pd');
   if (!pd) return;
   profile.pd = pd;
-  profile.category = document.getElementById('pe-category').value;
-  profile.country = document.getElementById('pe-country').value;
   persistProfile();
   document.getElementById('profile-view').classList.remove('hidden');
   document.getElementById('profile-edit').classList.remove('active');
@@ -1581,20 +1543,6 @@ document.getElementById('pe-cancel').addEventListener('click', function() {
   document.getElementById('profile-view').classList.remove('hidden');
   document.getElementById('profile-edit').classList.remove('active');
   document.getElementById('profile-toggle').textContent = '编辑';
-});
-
-document.querySelectorAll('.preset').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    var name = btn.dataset.preset;
-    var p = PRESETS[name]; if (!p) return;
-    Object.keys(p).forEach(function(k) {
-      currentParams[k] = p[k];
-      var input = document.getElementById(k);
-      if (input) { input.value = p[k]; document.getElementById('v-' + k).textContent = PARAM_META[k].format(p[k]); }
-    });
-    document.querySelectorAll('.preset').forEach(function(b) { b.classList.toggle('active', b.dataset.preset === name); });
-    render();
-  });
 });
 
 document.querySelectorAll('.stat').forEach(function(cell) {
@@ -1635,8 +1583,6 @@ setupChartTooltip();
     var pd = readDateGroup('wf-pd');
     if (!pd) return;
     profile.pd = pd;
-    profile.category = document.getElementById('wf-category').value;
-    profile.country = document.getElementById('wf-country').value;
     persistProfile();
     modal.classList.add('out');
     setTimeout(function() { modal.style.display = 'none'; }, 300);
