@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""
+自学习签证公告探测器（EB-1 中国大陆）。
+
+设计目标：尽量轻 + 自己回测自己。
+- 门控（命中即退、零请求）：按美东时间 America/New_York 判断 工作日 / 非联邦假日 /
+  高概率日 / 高概率时段 / 是否已抓到目标月；任一不满足立即退出。
+- 探测：对可预测的"下月 bulletin URL" 发 GET，404=未发，200=已发。
+- 命中：解析 EB-1 中国大陆 表A(Final Action)/表B(Dates for Filing) + USCIS 当月开放表，
+  写回 index.html；并把"本次实际探到的美东时刻"记进 data/release_log.json。
+- 自学习：≥3 条真实记录后，把高概率"星期/几号/时段"窗口收窄到历史命中范围（±缓冲），
+  下次门控更紧 → 越用越轻。探测频率由 workflow 的 cron 决定（每 30 分钟）。
+
+依赖：仅标准库。需在能访问 travel.state.gov 的环境运行（Actions runner / 本机；沙箱会 403）。
+
+用法：
+    python scripts/sniff_visa_bulletin.py            # 正常运行（CI 调用）
+    python scripts/sniff_visa_bulletin.py --dry-run  # 不写文件、不提交，只打印
+    python scripts/sniff_visa_bulletin.py --force     # 跳过时间门控，强制探一次（调试）
+"""
+import argparse
+import json
+import os
+import re
+import sys
+import urllib.request
+import urllib.error
+from datetime import date, datetime, timedelta
+
+try:
+    from zoneinfo import ZoneInfo
+    ET = ZoneInfo("America/New_York")
+except Exception:
+    ET = None  # 老 Python 兜底；门控会退化为 UTC
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+INDEX = os.path.join(ROOT, "index.html")
+LOG = os.path.join(ROOT, "data", "release_log.json")
+UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+MONTHS = ["january", "february", "march", "april", "may", "june",
+          "july", "august", "september", "october", "november", "december"]
+
+# 美国联邦假日（每年初更新一次即可）。这几天 gov 不发布。
+FED_HOLIDAYS = {
+    "2026-01-01", "2026-01-19", "2026-02-16", "2026-05-25", "2026-06-19",
+    "2026-07-03", "2026-09-07", "2026-10-12", "2026-11-11", "2026-11-26", "2026-12-25",
+    "2027-01-01", "2027-01-18", "2027-02-15", "2027-05-31", "2027-06-18",
+    "2027-07-05", "2027-09-06", "2027-10-11", "2027-11-11", "2027-11-25", "2027-12-24",
+}
+
+# 冷启动默认高概率窗口（无足够历史时用）
+DEFAULT_DAY_LO, DEFAULT_DAY_HI = 9, 16
+DEFAULT_HOUR_LO, DEFAULT_HOUR_HI = 12, 20   # 美东 12:00–20:00
+MIN_RECORDS_TO_TUNE = 3
+
+
+def now_et():
+    return datetime.now(ET) if ET else datetime.utcnow()
+
+
+def bulletin_url(year, month):
+    fy = year + 1 if month >= 10 else year
+    return ("https://travel.state.gov/content/travel/en/legal/visa-law0/"
+            f"visa-bulletin/{fy}/visa-bulletin-for-{MONTHS[month-1]}-{year}.html")
+
+
+def next_month(y, m):
+    return (y + 1, 1) if m == 12 else (y, m + 1)
+
+
+def load_log():
+    try:
+        with open(LOG, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def save_log(rows):
+    os.makedirs(os.path.dirname(LOG), exist_ok=True)
+    with open(LOG, "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False, indent=2)
+
+
+def learned_window(log):
+    """从真实命中记录学习窗口；不足则用默认。返回 (day_lo,day_hi,hour_lo,hour_hi,tuned?)。"""
+    days = [r["day"] for r in log if r.get("day")]
+    hours = [r["hour"] for r in log if r.get("hour") is not None]  # 仅在线探到的有 hour
+    if len(days) >= MIN_RECORDS_TO_TUNE:
+        dlo, dhi = max(1, min(days) - 1), min(28, max(days) + 1)
+        if len(hours) >= MIN_RECORDS_TO_TUNE:
+            hlo, hhi = max(0, min(hours) - 1), min(23, max(hours) + 1)
+        else:
+            hlo, hhi = DEFAULT_HOUR_LO, DEFAULT_HOUR_HI
+        return dlo, dhi, hlo, hhi, True
+    return DEFAULT_DAY_LO, DEFAULT_DAY_HI, DEFAULT_HOUR_LO, DEFAULT_HOUR_HI, False
+
+
+def gate(log, force=False):
+    """返回 (ok, reason)。"""
+    t = now_et()
+    if force:
+        return True, "force"
+    if t.weekday() >= 5:
+        return False, "周末"
+    if t.strftime("%Y-%m-%d") in FED_HOLIDAYS:
+        return False, "联邦假日"
+    dlo, dhi, hlo, hhi, tuned = learned_window(log)
+    if not (dlo <= t.day <= dhi):
+        return False, f"非高概率日({t.day}不在{dlo}-{dhi})"
+    if not (hlo <= t.hour < hhi):
+        return False, f"非高概率时段(ET {t.hour}点不在{hlo}-{hhi})"
+    return True, f"窗口内({'已自学习' if tuned else '默认'} {dlo}-{dhi}号 ET{hlo}-{hhi})"
+
+
+def fetch(url):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        return r.getcode(), r.read().decode("utf-8", "ignore")
+
+
+def parse_eb1_china(html):
+    """尽力解析 EB-1 中国大陆 表A/表B。返回 (fad, dff) 形如 '2023-04-01' 或 None。
+    注：bulletin 表格 HTML 结构可能调整；首次真实运行后按需校准本函数。"""
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"\s+", " ", text)
+
+    def grab(after_label):
+        # 在 "Employment-based ... 1st ..." 行附近找中国列的日期；
+        # bulletin 日期格式如 "01APR23" 或 "01 APR 23"。
+        m = re.search(after_label + r".{0,400}?\b1st\b(.{0,200})", text, re.I)
+        if not m:
+            return None
+        seg = m.group(1)
+        dates = re.findall(r"(\d{2})\s*([A-Z]{3})\s*(\d{2})|(C\b|Current)", seg, re.I)
+        # 列顺序: All / CHINA / INDIA / MEXICO / PHILIPPINES → 取第 2 个（China）
+        vals = []
+        for d, mo, yy, cur in dates:
+            if cur:
+                vals.append("current")
+            elif d:
+                vals.append((d, mo, yy))
+        if len(vals) >= 2:
+            v = vals[1]
+            if v == "current":
+                return "current"
+            d, mo, yy = v
+            mon = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+                   "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}.get(mo.upper())
+            if mon:
+                return f"20{yy}-{mon:02d}-{int(d):02d}"
+        return None
+
+    fad = grab(r"Final Action Date")
+    dff = grab(r"Dates for Filing")
+    return fad, dff
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--force", action="store_true")
+    args = ap.parse_args()
+
+    log = load_log()
+    t = now_et()
+
+    # 目标 = 下个日历月的 bulletin（通常在本月中旬发布）
+    ty, tm = next_month(t.year, t.month)
+    tag = f"{ty}-{tm:02d}"
+
+    if any(r.get("bulletin") == tag for r in log):
+        print(f"[skip] {tag} 已抓到，命中即停。")
+        return
+
+    ok, reason = gate(log, force=args.force)
+    if not ok:
+        print(f"[gate] 跳过：{reason}（ET {t:%Y-%m-%d %H:%M}）")
+        return
+    print(f"[gate] {reason} → 探测 {tag}")
+
+    url = bulletin_url(ty, tm)
+    try:
+        code, html = fetch(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"[probe] {tag} 尚未发布 (404)")
+            return
+        print(f"[probe] HTTP {e.code}（gov 可能屏蔽本环境；Actions runner 通常可访问）")
+        return
+    except Exception as e:
+        print(f"[probe] 失败 {type(e).__name__}: {str(e)[:160]}")
+        return
+
+    print(f"[hit] {tag} 已发布！{url}")
+    fad, dff = parse_eb1_china(html)
+    print(f"[parse] EB-1 中国 表A(裁定)={fad}  表B(递交)={dff}")
+
+    rec = {"bulletin": tag, "detected_et": t.strftime("%Y-%m-%d %H:%M"),
+           "day": t.day, "hour": t.hour, "weekday": t.weekday(),
+           "fad": fad, "dff": dff}
+
+    if args.dry_run:
+        print("[dry-run] 不写文件。记录将是:", json.dumps(rec, ensure_ascii=False))
+        return
+
+    log.append(rec)
+    save_log(log)
+    print(f"[log] 已记录到 {LOG}")
+
+    if fad and dff and fad != "current":
+        try:
+            update_index(ty, tm, fad, dff)
+            print("[index] 已更新 CUTOFF_DATA / HISTORY（FILING_CHART 仍需人工或扩展 USCIS 抓取）")
+        except Exception as e:
+            print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
+    else:
+        print("[index] 解析不完整，仅记录命中时间；请检查 parse_eb1_china 是否需按真实 HTML 调整。")
+
+
+def update_index(ty, tm, fad, dff):
+    """把新一期表A/表B 写回 index.html：更新 CUTOFF_DATA 与追加 HISTORY/HISTORY_B。"""
+    with open(INDEX, encoding="utf-8") as f:
+        s = f.read()
+    bull = f"{ty}-{tm:02d}-15"  # 该期对应的 bulletin 月（用 15 号作 x）
+
+    # 1) 更新 EB-1A CN 的 A/B
+    s = re.sub(r"('EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*')[0-9-]+(',\s*B:\s*')[0-9-]+(')",
+               lambda m: m.group(1) + fad + m.group(2) + dff + m.group(3), s, count=1)
+
+    # 2) 追加 HISTORY（表A）与 HISTORY_B（表B）最新点（若该 bulletin 月尚未存在）
+    if bull not in s:
+        s = re.sub(r"(\n\]\.map\(function\(p\) \{ return \{ x: new Date\(p\[0\]\)\.getTime\(\),"
+                   r" y: new Date\(p\[1\]\)\.getTime\(\) \}; \}\);\s*\n\s*var HISTORY_B)",
+                   f",\n  ['{bull}','{fad}']\\1", s, count=1)
+        s = re.sub(r"(\n\]\.map\(function\(p\) \{ return \{ x: new Date\(p\[0\]\)\.getTime\(\),"
+                   r" y: new Date\(p\[1\]\)\.getTime\(\) \}; \}\);\s*\n\s*// 当前签证公告状态)",
+                   f",\n  ['{bull}','{dff}']\\1", s, count=1)
+
+    with open(INDEX, "w", encoding="utf-8") as f:
+        f.write(s)
+
+
+if __name__ == "__main__":
+    main()

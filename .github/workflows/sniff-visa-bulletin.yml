@@ -1,0 +1,81 @@
+name: Sniff Visa Bulletin
+
+on:
+  workflow_dispatch:        # 手动触发
+    inputs:
+      mode:
+        description: 'sniff（探测，默认）| analyze（统计近36月发布日期+回测）'
+        default: 'sniff'
+        type: choice
+        options: [sniff, analyze]
+  schedule:
+    # 探测间隔 = 每 30 分钟，仅在高概率 UTC 时段（覆盖美东 12:00–20:00，含夏/冬令时）。
+    # 脚本再按美东时间精确门控（工作日 / 非假日 / 高概率日 / 高概率时段 / 命中即停）。
+    - cron: '*/30 16-23 8-17 * *'   # 美东当日午后~晚（UTC 同日）
+    - cron: '*/30 0 9-18 * *'       # 冬令时傍晚溢出到 UTC 次日 0 点
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  sniff:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run sniff or analyze
+        run: |
+          MODE="${{ github.event.inputs.mode || 'sniff' }}"
+          if [ "$MODE" = "analyze" ]; then
+            python scripts/analyze_release_times.py --months 36
+          else
+            python scripts/sniff_visa_bulletin.py
+          fi
+
+      - name: Commit if changed
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/release_log.json index.html
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "无更新"
+          else
+            git commit -m "Auto: visa bulletin update $(date -u +%Y-%m-%d)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 仅在有更新时，同一次运行内直接部署（GITHUB_TOKEN 的 push 不会自动触发部署工作流）
+      - name: Prepare site
+        if: steps.commit.outputs.changed == 'true'
+        run: mkdir -p _site && cp index.html _site/index.html
+
+      - name: Setup Pages
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/deploy-pages@v4
