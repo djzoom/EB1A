@@ -1,6 +1,6 @@
 # Data Directory
 
-Public government data for EB-1A priority date prediction (V22).
+Public government data for EB-1A priority date prediction.
 
 All files are from official USCIS/DOS sources or community-curated public datasets.
 
