@@ -65,6 +65,10 @@
   .bar-track { flex: 1; height: 4px; background: #f0f0f0; border-radius: 2px; overflow: hidden; }
   .bar-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--blue)); border-radius: 2px; transition: width 0.6s; }
   .bar-note { font-size: 10px; color: var(--text3); text-align: center; margin-top: 1px; }
+  .ab-status { font-size: 11px; color: var(--text2); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); text-align: center; line-height: 1.6; }
+  .ab-status b { font-variant-numeric: tabular-nums; }
+  .ab-status .open { color: var(--blue); font-weight: 700; }
+  .ab-status .ab-sep { color: var(--text3); margin: 0 6px; }
 
   .chart-panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 4px; box-shadow: var(--shadow); overflow: hidden; }
   .chart-head { display: flex; align-items: center; padding: 4px 8px 0; gap: 4px; }
@@ -258,6 +262,7 @@
       <span id="progress-right">--</span>
     </div>
     <div class="bar-note" id="progress-note"></div>
+    <div class="ab-status" id="ab-status"></div>
     <span id="hero-fast" style="display:none"></span>
     <span id="hero-slow" style="display:none"></span>
   </div>
@@ -274,7 +279,8 @@
       <div id="chart-tooltip" class="chart-tooltip"></div>
     </div>
     <div class="legend" id="chart-legend">
-      <span class="leg"><i style="background:#F59E0B"></i>历史</span>
+      <span class="leg"><i style="background:#F59E0B"></i>表A裁定</span>
+      <span class="leg"><i class="dash" style="border-color:#64748B"></i>表B递交</span>
       <span class="leg"><i style="background:#15734F"></i>预测</span>
       <span class="leg"><i class="band" style="background:#15734F"></i>范围</span>
       <span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>
@@ -360,6 +366,11 @@ var HISTORY_B = [
   ['2025-10-15','2023-05-15'],['2025-12-15','2023-08-01'],['2026-01-15','2023-09-15'],
   ['2026-03-15','2023-11-01'],['2026-04-15','2023-12-01'],['2026-06-15','2023-12-01']
 ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; });
+
+// 当前签证公告状态（每月更新）：本月 AOS 职业移民递交用哪张表
+// 2026年6月：USCIS 要求用表A（Final Action），已连续第二个月
+var VB_MONTH = '2026年6月';
+var FILING_CHART = 'A'; // 'A' = 用表A(最终裁定) 递交；'B' = 用表B(递交日期)
 
 var PARAM_META = {
   chinaBaseQuota: {
@@ -971,16 +982,18 @@ function drawForecastChart(percentiles) {
   var PW = W - PAD.left - PAD.right, PH = H - PAD.top - PAD.bottom;
   var yourPD = getYourPD();
 
+  // 图表聚焦：从当前排期所在年份起（不回溯到 2016/2017 的远古历史）
+  var FOCUS_START = new Date('2023-01-01').getTime();
   var allX = [], allY = [];
-  for (var i = 0; i < HISTORY.length; i++) { allX.push(HISTORY[i].x); allY.push(HISTORY[i].y); }
+  for (var i = 0; i < HISTORY.length; i++) { if (HISTORY[i].x >= FOCUS_START) { allX.push(HISTORY[i].x); allY.push(HISTORY[i].y); } }
+  for (var j = 0; j < HISTORY_B.length; j++) { if (HISTORY_B[j].x >= FOCUS_START) { allX.push(HISTORY_B[j].x); allY.push(HISTORY_B[j].y); } }
   var pathArrs = [percentiles.p10, percentiles.p25, percentiles.p50, percentiles.p75, percentiles.p90];
   for (var p = 0; p < pathArrs.length; p++) {
     for (var k = 0; k < pathArrs[p].length; k++) { allX.push(pathArrs[p][k].x); allY.push(pathArrs[p][k].y); }
   }
   allY.push(yourPD);
 
-  var xMinDefault = new Date('2022-10-01').getTime();
-  var xMin = Math.min(xMinDefault, Math.min.apply(null, allX));
+  var xMin = FOCUS_START;
   var xMax = Math.max.apply(null, allX);
   var yMin = Math.min.apply(null, allY);
   var yMax = Math.max.apply(null, allY);
@@ -1048,6 +1061,9 @@ function drawForecastChart(percentiles) {
     if (histVisible[h].x < xMin || histVisible[h].y < yMin) continue;
     hist += '<circle cx="' + sx(histVisible[h].x).toFixed(1) + '" cy="' + sy(histVisible[h].y).toFixed(1) + '" r="2.5" fill="#F59E0B"/>';
   }
+  // 表B (Dates for Filing) 历史 — 次要虚线
+  var histBVisible = HISTORY_B.filter(function(h) { return h.x >= xMin - 90 * MS_PER_DAY; });
+  var histB = histBVisible.length ? '<path d="' + smoothPathD(histBVisible, sx, sy) + '" fill="none" stroke="#64748B" stroke-width="1.5" stroke-dasharray="5 3" opacity="0.75" stroke-linecap="round" stroke-linejoin="round"/>' : '';
 
   // Prediction lines (smooth)
   var lineP90 = '<path d="' + smoothPathD(percentiles.p90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>';
@@ -1074,7 +1090,7 @@ function drawForecastChart(percentiles) {
   lastSnapData = { mode: 'trend', p50: HISTORY.slice().concat(percentiles.p50), p10: percentiles.p10, p90: percentiles.p90, predStart: HISTORY.length };
 
   document.getElementById('chart').innerHTML = defs + bg + grid +
-    '<g clip-path="url(#plot-clip)">' + band90 + band50 + hist + pdLine + lineP90 + lineP10 + lineP50 + crossMarker + pdLabel + '</g>' +
+    '<g clip-path="url(#plot-clip)">' + band90 + band50 + histB + hist + pdLine + lineP90 + lineP10 + lineP50 + crossMarker + pdLabel + '</g>' +
     todayLine + todayLabel;
 }
 
@@ -1214,7 +1230,7 @@ window.setChartMode = function(mode) {
   if (mode === 'wait') {
     legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>历史等待</span><span class="leg"><i style="background:#15734F"></i>预测等待</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的PD</span>';
   } else {
-    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>历史</span><span class="leg"><i style="background:#15734F"></i>预测</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>';
+    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>表A裁定</span><span class="leg"><i class="dash" style="border-color:#64748B"></i>表B递交</span><span class="leg"><i style="background:#15734F"></i>预测</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>';
   }
   redrawChart();
   updateZoomHint();
@@ -1251,6 +1267,18 @@ function renderHero() {
     note = '从 PD 到今天已等 ' + fmtMonths(elapsedMonths) + '，预计还需 ' + formatWait(p50);
   }
   document.getElementById('progress-note').textContent = note;
+
+  // 表A / 表B 当前排期 + 本月递交开放哪张表
+  var dateA = getCutoffData('EB-1A', 'CN', 'A');
+  var dateB = getCutoffData('EB-1A', 'CN', 'B');
+  var aCls = FILING_CHART === 'A' ? ' class="open"' : '';
+  var bCls = FILING_CHART === 'B' ? ' class="open"' : '';
+  document.getElementById('ab-status').innerHTML =
+    '<span' + aCls + '>表A裁定 <b>' + formatDate(dateA) + '</b></span>' +
+    '<span class="ab-sep">·</span>' +
+    '<span' + bCls + '>表B递交 <b>' + formatDate(dateB) + '</b></span>' +
+    '<span class="ab-sep">|</span>' +
+    VB_MONTH + ' 递交用 <span class="open">表' + FILING_CHART + '</span>';
 }
 
 function renderStats() {
