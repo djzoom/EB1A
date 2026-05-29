@@ -1,4 +1,4 @@
-# EB1A Predictor V22 - 数据源清单
+# EB1A Predictor - 数据源清单
 
 完整可下载/可抓取的公开数据源,用于构建 cohort × country × subcategory × PD-bucket × stage 模型。
 
@@ -190,7 +190,7 @@ jobs:
 
 ---
 
-## 📊 V22 初始 cohort 库存构建步骤
+## 📊 初始 cohort 库存构建步骤
 
 ### Phase 1: 静态快照 (用最新数据初始化)
 
@@ -236,7 +236,7 @@ jobs:
 
 ---
 
-## 推荐 V22 数据架构
+## 推荐数据架构
 
 ```
 data/
