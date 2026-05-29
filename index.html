@@ -150,6 +150,7 @@
   .source-chip { background: var(--blue-bg); color: var(--blue); padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 500; display: inline-block; margin: 1px; }
 
   .footer { font-size: 10px; color: var(--text3); text-align: center; padding: 4px; }
+  .footer a, .explain-content a { color: var(--blue); text-decoration: none; font-weight: 600; }
   .touch-hint { display: none; font-size: 10px; color: var(--text3); text-align: center; padding: 0 0 5px; }
 
   .modal-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.4); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; opacity: 1; transition: opacity 0.3s; }
@@ -311,11 +312,12 @@
       <p><span class="step">表A 与 表B</span><br><b>表A（最终裁定日）</b>= 真正能拿绿卡的排期；<b>表B（递交日期）</b>= 能递交 I-485 的排期。页面同时显示两者，并标出 <b>本月 USCIS 开放哪张表</b>递交。</p>
       <p><span class="step">第一时间拿到最新公告</span><br>内置<b>自动探测</b>：每月签证公告一发布（美东工作日、通常月中），后台定时任务会在 <b>30 分钟内</b>抓到，自动更新表A/表B并重新部署上线。它还会<b>自学习</b>公告的实际发布时刻，把探测窗口越收越窄——越用越准、越省。</p>
       <p><span class="step">隐私与数据</span><br>你的 PD、类别等只保存在浏览器本地（localStorage），<b>不上传</b>。底层数据来自 USCIS / DOS 公开来源。</p>
+      <p><span class="step">作者</span><br>由 <a href="https://x.com/DJWZ" target="_blank" rel="noopener">0xGarfield · @DJWZ</a> 制作，欢迎在 X 反馈。</p>
       <p class="explain-note">这不是法律建议，仅为基于公开数据的统计估算。实际结果受配额政策、行政命令、立法与个人情况影响，请咨询持牌移民律师。</p>
     </div>
   </details>
 
-  <div class="footer">EB-1A 中国大陆排期预测 · 自动抓取最新签证公告 · 数据源 USCIS/DOS · 500 次蒙特卡洛</div>
+  <div class="footer">EB-1A 中国大陆排期预测 · 自动抓取最新签证公告 · 数据源 USCIS/DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a></div>
   <table style="display:none"><tbody id="monthly-tbody"></tbody></table>
 
 </div>
