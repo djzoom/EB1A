@@ -4,17 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>EB 排期预测 V22</title>
+<title>EB 排期预测</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   :root {
-    --bg: #f7f8fa; --card: #fff; --border: #e5e7eb;
-    --text: #1a1a2e; --text2: #4b5563; --text3: #9ca3af;
-    --blue: #3b82f6; --blue-light: #dbeafe; --blue-bg: #eff6ff;
+    --bg: #eef4f0; --card: #fff; --border: #d7e5dd;
+    --text: #13241c; --text2: #45574e; --text3: #8aa093;
+    --blue: #15734f; --blue-light: #c2e3d4; --blue-bg: #e7f4ee;
     --orange: #f59e0b; --orange-light: #fef3c7;
     --green: #10b981; --green-light: #d1fae5;
     --red: #ef4444; --red-light: #fee2e2;
-    --shadow: 0 1px 3px rgba(0,0,0,0.06); --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow: 0 1px 3px rgba(16,80,55,0.07); --shadow-lg: 0 4px 14px rgba(16,80,55,0.10);
     --radius: 12px;
   }
   html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.4; }
@@ -156,6 +156,28 @@
   .modal-box .start-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   .modal-box .start-btn:not(:disabled):hover { filter: brightness(1.08); }
   .modal-box .hint { font-size: 10px; color: var(--text3); text-align: center; margin-top: 8px; }
+
+  /* ---- Mobile / touch simplification ---- */
+  /* 16px inputs prevent iOS auto-zoom on focus */
+  .pe-input, select.pe-input, .date-group input,
+  .modal-box input, .modal-box select { font-size: 16px; }
+  .date-group .dg-year { width: 64px; }
+  .date-group .dg-month, .date-group .dg-day { width: 46px; }
+
+  @media (pointer: coarse) {
+    html, body { font-size: 15px; }
+    /* comfortable tap targets */
+    .mode-btn, .act-btn, .pe-btn, .text-btn {
+      min-height: 40px; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .stat { min-height: 36px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; }
+    .btm-detail summary { padding: 14px 12px; }
+    .preset { padding: 12px 6px; }
+    .modal-box .start-btn { padding: 14px; }
+    /* declutter chart toolbar: pinch-to-zoom replaces +/- buttons */
+    .zoom-ctrls { display: none; }
+    .chart-svg { cursor: default; }
+  }
 </style>
 </head>
 <body>
@@ -202,7 +224,6 @@
 
   <div class="topbar">
     <h1>EB排期预测</h1>
-    <span class="badge">V22</span>
     <div class="topbar-info" id="profile-view">
       <span id="pv-cat">EB-1A</span> · <span id="pv-country">中国大陆</span> · PD <span id="pv-pd">--</span>
       <span class="dist" id="pv-distance"></span>
@@ -289,8 +310,8 @@
     </div>
     <div class="legend" id="chart-legend">
       <span class="leg"><i style="background:#F59E0B"></i>历史</span>
-      <span class="leg"><i style="background:#3B82F6"></i>预测</span>
-      <span class="leg"><i class="band" style="background:#3B82F6"></i>范围</span>
+      <span class="leg"><i style="background:#15734F"></i>预测</span>
+      <span class="leg"><i class="band" style="background:#15734F"></i>范围</span>
       <span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>
     </div>
   </div>
@@ -313,7 +334,7 @@
     </details>
   </div>
 
-  <div class="footer">USCIS/DOS · V22 · 500次蒙特卡洛模拟</div>
+  <div class="footer">USCIS/DOS · 500次蒙特卡洛模拟</div>
   <table style="display:none"><tbody id="monthly-tbody"></tbody></table>
 
 </div>
@@ -927,7 +948,7 @@ function setupChartTooltip() {
 
     crosshairV = ensure(crosshairV, 'line', { stroke: '#94A3B8', 'stroke-width': '1', 'stroke-dasharray': '2 2' });
     crosshairH = ensure(crosshairH, 'line', { stroke: '#94A3B8', 'stroke-width': '1', 'stroke-dasharray': '2 2' });
-    hoverDot = ensure(hoverDot, 'circle', { r: '5', fill: '#3B82F6', stroke: '#fff', 'stroke-width': '2' });
+    hoverDot = ensure(hoverDot, 'circle', { r: '5', fill: '#15734F', stroke: '#fff', 'stroke-width': '2' });
 
     crosshairV.setAttribute('x1', c.svgX); crosshairV.setAttribute('x2', c.svgX);
     crosshairV.setAttribute('y1', b.PAD.top); crosshairV.setAttribute('y2', b.PAD.top + b.PH);
@@ -953,12 +974,12 @@ function setupChartTooltip() {
         if (chartMode === 'wait') {
           html = '<div class="tt-hdr">PD: ' + fmtDate(snap.x) + '</div>';
           if (p10v !== null) html += '<div class="tt-series"><span class="tt-dot" style="background:#10B981"></span><span class="tt-sname">快</span><span class="tt-sval" style="color:#10B981">' + p10v.toFixed(1) + '年</span></div>';
-          html += '<div class="tt-series"><span class="tt-dot" style="background:#3B82F6"></span><span class="tt-sname">中</span><span class="tt-sval" style="color:#3B82F6">' + snap.y.toFixed(1) + '年</span></div>';
+          html += '<div class="tt-series"><span class="tt-dot" style="background:#15734F"></span><span class="tt-sname">中</span><span class="tt-sval" style="color:#15734F">' + snap.y.toFixed(1) + '年</span></div>';
           if (p90v !== null) html += '<div class="tt-series"><span class="tt-dot" style="background:#EF4444"></span><span class="tt-sname">慢</span><span class="tt-sval" style="color:#EF4444">' + p90v.toFixed(1) + '年</span></div>';
         } else {
           html = '<div class="tt-hdr">' + fmtDate(snap.x) + '</div>';
           if (p10v !== null) html += '<div class="tt-series"><span class="tt-dot" style="background:#10B981"></span><span class="tt-sname">快</span><span class="tt-sval" style="color:#10B981">' + fmtDate(p10v) + '</span></div>';
-          html += '<div class="tt-series"><span class="tt-dot" style="background:#3B82F6"></span><span class="tt-sname">中</span><span class="tt-sval" style="color:#3B82F6">' + fmtDate(snap.y) + '</span></div>';
+          html += '<div class="tt-series"><span class="tt-dot" style="background:#15734F"></span><span class="tt-sname">中</span><span class="tt-sval" style="color:#15734F">' + fmtDate(snap.y) + '</span></div>';
           if (p90v !== null) html += '<div class="tt-series"><span class="tt-dot" style="background:#EF4444"></span><span class="tt-sname">慢</span><span class="tt-sval" style="color:#EF4444">' + fmtDate(p90v) + '</span></div>';
         }
       }
@@ -1032,8 +1053,8 @@ function drawForecastChart(percentiles) {
   // Defs: clip + gradients
   var defs = '<defs>' +
     '<clipPath id="plot-clip"><rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '"/></clipPath>' +
-    '<linearGradient id="band-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3B82F6" stop-opacity="0.10"/><stop offset="100%" stop-color="#3B82F6" stop-opacity="0.02"/></linearGradient>' +
-    '<linearGradient id="band-inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3B82F6" stop-opacity="0.18"/><stop offset="100%" stop-color="#3B82F6" stop-opacity="0.05"/></linearGradient>' +
+    '<linearGradient id="band-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15734F" stop-opacity="0.10"/><stop offset="100%" stop-color="#15734F" stop-opacity="0.02"/></linearGradient>' +
+    '<linearGradient id="band-inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15734F" stop-opacity="0.18"/><stop offset="100%" stop-color="#15734F" stop-opacity="0.05"/></linearGradient>' +
     '</defs>';
   var bg = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>';
 
@@ -1079,11 +1100,11 @@ function drawForecastChart(percentiles) {
   // Prediction lines (smooth)
   var lineP90 = '<path d="' + smoothPathD(percentiles.p90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>';
   var lineP10 = '<path d="' + smoothPathD(percentiles.p10, sx, sy) + '" fill="none" stroke="#10B981" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>';
-  var lineP50 = '<path d="' + smoothPathD(percentiles.p50, sx, sy) + '" fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  var lineP50 = '<path d="' + smoothPathD(percentiles.p50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
 
   // Cross marker with glow
   var crossMarker = '';
-  var selColors = { p10: '#10B981', p25: '#60A5FA', p50: '#3B82F6', p75: '#F59E0B', p90: '#EF4444' };
+  var selColors = { p10: '#10B981', p25: '#5cbf99', p50: '#15734F', p75: '#F59E0B', p90: '#EF4444' };
   var selPath = percentiles[selectedPercentile];
   if (selPath && selPath.length) {
     for (var c = 0; c < selPath.length; c++) {
@@ -1165,8 +1186,8 @@ function drawWaitTimeChart(percentiles) {
   // Defs
   var defs = '<defs>' +
     '<clipPath id="plot-clip"><rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '"/></clipPath>' +
-    '<linearGradient id="band-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3B82F6" stop-opacity="0.10"/><stop offset="100%" stop-color="#3B82F6" stop-opacity="0.02"/></linearGradient>' +
-    '<linearGradient id="band-inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3B82F6" stop-opacity="0.18"/><stop offset="100%" stop-color="#3B82F6" stop-opacity="0.05"/></linearGradient>' +
+    '<linearGradient id="band-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15734F" stop-opacity="0.10"/><stop offset="100%" stop-color="#15734F" stop-opacity="0.02"/></linearGradient>' +
+    '<linearGradient id="band-inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15734F" stop-opacity="0.18"/><stop offset="100%" stop-color="#15734F" stop-opacity="0.05"/></linearGradient>' +
     '</defs>';
   var bg = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>';
 
@@ -1206,7 +1227,7 @@ function drawWaitTimeChart(percentiles) {
   // Prediction (smooth)
   var lineP90 = waitP90.length ? '<path d="' + smoothPathD(waitP90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
   var lineP10 = waitP10.length ? '<path d="' + smoothPathD(waitP10, sx, sy) + '" fill="none" stroke="#10B981" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
-  var lineP50 = waitP50.length ? '<path d="' + smoothPathD(waitP50, sx, sy) + '" fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' : '';
+  var lineP50 = waitP50.length ? '<path d="' + smoothPathD(waitP50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' : '';
 
   // Cross marker with glow
   var crossMarker = '';
@@ -1215,7 +1236,7 @@ function drawWaitTimeChart(percentiles) {
     if (selCross) {
       var selWait = (selCross - yourPD) / (365.25 * MS_PER_DAY);
       if (selWait >= 0 && selWait < 20) {
-        var selColors = { p10: '#10B981', p25: '#60A5FA', p50: '#3B82F6', p75: '#F59E0B', p90: '#EF4444' };
+        var selColors = { p10: '#10B981', p25: '#5cbf99', p50: '#15734F', p75: '#F59E0B', p90: '#EF4444' };
         var color = selColors[selectedPercentile];
         crossMarker += '<circle cx="' + pdX.toFixed(1) + '" cy="' + sy(selWait).toFixed(1) + '" r="10" fill="' + color + '" opacity="0.12"/>';
         crossMarker += '<circle cx="' + pdX.toFixed(1) + '" cy="' + sy(selWait).toFixed(1) + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
@@ -1239,9 +1260,9 @@ window.setChartMode = function(mode) {
   document.getElementById('mode-wait').classList.toggle('active', mode === 'wait');
   var legend = document.getElementById('chart-legend');
   if (mode === 'wait') {
-    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>历史等待</span><span class="leg"><i style="background:#3B82F6"></i>预测等待</span><span class="leg"><i class="band" style="background:#3B82F6"></i>范围</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的PD</span>';
+    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>历史等待</span><span class="leg"><i style="background:#15734F"></i>预测等待</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的PD</span>';
   } else {
-    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>历史</span><span class="leg"><i style="background:#3B82F6"></i>预测</span><span class="leg"><i class="band" style="background:#3B82F6"></i>范围</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>';
+    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>历史</span><span class="leg"><i style="background:#15734F"></i>预测</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>';
   }
   redrawChart();
   updateZoomHint();

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calibrate V21 predictor parameters from actual USCIS/DOS data.
+Calibrate predictor parameters from actual USCIS/DOS data.
 
 Analyzes:
   1. DOS Monthly IV Issuance → total China EB-1 supply, spillover decomposition
@@ -238,7 +238,7 @@ def analyze_i485():
 
 def main():
     print("=" * 70)
-    print("EB1A V21 参数校准 — 基于实际 USCIS/DOS 数据")
+    print("EB1A 参数校准 — 基于实际 USCIS/DOS 数据")
     print("=" * 70)
 
     # ── 1. DOS 签发数据分析 ──
@@ -417,12 +417,12 @@ def main():
         s = supply[fy]
         total_supply = s["china_eb1"]
         print(f"\n  FY{fy} 实际总 supply = {total_supply}")
-        print(f"    V21 默认总 supply = {BASE_QUOTA} + 800 + 400 + 200 = {BASE_QUOTA + 800 + 400 + 200}")
+        print(f"    模型默认总 supply = {BASE_QUOTA} + 800 + 400 + 200 = {BASE_QUOTA + 800 + 400 + 200}")
         print(f"    差异: {total_supply - (BASE_QUOTA + 800 + 400 + 200):+d}")
 
     print()
     print("  ┌────────────────────────┬──────────┬──────────┐")
-    print("  │ 参数                   │ V21 默认 │ 数据推荐 │")
+    print("  │ 参数                   │ 模型默认 │ 数据推荐 │")
     print("  ├────────────────────────┼──────────┼──────────┤")
 
     if len(fy_list) >= 2:

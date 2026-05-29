@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Independent verification of V22 EB-1A prediction model.
+ * Independent verification of the EB-1A prediction model.
  *
  * This script replicates the core simulation from index.html and validates
  * the prediction against actual Visa Bulletin history.
