@@ -108,6 +108,10 @@
   .btm-detail[open] summary::after { content: '▴'; }
   .btm-detail[open] summary { border-bottom: 1px solid var(--border); }
   .explain-content { padding: 10px 12px; font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .explain-content p { margin: 0 0 7px; }
+  .explain-content p:last-child { margin-bottom: 0; }
+  .explain-content .step { font-weight: 700; color: var(--blue); }
+  .explain-content .explain-note { font-size: 11px; color: var(--text3); border-top: 1px solid var(--border); padding-top: 6px; margin-top: 2px; }
   .settings-content { padding: 10px 12px; }
   .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
   .preset { padding: 6px; background: #f9fafb; border: 1.5px solid var(--border); border-radius: 8px; cursor: pointer; font-family: inherit; text-align: center; transition: all 0.15s; color: var(--text); }
@@ -1328,11 +1332,33 @@ function renderExplanation() {
   var avgDensity = getPDDensity((cutoff + pd) / 2, currentParams);
   var queueAhead = Math.round(gapDays * avgDensity);
   var yearsEst = (queueAhead / mainPerYear).toFixed(1);
-  el.textContent = '当前排到 ' + formatDate(cutoff) + '，你的号 ' + formatDate(pd) +
-    '，隔 ' + gapDays + ' 天，约 ' + queueAhead.toLocaleString() + ' 人在前面。' +
-    '每年处理 ' + mainPerYear.toLocaleString() + ' 人（' + totalSupply.toLocaleString() + ' 名额 ÷ ' +
-    currentParams.familyMultiplier.toFixed(1) + ' 人/家庭），预计约 ' + yearsEst + ' 年。' +
-    '模拟含10月突进（新财年首月集中处理）和月度节奏差异，500次模拟估算范围。';
+  var densityRound = Math.max(1, Math.round(avgDensity));
+  var spillTotal = totalSupply - currentParams.chinaBaseQuota;
+  var spillStr = (spillTotal >= 0 ? '＋ ' : '－ ') + Math.abs(spillTotal).toLocaleString();
+  var fm = currentParams.familyMultiplier.toFixed(1);
+
+  if (gapDays <= 0) {
+    el.innerHTML = '<p>当前排期已推进到 <b>' + formatDate(cutoff) + '</b>，已达到或超过你的优先日 <b>' +
+      formatDate(pd) + '</b>——也就是说你的排期理论上已经 current。一切仍以官方签证公告（Visa Bulletin）为准。</p>';
+    return;
+  }
+
+  el.innerHTML =
+    '<p><b>这个时间是怎么推算出来的？</b>工具不是去拟合一条趋势线，而是还原签证发放的真实供需过程，分四步：</p>' +
+    '<p><span class="step">① 你前面还排着多少人</span><br>' +
+      '当前排期排到 <b>' + formatDate(cutoff) + '</b>，你的优先日是 <b>' + formatDate(pd) + '</b>，两者相差 <b>' +
+      gapDays.toLocaleString() + ' 天</b>。按这段优先日时期每天约 ' + densityRound +
+      ' 个中国大陆申请人估算，你前面大约还有 <b>' + queueAhead.toLocaleString() + ' 名主申请人</b>。</p>' +
+    '<p><span class="step">② 每年能消化多少人</span><br>' +
+      'EB-1 中国大陆每年可用签证号 ≈ 法定基础配额 ' + currentParams.chinaBaseQuota.toLocaleString() + ' ' + spillStr +
+      ' 个其他国家/类别溢出 = <b>' + totalSupply.toLocaleString() + ' 个</b>。但一个签证号要覆盖全家（平均 ' + fm +
+      ' 人），换算成主申请人约 <b>' + mainPerYear.toLocaleString() + ' 人/年</b>。</p>' +
+    '<p><span class="step">③ 相除得到大致年数</span><br>' +
+      queueAhead.toLocaleString() + ' 人 ÷ ' + mainPerYear.toLocaleString() + ' 人/年 ≈ <b>' + yearsEst +
+      ' 年</b>，这是一个粗略的中心估计。</p>' +
+    '<p><span class="step">④ 加入真实节奏与不确定性</span><br>' +
+      '实际发放并不匀速：财年前几个月发得猛、后段收紧；每年 10 月新财年配额释放时，排期常出现"跳进"（约四分之一的年份是大跳）；再叠加随机波动。工具据此跑 <b>500 次蒙特卡洛模拟</b>，记录每条路径里排期追上你 PD 的时间，取这些时间的分布，得到 <b>快(P10) / 中(P50) / 慢(P90)</b> 三档预测与置信区间。</p>' +
+    '<p class="explain-note">以上为基于公开数据的统计估算，非官方、非法律意见。配额政策、行政命令或申请人行为变化都会改变真实结果。</p>';
 }
 
 function renderParams() {
