@@ -301,21 +301,10 @@
         <button class="mode-btn active" id="mode-trend">走势</button>
         <button class="mode-btn" id="mode-wait">等待时间</button>
       </div>
-      <div class="chart-actions">
-        <button class="act-btn" onclick="smartZoomForecast()">聚焦</button>
-        <button class="act-btn" onclick="resetChartZoom()">全图</button>
-      </div>
-      <div class="zoom-ctrls">
-        <button class="zoom-btn" id="zoom-in" title="放大">+</button>
-        <button class="zoom-btn" id="zoom-out" title="缩小">−</button>
-      </div>
     </div>
     <div class="chart-box">
       <svg id="chart" class="chart-svg" viewBox="0 0 700 340" preserveAspectRatio="xMidYMid meet"></svg>
       <div id="chart-tooltip" class="chart-tooltip"></div>
-      <div id="chart-zoom-hint" class="zoom-hint" style="display:none">
-        <span>已缩放</span><button onclick="resetChartZoom()">重置</button>
-      </div>
     </div>
     <div class="legend" id="chart-legend">
       <span class="leg"><i style="background:#F59E0B"></i>历史</span>
@@ -475,7 +464,7 @@ function getPDDensity(pdDate, params) {
 var MONTHLY_WEIGHTS = [0.338, 0.183, 0.139, 0.110, 0.057, 0.037, 0.047, 0.017, 0.022, 0.026, 0.020, 0.004];
 
 function simulate(params) {
-  var months = 60, path = [];
+  var months = 144, path = [];
   var cutoff = getCurrentCutoff(), yourPD = getYourPD();
   var startDate = new Date(TODAY);
   var familyMultiplier = params.familyMultiplier;
@@ -571,13 +560,13 @@ var lastSnapData = null;
 
 // Helpers
 function formatDate(ts) {
-  if (ts === null || ts === undefined) return '超过5年';
+  if (ts === null || ts === undefined) return '超过12年';
   if (!ts || ts < 100000000) return '--';
   var d = new Date(ts);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 function formatDateFull(ts) {
-  if (ts === null || ts === undefined) return '超过5年';
+  if (ts === null || ts === undefined) return '超过12年';
   if (!ts || ts < 100000000) return '--';
   var d = new Date(ts);
   return d.getFullYear() + '年' + (d.getMonth() + 1) + '月';
@@ -1497,14 +1486,11 @@ document.querySelectorAll('.stat').forEach(function(cell) {
 
 document.getElementById('mode-trend').addEventListener('click', function() { setChartMode('trend'); });
 document.getElementById('mode-wait').addEventListener('click', function() { setChartMode('wait'); });
-document.getElementById('zoom-in').addEventListener('click', function() { zoomBy(0.6); });
-document.getElementById('zoom-out').addEventListener('click', function() { zoomBy(1.5); });
 
 document.addEventListener('click', function(e) {
   if (openSourceParam && !e.target.closest('.source-popup') && !e.target.closest('.param-name')) closeSource();
 });
 
-setupDragZoom('chart');
 setupChartTooltip();
 
 (function() {
