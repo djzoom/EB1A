@@ -140,6 +140,7 @@
   .source-chip { background: var(--blue-bg); color: var(--blue); padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 500; display: inline-block; margin: 1px; }
 
   .footer { font-size: 10px; color: var(--text3); text-align: center; padding: 4px; }
+  .touch-hint { display: none; font-size: 10px; color: var(--text3); text-align: center; padding: 0 0 5px; }
 
   .modal-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.4); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; opacity: 1; transition: opacity 0.3s; }
   .modal-overlay.out { opacity: 0; pointer-events: none; }
@@ -174,9 +175,11 @@
     .btm-detail summary { padding: 14px 12px; }
     .preset { padding: 12px 6px; }
     .modal-box .start-btn { padding: 14px; }
-    /* declutter chart toolbar: pinch-to-zoom replaces +/- buttons */
+    /* declutter chart toolbar: presets (聚焦/全图) replace manual zoom buttons */
     .zoom-ctrls { display: none; }
-    .chart-svg { cursor: default; }
+    /* single-finger scrubbing reads values; disable native pan/zoom on the chart */
+    .chart-svg { cursor: default; touch-action: none; }
+    .touch-hint { display: block; }
   }
 </style>
 </head>
@@ -314,6 +317,7 @@
       <span class="leg"><i class="band" style="background:#15734F"></i>范围</span>
       <span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>
     </div>
+    <div class="touch-hint">按住图表横向滑动，查看每个时间点的数值</div>
   </div>
 
   <div class="bottom-row">
@@ -773,36 +777,8 @@ function setupDragZoom(svgId) {
     updateZoomHint();
   }, { passive: false });
 
-  var lastTouchDist = null, lastTouchCenter = null;
-  svg.addEventListener('touchstart', function(e) {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      var t = e.touches;
-      lastTouchDist = Math.hypot(t[1].clientX - t[0].clientX, t[1].clientY - t[0].clientY);
-      lastTouchCenter = getCoords({ clientX: (t[0].clientX + t[1].clientX) / 2, clientY: (t[0].clientY + t[1].clientY) / 2 });
-    }
-  }, { passive: false });
-  svg.addEventListener('touchmove', function(e) {
-    if (e.touches.length === 2 && lastTouchDist && lastTouchCenter) {
-      e.preventDefault();
-      var t = e.touches;
-      var dist = Math.hypot(t[1].clientX - t[0].clientX, t[1].clientY - t[0].clientY);
-      var scale = lastTouchDist / dist; lastTouchDist = dist;
-      var b = chartBounds; if (!b) return;
-      var c = lastTouchCenter;
-      var xRange = b.xMax - b.xMin, yRange = b.yMax - b.yMin;
-      var xR = Math.max(0, Math.min(1, (c.dataX - b.xMin) / xRange));
-      var yR = Math.max(0, Math.min(1, (c.dataY - b.yMin) / yRange));
-      chartZoom.xMin = c.dataX - xRange * scale * xR;
-      chartZoom.xMax = c.dataX + xRange * scale * (1 - xR);
-      chartZoom.yMin = c.dataY - yRange * scale * yR;
-      chartZoom.yMax = c.dataY + yRange * scale * (1 - yR);
-      clampZoom();
-      redrawChart();
-      updateZoomHint();
-    }
-  }, { passive: false });
-  svg.addEventListener('touchend', function() { lastTouchDist = null; lastTouchCenter = null; });
+  // Pinch-to-zoom removed: on phones the chart uses a single-finger scrubber
+  // (see setupChartTooltip) plus the 聚焦/全图 preset buttons instead.
 }
 
 // Chart Utilities
@@ -941,7 +917,7 @@ function setupChartTooltip() {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  svg.addEventListener('mousemove', function(e) {
+  function updateHover(e) {
     var c = toData(e);
     if (!c || !chartBounds) { hideTooltip(); return; }
     var b = chartBounds;
@@ -1001,7 +977,21 @@ function setupChartTooltip() {
     tooltip.style.display = 'block';
     tooltip.style.left = tx + 'px';
     tooltip.style.top = ty + 'px';
-  });
+  }
+  svg.addEventListener('mousemove', updateHover);
+
+  // Touch scrubber: drag a finger across the chart to read values at any date
+  // (replaces pinch/drag zoom on phones — natural like the iOS Stocks/Health apps)
+  function touchScrub(e) {
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    var t = e.touches[0];
+    updateHover({ clientX: t.clientX, clientY: t.clientY });
+  }
+  svg.addEventListener('touchstart', touchScrub, { passive: false });
+  svg.addEventListener('touchmove', touchScrub, { passive: false });
+  svg.addEventListener('touchend', hideTooltip);
+  svg.addEventListener('touchcancel', hideTooltip);
 
   function hideTooltip() {
     tooltip.style.display = 'none';
