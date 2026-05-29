@@ -589,6 +589,7 @@ function formatWait(ts) {
   if (diff < 1) return '不到1个月';
   if (diff < 12) return '约' + Math.round(diff) + '个月';
   var y = Math.floor(diff / 12), m = Math.round(diff - y * 12);
+  if (m >= 12) { y += 1; m = 0; }
   return '约' + y + '年' + (m > 0 ? m + '个月' : '');
 }
 
