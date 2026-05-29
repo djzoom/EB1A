@@ -446,6 +446,10 @@ function simulate(params) {
   var startDate = new Date(TODAY);
   var familyMultiplier = params.familyMultiplier;
   var currentFY = null, mainPerFY = 0;
+  // 路径级"情景系数"（整条路径不变）：捕捉结构性不确定性，避免逐年/逐月噪声在长路径上被平均掉，
+  // 否则每条路径趋同、快/中/慢挤在一起。供给整体偏好/偏差 + 排队密度整体偏高/偏低。
+  var regimeSupply = Math.max(0.4, gaussian(1.0, 0.30));
+  var regimeDensity = Math.max(0.6, gaussian(1.0, 0.15));
 
   for (var i = 0; i < months; i++) {
     var monthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 15);
@@ -458,12 +462,12 @@ function simulate(params) {
       var rowSpill = gaussian(params.spilloverROW, Math.max(60, Math.abs(params.spilloverROW) * 0.4));
       var indiaSpill = gaussian(params.spilloverIndia, Math.max(100, Math.abs(params.spilloverIndia) * 0.6));
       var eb45Spill = gaussian(params.eb4eb5Spillover, Math.max(30, params.eb4eb5Spillover * 0.4));
-      var totalVisas = Math.max(500, params.chinaBaseQuota + rowSpill + indiaSpill + eb45Spill);
+      var totalVisas = Math.max(500, (params.chinaBaseQuota + rowSpill + indiaSpill + eb45Spill) * regimeSupply);
       mainPerFY = totalVisas / familyMultiplier;
     }
 
     var monthlyMain = mainPerFY * MONTHLY_WEIGHTS[fyMonth];
-    var density = getPDDensity(cutoff, params);
+    var density = getPDDensity(cutoff, params) * regimeDensity;
     var advanceDays = monthlyMain / density;
 
     if (fyMonth === 0) {
