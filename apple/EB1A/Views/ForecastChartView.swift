@@ -1,9 +1,9 @@
 import SwiftUI
 import Charts
 
-/// Trend chart: X = calendar date, Y = cutoff date (the date the bulletin has
-/// reached). Shows Table A history, the p10–p90 confidence band, the p50
-/// median path, the user's PD, and today.
+/// Trend chart: X = calendar date, Y = cutoff date. Shows Table A history,
+/// the p10–p90 band, p10/p50/p90 lines, the user's PD and today. Colors match
+/// the web drawForecastChart.
 struct ForecastChartView: View {
     let result: PredictionResult
     let pd: Date
@@ -12,71 +12,73 @@ struct ForecastChartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("排期走势预测").font(.headline)
+            Text("排期走势预测")
+                .font(.headline).foregroundColor(Theme.text)
 
             Chart {
-                // p10–p90 confidence band.
+                // p10–p90 confidence band (dark-green tint).
                 ForEach(result.band) { row in
                     AreaMark(
                         x: .value("日期", row.x),
                         yStart: .value("慢", row.low),
                         yEnd: .value("快", row.high)
                     )
-                    .foregroundStyle(Color.green.opacity(0.12))
+                    .foregroundStyle(Theme.chartP50.opacity(0.10))
                     .interpolationMethod(.catmullRom)
                 }
 
-                // Historical Table A.
+                // Historical Table A (amber).
                 ForEach(result.historyA) { row in
                     LineMark(
                         x: .value("日期", row.x),
                         y: .value("裁定日", row.y),
                         series: .value("系列", "历史表A")
                     )
-                    .foregroundStyle(.orange)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .foregroundStyle(Theme.chartHistory)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                 }
 
-                // p50 median prediction.
+                // p50 median prediction (dark green).
                 ForEach(result.p50Line) { row in
                     LineMark(
                         x: .value("日期", row.x),
                         y: .value("裁定日", row.y),
                         series: .value("系列", "预测中位")
                     )
-                    .foregroundStyle(.teal)
-                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                    .foregroundStyle(Theme.chartP50)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                     .interpolationMethod(.catmullRom)
                 }
 
-                // Your priority date (horizontal) and today (vertical).
+                // Your PD (horizontal, amber) + today (vertical, gray).
                 RuleMark(y: .value("你的PD", pd))
-                    .foregroundStyle(.orange.opacity(0.7))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(Theme.chartHistory.opacity(0.8))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                     .annotation(position: .top, alignment: .leading) {
-                        Text("你的优先日").font(.caption2).foregroundStyle(.orange)
+                        Text("你的优先日")
+                            .font(.caption2).foregroundColor(Theme.chartHistory)
                     }
 
                 RuleMark(x: .value("今天", today))
-                    .foregroundStyle(.gray.opacity(0.5))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                    .foregroundStyle(Theme.chartToday)
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
             .chartYAxis {
                 AxisMarks { value in
-                    AxisGridLine()
+                    AxisGridLine().foregroundStyle(Color(hex: 0xF0F0F0))
                     AxisValueLabel {
                         if let d = value.as(Date.self) {
-                            Text(yearLabel(d))
+                            Text(yearLabel(d)).foregroundColor(Theme.text3)
                         }
                     }
                 }
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .year)) { value in
-                    AxisGridLine()
+                    AxisGridLine().foregroundStyle(Color(hex: 0xF0F0F0))
                     AxisValueLabel {
                         if let d = value.as(Date.self) {
-                            Text(yearLabel(d))
+                            Text(yearLabel(d)).foregroundColor(Theme.text3)
                         }
                     }
                 }
@@ -85,9 +87,10 @@ struct ForecastChartView: View {
 
             Legend()
         }
-        .padding()
+        .padding(16)
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Theme.card)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.border, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -100,12 +103,12 @@ struct ForecastChartView: View {
 private struct Legend: View {
     var body: some View {
         HStack(spacing: 14) {
-            LegendItem(color: .orange, text: "历史表A")
-            LegendItem(color: .teal, text: "预测中位")
-            LegendItem(color: .green.opacity(0.4), text: "P10–P90 区间")
+            LegendItem(color: Theme.chartHistory, text: "历史表A")
+            LegendItem(color: Theme.chartP50, text: "预测中位")
+            LegendItem(color: Theme.chartP50.opacity(0.35), text: "P10–P90 区间")
         }
         .font(.caption2)
-        .foregroundStyle(.secondary)
+        .foregroundColor(Theme.text3)
     }
 }
 
