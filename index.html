@@ -510,7 +510,8 @@ function simulate(params) {
 
     cutoff += advanceDays * MS_PER_DAY;
     path.push({ x: monthDate.getTime(), y: cutoff });
-    if (cutoff > yourPD + 365 * MS_PER_DAY) break;
+    // 不提前终止：若穿越后就 break，后段只剩慢路径存活 → 百分位带/等待时间图出现幸存者偏差(虚高)。
+    // 全程跑满，让每个月的百分位带都基于全部路径。
   }
   return path;
 }
