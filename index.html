@@ -370,13 +370,9 @@ profile.country = 'CN';
 function getYourPD() { return profile.pd; }
 function getCurrentCutoff() { return getCutoffData(profile.category, profile.country, profile.chartType); }
 
+// 工具锁定 EB-1A 中国大陆；探测器 update_index 依赖此处 EB-1A/CN 的结构
 var CUTOFF_DATA = {
-  'EB-1A': { 'CN': { A: '2023-04-01', B: '2023-12-01' }, 'IN': { A: '2022-02-15', B: '2023-04-15' }, 'MX': { A: 'current', B: 'current' }, 'PH': { A: 'current', B: 'current' }, 'ROW': { A: 'current', B: 'current' } },
-  'EB-1B': { 'CN': { A: '2023-04-01', B: '2023-12-01' }, 'IN': { A: '2022-02-15', B: '2023-04-15' }, 'MX': { A: 'current', B: 'current' }, 'PH': { A: 'current', B: 'current' }, 'ROW': { A: 'current', B: 'current' } },
-  'EB-1C': { 'CN': { A: '2023-04-01', B: '2023-12-01' }, 'IN': { A: '2022-02-15', B: '2023-04-15' }, 'MX': { A: 'current', B: 'current' }, 'PH': { A: 'current', B: 'current' }, 'ROW': { A: 'current', B: 'current' } },
-  'EB-2-NIW': { 'CN': { A: '2021-04-01', B: '2021-12-01' }, 'IN': { A: '2013-04-01', B: '2013-12-01' }, 'MX': { A: '2023-12-01', B: '2024-07-15' }, 'PH': { A: '2023-12-01', B: '2024-07-15' }, 'ROW': { A: '2023-12-01', B: '2024-07-15' } },
-  'EB-2': { 'CN': { A: '2021-04-01', B: '2021-12-01' }, 'IN': { A: '2013-04-01', B: '2013-12-01' }, 'MX': { A: '2023-12-01', B: '2024-07-15' }, 'PH': { A: '2023-12-01', B: '2024-07-15' }, 'ROW': { A: '2023-12-01', B: '2024-07-15' } },
-  'EB-3': { 'CN': { A: '2021-03-01', B: '2022-01-01' }, 'IN': { A: '2013-08-22', B: '2014-08-15' }, 'MX': { A: '2023-04-01', B: '2023-07-01' }, 'PH': { A: '2023-04-01', B: '2023-07-01' }, 'ROW': { A: '2023-04-01', B: '2023-07-01' } }
+  'EB-1A': { 'CN': { A: '2023-04-01', B: '2023-12-01' } }
 };
 
 function getCutoffData(category, country, chartType) {
@@ -385,8 +381,6 @@ function getCutoffData(category, country, chartType) {
   var v = cc[chartType]; if (v === 'current') return TODAY;
   return new Date(v).getTime();
 }
-
-var COUNTRY_LABEL = { 'CN': '中国大陆', 'IN': '印度', 'MX': '墨西哥', 'PH': '菲律宾', 'ROW': '其他' };
 
 var HISTORY = [
   ['2017-10-15','2017-10-01'],['2018-10-15','2016-06-01'],['2019-10-15','2016-11-01'],
@@ -916,8 +910,8 @@ function drawForecastChart(percentiles) {
 
   chartBounds = { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax, PAD: PAD, W: W, H: H, PW: PW, PH: PH };
 
-  function sx(x) { return PAD.left + (x - xMin) / (xMax - xMin) * PW; }
-  function sy(y) { return PAD.top + (1 - (y - yMin) / (yMax - yMin)) * PH; }
+  function sx(x) { return PAD.left + (x - xMin) / ((xMax - xMin) || 1) * PW; }
+  function sy(y) { return PAD.top + (1 - (y - yMin) / ((yMax - yMin) || 1)) * PH; }
 
   function bandPath(upper, lower) {
     if (!upper.length || !lower.length) return '';
@@ -1037,11 +1031,6 @@ function drawWaitTimeChart(percentiles) {
   var waitP75 = pathToWait(percentiles.p75);
   var waitP90 = pathToWait(percentiles.p90);
 
-  var allX = histWait.map(function(d) { return d.x; });
-  allX.push(yourPD);
-  [waitP10, waitP50, waitP90].forEach(function(a) { for (var i = 0; i < a.length; i++) allX.push(a[i].x); });
-  var allY = histWait.map(function(d) { return d.y; });
-  [waitP10, waitP50, waitP90].forEach(function(a) { for (var i = 0; i < a.length; i++) allY.push(a[i].y); });
 
   // PD 轴范围固定：从"当前 cutoff 的前一年"到"今天的后一年"
   // 例：cutoff 2023-04、今天 2026-06 → 2022-04 至 2027-06
@@ -1057,8 +1046,8 @@ function drawWaitTimeChart(percentiles) {
 
   chartBounds = { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax, PAD: PAD, W: W, H: H, PW: PW, PH: PH };
 
-  function sx(x) { return PAD.left + (x - xMin) / (xMax - xMin) * PW; }
-  function sy(y) { return PAD.top + (1 - (y - yMin) / (yMax - yMin)) * PH; }
+  function sx(x) { return PAD.left + (x - xMin) / ((xMax - xMin) || 1) * PW; }
+  function sy(y) { return PAD.top + (1 - (y - yMin) / ((yMax - yMin) || 1)) * PH; }
 
   function bandPath(upper, lower) {
     if (!upper.length || !lower.length) return '';
