@@ -40,6 +40,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .tint(Theme.primary)
     }
 
     private var presetHint: String {

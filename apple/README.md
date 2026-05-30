@@ -44,6 +44,7 @@ apple/
 ├── EB1A/
 │   ├── EB1AApp.swift                 # @main 入口
 │   ├── Core/                         # ★ 纯 Swift，无 UI，对照 index.html 移植
+│   │   ├── Theme.swift               # 配色板，1:1 对应网页 CSS :root（样式一致）
 │   │   ├── EBDate.swift              # UTC 日历 / 造日期工具
 │   │   ├── ModelParams.swift         # 7 个模型参数 + 三套预设(现实/乐观/悲观)
 │   │   ├── VisaData.swift            # HISTORY / HISTORY_B / 当前 cutoff / 月权重

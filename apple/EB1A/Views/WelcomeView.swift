@@ -10,14 +10,15 @@ struct WelcomeView: View {
             Spacer()
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 56))
-                .foregroundStyle(Color.green)
+                .foregroundColor(Theme.primary)
 
             VStack(spacing: 8) {
-                Text("EB-1A 中国大陆排期预测")
+                Text("EB-1A 中国申请人排期预测器")
                     .font(.title2).bold()
-                Text("输入你的优先日 (Priority Date)，估算大约何时轮到你。")
+                    .foregroundColor(Theme.text)
+                Text("基于蒙特卡洛模拟 · 输入你的优先日 (Priority Date)，估算大约何时轮到你。")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(Theme.text2)
                     .multilineTextAlignment(.center)
             }
 
@@ -35,11 +36,13 @@ struct WelcomeView: View {
                     .padding(.vertical, 4)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(Theme.primary)
 
             Spacer()
         }
         .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.bg.ignoresSafeArea())
     }
 }
 
@@ -73,5 +76,6 @@ struct EditPDView: View {
                 }
             }
         }
+        .tint(Theme.primary)
     }
 }
