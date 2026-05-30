@@ -64,7 +64,8 @@ private struct MainView: View {
 
                 if let result = vm.result {
                     HeroCardView(result: result, pd: pd)
-                    ForecastChartView(result: result, pd: pd)
+                    ChartCardView(result: result)
+                    ExplanationView(result: result, params: vm.preset.params)
                 } else {
                     ProgressView("正在运行 500 次蒙特卡洛模拟…")
                         .frame(maxWidth: .infinity, minHeight: 200)
