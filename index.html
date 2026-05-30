@@ -228,9 +228,9 @@
 <div class="app">
 
   <div class="topbar">
-    <h1>EB排期预测</h1>
+    <h1>EB1A</h1>
     <div class="topbar-info" id="profile-view">
-      <span id="pv-cat">EB-1A</span> · <span id="pv-country">中国大陆</span> · PD <span id="pv-pd">--</span>
+      PD <span id="pv-pd">--</span>
       <span class="dist" id="pv-distance"></span>
     </div>
     <button class="text-btn" id="profile-toggle">编辑</button>
@@ -282,6 +282,11 @@
     <span id="hero-fast" style="display:none"></span>
     <span id="hero-slow" style="display:none"></span>
   </div>
+
+  <details class="btm-detail about-card" id="bulletin-card">
+    <summary>📅 签证公告 · 下月预测</summary>
+    <div class="explain-content" id="bulletin-box"></div>
+  </details>
 
   <div class="chart-panel">
     <div class="chart-head">
@@ -398,7 +403,9 @@ var HISTORY_B = [
 
 // 当前签证公告状态（每月更新）：本月 AOS 职业移民递交用哪张表
 // 2026年6月：USCIS 要求用表A（Final Action），已连续第二个月
-var VB_MONTH = '2026年6月';
+var VB_MONTH = '2026年6月';      // 最新已发布公告对应的月份
+var VB_YEAR = 2026, VB_MON = 6;  // 同上，数值形式（用于推下月）
+var VB_RELEASED = '2026-05-13';  // 该期实际发布日期（探测器命中后会更新）
 var FILING_CHART = 'A'; // 'A' = 用表A(最终裁定) 递交；'B' = 用表B(递交日期)
 
 var PARAM_META = {
@@ -1367,8 +1374,6 @@ function renderProfileView() {
   var days = Math.round((profile.pd - cutoff) / MS_PER_DAY);
   var distStr = days > 0 ? '+' + days + '天' : days < 0 ? '已排到' : '刚好排到';
   document.getElementById('pv-pd').textContent = formatDate(profile.pd);
-  document.getElementById('pv-cat').textContent = profile.category;
-  document.getElementById('pv-country').textContent = COUNTRY_LABEL[profile.country] || profile.country;
   document.getElementById('pv-distance').textContent = distStr;
 }
 
@@ -1470,10 +1475,40 @@ function render() {
 
   renderProfileView();
   renderExplanation();
+  renderBulletinPanel();
   redrawChart();
   renderHero();
   renderStats();
   renderMonthlyTable(percentiles);
+}
+
+function renderBulletinPanel() {
+  var el = document.getElementById('bulletin-box');
+  if (!el) return;
+  var aNow = getCutoffData('EB-1A', 'CN', 'A');
+  var bNow = getCutoffData('EB-1A', 'CN', 'B');
+  // 近 6 个数据点的平均月推进（PD 毫秒/月）
+  function monthlyAdv(arr) {
+    var n = arr.length; if (n < 2) return 0;
+    var k = Math.min(6, n - 1), a = arr[n - 1 - k], b = arr[n - 1];
+    var months = (b.x - a.x) / (30.44 * MS_PER_DAY);
+    return months > 0 ? Math.max(0, (b.y - a.y) / months) : 0;
+  }
+  var nextA = aNow + monthlyAdv(HISTORY);
+  var nextB = bNow + monthlyAdv(HISTORY_B);
+  var nm = VB_MON + 1, ny = VB_YEAR; if (nm > 12) { nm = 1; ny += 1; }
+  var nextRel = new Date(new Date(VB_RELEASED).getTime() + 31 * MS_PER_DAY);
+  function ymd(ts) { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+
+  el.innerHTML =
+    '<p><span class="step">最新公告 · ' + VB_MONTH + '</span><br>' +
+      '发布日期：<b>' + VB_RELEASED + '</b><br>' +
+      '表A 最终裁定：<b>' + ymd(aNow) + '</b>　·　表B 递交：<b>' + ymd(bNow) + '</b><br>' +
+      '本月 AOS 递交用：<b style="color:var(--blue)">表' + FILING_CHART + '</b></p>' +
+    '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
+      '预计发布：约 <b>' + ymd(nextRel.getTime()) + '</b>（历史规律：上月中旬工作日）<br>' +
+      '预测表A：约 <b>' + ymd(nextA) + '</b>　·　预测表B：约 <b>' + ymd(nextB) + '</b></p>' +
+    '<p class="explain-note">下月数值为按近期推进速度的估算，月度移动有较大不确定性（常见停滞或跳进），一切以官方公告为准。</p>';
 }
 
 // Events
