@@ -1106,7 +1106,8 @@ function drawWaitTimeChart(percentiles) {
     grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" stroke="#f0f0f0" stroke-width="1" stroke-dasharray="3 3"/>';
     grid += '<text x="' + px + '" y="' + (PAD.top + PH + 16) + '" fill="#9ca3af" font-size="11" text-anchor="middle">' + xTicks[i].label + '</text>';
   }
-  var yNTicks = getNumberTicks(yMin, yMax, 6);
+  var yNTicks = [];
+  for (var yt = Math.ceil(yMin); yt <= yMax + 1e-9; yt += 1) yNTicks.push(yt); // 纵轴固定一年一格
   for (var i = 0; i < yNTicks.length; i++) {
     var py = sy(yNTicks[i]);
     grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" stroke="#f0f0f0" stroke-width="1" stroke-dasharray="3 3"/>';
