@@ -43,6 +43,9 @@
   .date-group .dg-month, .date-group .dg-day { width: 38px; }
   .date-group .dg-sep { color: var(--text3); font-size: 14px; user-select: none; }
   .pe-actions { display: flex; gap: 4px; }
+  .pe-err { color: var(--red); font-size: 11px; margin-top: 6px; }
+  .pe-err[hidden] { display: none; }
+  .date-group.invalid input { border-color: var(--red); }
   .pe-btn { padding: 6px 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .pe-btn-primary { background: var(--blue); color: #fff; }
   .pe-btn-secondary { background: #f3f4f6; color: var(--text2); border: 1px solid var(--border); }
@@ -253,6 +256,7 @@
         <button class="pe-btn pe-btn-primary" id="pe-save">保存</button>
       </div>
     </div>
+    <div class="pe-err" id="pe-err" hidden>请填写完整、有效的优先日期（年-月-日）</div>
   </div>
 
   <div class="result">
@@ -578,7 +582,7 @@ var lastSnapData = null;
 
 // Helpers
 function formatDate(ts) {
-  if (ts === null || ts === undefined) return '超过12年';
+  if (ts === null || ts === undefined) return '12年+';
   if (!ts || ts < 100000000) return '--';
   var d = new Date(ts);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -1541,7 +1545,10 @@ document.getElementById('profile-toggle').addEventListener('click', function() {
 });
 document.getElementById('pe-save').addEventListener('click', function() {
   var pd = readDateGroup('pe-pd');
-  if (!pd) return;
+  var errEl = document.getElementById('pe-err'), grp = document.getElementById('pe-pd-group');
+  if (!pd) { if (errEl) errEl.hidden = false; if (grp) grp.classList.add('invalid'); return; }
+  if (errEl) errEl.hidden = true;
+  if (grp) grp.classList.remove('invalid');
   profile.pd = pd;
   persistProfile();
   document.getElementById('profile-view').classList.remove('hidden');
