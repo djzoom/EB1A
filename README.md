@@ -64,7 +64,7 @@ EB1A/
 
 1. Settings → Pages → Build and deployment → Source: "Deploy from a branch"
 2. Branch: `main`，folder: `/ (root)` → Save
-3. 1–2 分钟后访问（注意仓库名小写）: https://djzoom.github.io/eb1a/
+3. 1–2 分钟后访问（路径区分大小写，须与仓库名一致）: https://djzoom.github.io/EB1A/
 
 ## 开发 (Claude Code)
 
