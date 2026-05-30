@@ -440,7 +440,7 @@ var PARAM_META = {
 };
 
 var PRESETS = {
-  realistic: { chinaBaseQuota:2803, spilloverROW:500, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:12, densityPeak:15 },
+  realistic: { chinaBaseQuota:2803, spilloverROW:500, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9 },
   optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12 },
   pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20 }
 };
@@ -1031,6 +1031,12 @@ function drawForecastChart(percentiles) {
   var xMax = Math.max.apply(null, allX);
   var yMin = Math.min.apply(null, allY);
   var yMax = Math.max.apply(null, allY);
+  // 收紧显示范围：横轴到"最慢穿越你 PD"再留点缓冲（不拖到 12 年后）；纵轴到你的 PD 稍上方
+  var capX = (crossingsByPct && crossingsByPct.p90) ? crossingsByPct.p90 + 1.2 * 365 * MS_PER_DAY
+            : (crossingsByPct && crossingsByPct.p50) ? crossingsByPct.p50 + 3 * 365 * MS_PER_DAY
+            : TODAY + 7 * 365 * MS_PER_DAY;
+  xMax = Math.min(xMax, capX);
+  yMax = Math.min(yMax, yourPD + 240 * MS_PER_DAY);
   var yPad = (yMax - yMin) * 0.05; yMin -= yPad; yMax += yPad;
 
   if (chartZoom.xMin !== null) { xMin = chartZoom.xMin; xMax = chartZoom.xMax; }
@@ -1165,8 +1171,13 @@ function drawWaitTimeChart(percentiles) {
   [waitP10, waitP50, waitP90].forEach(function(a) { for (var i = 0; i < a.length; i++) allY.push(a[i].y); });
 
   var xMin = Math.min.apply(null, allX), xMax = Math.max.apply(null, allX);
+  // 收紧 PD 轴到你的 PD 稍右；等待轴据可见范围重算，避免远端 PD 把图拉得过高
+  xMax = Math.min(xMax, yourPD + 240 * MS_PER_DAY);
+  var visY = [0];
+  histWait.forEach(function(d) { if (d.x <= xMax) visY.push(d.y); });
+  [waitP10, waitP50, waitP90].forEach(function(a) { for (var vi = 0; vi < a.length; vi++) if (a[vi].x <= xMax) visY.push(a[vi].y); });
   var xPd = (xMax - xMin) * 0.03; xMin -= xPd; xMax += xPd;
-  var yMin = 0, yMax = Math.max.apply(null, allY) * 1.15;
+  var yMin = 0, yMax = Math.max.apply(null, visY) * 1.15;
   if (yMax < 1) yMax = 1;
 
   if (chartZoom.xMin !== null) { xMin = chartZoom.xMin; xMax = chartZoom.xMax; }
