@@ -1054,7 +1054,9 @@ function drawForecastChart(percentiles) {
             : (crossingsByPct && crossingsByPct.p50) ? crossingsByPct.p50 + 3 * 365 * MS_PER_DAY
             : TODAY + 7 * 365 * MS_PER_DAY;
   xMax = Math.min(xMax, capX);
-  yMax = Math.min(yMax, yourPD + 240 * MS_PER_DAY);
+  // 纵轴上限取"你的 PD"与"当前 cutoff"的较大者 + 缓冲，避免 PD 已 current 时把整条预测线裁掉
+  var cutoffNow = getCurrentCutoff();
+  yMax = Math.min(yMax, Math.max(yourPD, cutoffNow) + 240 * MS_PER_DAY);
   var yPad = (yMax - yMin) * 0.05; yMin -= yPad; yMax += yPad;
 
   if (chartZoom.xMin !== null) { xMin = chartZoom.xMin; xMax = chartZoom.xMax; }
@@ -1458,7 +1460,9 @@ function renderParams() {
     document.getElementById(key).addEventListener('input', function(e) {
       currentParams[key] = +e.target.value;
       document.getElementById('v-' + key).textContent = PARAM_META[key].format(currentParams[key]);
-      render();
+      // 合并连续拖动为每帧一次重算，避免 500 次蒙特卡洛在每个 input 事件都跑一遍卡顿
+      if (window._renderRAF) cancelAnimationFrame(window._renderRAF);
+      window._renderRAF = requestAnimationFrame(render);
     });
   });
 }
