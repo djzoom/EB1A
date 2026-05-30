@@ -156,6 +156,41 @@ def parse_eb1_china(html):
     return fad, dff
 
 
+# ---- A1: 写入前的理智门禁（防止解析错误把垃圾日期写进 index.html）----
+def parse_iso(s):
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def read_current_ab():
+    """从 index.html 读当前 EB-1A CN 的表A/表B，用于对比新值是否合理。返回 (a_str, b_str) 或 (None, None)。"""
+    try:
+        with open(INDEX, encoding="utf-8") as f:
+            s = f.read()
+        m = re.search(r"'EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*'([0-9-]+)',\s*B:\s*'([0-9-]+)'", s)
+        return (m.group(1), m.group(2)) if m else (None, None)
+    except Exception:
+        return None, None
+
+
+def plausible_cutoff(new_s, old_s):
+    """新 cutoff 是否合理：合法日期、落在 2010~今天、且相对旧值前进≤18月/倒退≤12月。
+    解析错误通常会产出明显越界的日期，这里把它们挡掉。"""
+    nd = parse_iso(new_s)
+    if nd is None:
+        return False, "非法日期"
+    if not (date(2010, 1, 1) <= nd <= date.today()):
+        return False, f"超出合理区间(2010~今天): {nd}"
+    od = parse_iso(old_s) if old_s else None
+    if od is not None:
+        delta = (nd - od).days
+        if not (-370 <= delta <= 560):
+            return False, f"相对旧值({od})位移异常: {delta} 天"
+    return True, "ok"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -209,11 +244,19 @@ def main():
     print(f"[log] 已记录到 {LOG}")
 
     if fad and dff and fad != "current":
-        try:
-            update_index(ty, tm, fad, dff, t.strftime("%Y-%m-%d"))
-            print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED 等（FILING_CHART 仍需人工或扩展 USCIS 抓取）")
-        except Exception as e:
-            print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
+        # A1 理智门禁：解析出的新值必须通过合理性校验，否则只记录命中、不写文件
+        old_a, old_b = read_current_ab()
+        ok_a, why_a = plausible_cutoff(fad, old_a)
+        ok_b, why_b = plausible_cutoff(dff, old_b)
+        if not (ok_a and ok_b):
+            print(f"[guard] 解析结果未通过理智门禁，放弃写入（疑似解析错误）。表A: {why_a}；表B: {why_b}")
+            print("        已记录命中时间，请人工核对 parse_eb1_china 与官方公告后再更新。")
+        else:
+            try:
+                update_index(ty, tm, fad, dff, t.strftime("%Y-%m-%d"))
+                print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 置为待确认(?)")
+            except Exception as e:
+                print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
     else:
         print("[index] 解析不完整，仅记录命中时间；请检查 parse_eb1_china 是否需按真实 HTML 调整。")
 
@@ -234,6 +277,8 @@ def update_index(ty, tm, fad, dff, released):
     s = re.sub(r"(var VB_YEAR = )\d+(, VB_MON = )\d+(;)",
                lambda m: m.group(1) + str(ty) + m.group(2) + str(tm) + m.group(3), s, count=1)
     s = re.sub(r"(var VB_RELEASED = ')[^']*(')", lambda m: m.group(1) + released + m.group(2), s, count=1)
+    # A2) 本月递交开放哪张表是 USCIS 另发的公告，探测器无从得知 → 置为待确认 '?'
+    s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + "?" + m.group(2), s, count=1)
 
     # 2) 追加 HISTORY（表A）与 HISTORY_B（表B）最新点（若该 bulletin 月尚未存在）
     if bull not in s:
