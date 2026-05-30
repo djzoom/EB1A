@@ -212,7 +212,7 @@
 <div class="modal-overlay" id="welcome-modal">
   <div class="modal-box">
     <h2>EB 排期预测</h2>
-    <div class="modal-sub">EB-1A · 中国大陆。输入你的优先日期，看看绿卡大概什么时候排到你</div>
+    <div class="modal-sub">EB-1A · 中国大陆排期预测。输入你的优先日，估算绿卡大约何时轮到你。</div>
     <div class="field">
       <label>Priority Date (优先日) *</label>
       <div class="date-group" id="wf-pd-group">
@@ -330,17 +330,17 @@
   <details class="btm-detail about-card">
     <summary>关于本工具 · 数据如何更新</summary>
     <div class="explain-content">
-      <p>这是一个 <b>EB-1A 中国大陆</b>绿卡排期预测工具：输入你的优先日（Priority Date），估算排期大约什么时候排到你。所有计算都在你浏览器本地完成。</p>
-      <p><span class="step">怎么预测</span><br>不外推趋势线，而是还原签证发放的供需过程：① 用"当前排期↔你的 PD 的差距 × 排队密度"估算你前面还有多少人；② 用"每年可用签证数 ÷ 家庭系数"估算每年能消化多少主申请人；③ 相除得到大致年数；④ 跑 <b>500 次蒙特卡洛模拟</b>并加入结构性波动，给出 <b>快 / 中 / 慢</b> 三档与置信区间。展开"算法说明"看用你数字算的完整推理。</p>
-      <p><span class="step">表A 与 表B</span><br><b>表A（最终裁定日）</b>= 真正能拿绿卡的排期；<b>表B（递交日期）</b>= 能递交 I-485 的排期。页面同时显示两者，并标出 <b>本月 USCIS 开放哪张表</b>递交。</p>
-      <p><span class="step">第一时间拿到最新公告</span><br>内置<b>自动探测</b>：每月签证公告一发布（美东工作日、通常月中），后台定时任务会在 <b>30 分钟内</b>抓到，自动更新表A/表B并重新部署上线。它还会<b>自学习</b>公告的实际发布时刻，把探测窗口越收越窄——越用越准、越省。</p>
-      <p><span class="step">隐私与数据</span><br>你的 PD、类别等只保存在浏览器本地（localStorage），<b>不上传</b>。底层数据来自 USCIS / DOS 公开来源。</p>
-      <p><span class="step">作者</span><br>由 <a href="https://x.com/DJWZ" target="_blank" rel="noopener">0xGarfield · @DJWZ</a> 制作，欢迎在 X 反馈。</p>
-      <p class="explain-note">这不是法律建议，仅为基于公开数据的统计估算。实际结果受配额政策、行政命令、立法与个人情况影响，请咨询持牌移民律师。</p>
+      <p>这是一个面向 <b>EB-1A 中国大陆</b>申请人的绿卡排期预测工具。输入你的优先日（Priority Date），即可估算排期大约何时轮到你；所有计算均在本地浏览器完成。</p>
+      <p><span class="step">怎么预测</span><br>它不外推历史趋势线，而是还原签证发放背后的供需逻辑：① 以"当前排期与你优先日之间的间隔 × 排队密度"估算你前方尚有多少人；② 以"每年可用签证数 ÷ 家庭系数"估算每年可消化的主申请人数；③ 两者相除，得到大致年数；④ 在此基础上运行 <b>500 次蒙特卡洛模拟</b>并叠加结构性波动，给出 <b>快 / 中 / 慢</b> 三档预测与置信区间。展开"算法说明"，可见代入你数字后的完整推算。</p>
+      <p><span class="step">表 A 与 表 B</span><br><b>表 A（最终裁定日，Final Action Date）</b>决定何时真正获批绿卡；<b>表 B（递交日期，Dates for Filing）</b>决定何时可递交 I-485。本工具同时呈现两者，并标注当月 USCIS 受理递交所依据的表。</p>
+      <p><span class="step">第一时间获取最新公告</span><br>工具内置自动探测：每期签证公告发布后（通常在美东工作日的月中），后台任务会在约 <b>30 分钟内</b>捕获，自动更新表 A / 表 B 并重新部署上线。探测器还会<b>自学习</b>历次公告的实际发布时刻，逐月收窄探测窗口——越用越准，也越省。</p>
+      <p><span class="step">隐私与数据</span><br>你的优先日、类别等信息仅保存在本地浏览器（localStorage），<b>绝不上传</b>。底层数据均取自 USCIS 与 DOS 的公开来源。</p>
+      <p><span class="step">作者</span><br>由 <a href="https://x.com/DJWZ" target="_blank" rel="noopener">0xGarfield · @DJWZ</a> 制作，欢迎在 X 交流反馈。</p>
+      <p class="explain-note">本工具仅为基于公开数据的统计估算，<b>不构成法律建议</b>。实际结果受配额政策、行政命令、立法变动及个人情况影响，请以官方签证公告为准，并咨询持牌移民律师。</p>
     </div>
   </details>
 
-  <div class="footer">EB-1A 中国大陆排期预测 · 自动抓取最新签证公告 · 数据源 USCIS/DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a></div>
+  <div class="footer">EB-1A 中国大陆排期预测 · 自动同步最新签证公告 · 数据源 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a></div>
   <table style="display:none"><tbody id="monthly-tbody"></tbody></table>
 
 </div>
