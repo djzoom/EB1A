@@ -2,12 +2,6 @@ name: Sniff Visa Bulletin
 
 on:
   workflow_dispatch:        # 手动触发
-    inputs:
-      mode:
-        description: 'sniff（探测，默认）| analyze（统计近36月发布日期+回测）'
-        default: 'sniff'
-        type: choice
-        options: [sniff, analyze]
   schedule:
     # 探测间隔 = 每 30 分钟，仅在高概率 UTC 时段（覆盖美东 12:00–20:00，含夏/冬令时）。
     # 脚本再按美东时间精确门控（工作日 / 非假日 / 高概率日 / 高概率时段 / 命中即停）。
@@ -16,19 +10,16 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
+# 让 checkout/setup-python 用 Node 24 运行，消除 Node 20 弃用警告
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   sniff:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,14 +27,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run sniff or analyze
-        run: |
-          MODE="${{ github.event.inputs.mode || 'sniff' }}"
-          if [ "$MODE" = "analyze" ]; then
-            python scripts/analyze_release_times.py --months 36
-          else
-            python scripts/sniff_visa_bulletin.py
-          fi
+      - name: Sniff for new visa bulletin
+        run: python scripts/sniff_visa_bulletin.py
 
       - name: Commit if changed
         id: commit
@@ -60,22 +45,28 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # 仅在有更新时，同一次运行内直接部署（GITHUB_TOKEN 的 push 不会自动触发部署工作流）
-      - name: Prepare site
-        if: steps.commit.outputs.changed == 'true'
-        run: mkdir -p _site && cp index.html _site/index.html
-
-      - name: Setup Pages
-        if: steps.commit.outputs.changed == 'true'
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        if: steps.commit.outputs.changed == 'true'
-        uses: actions/upload-pages-artifact@v3
+  # 仅在 sniff 真正更新了数据时才部署（避免空跑也挂上 github-pages 环境标记）
+  deploy:
+    needs: sniff
+    if: needs.sniff.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main          # 取 sniff 刚 push 的最新提交
+      - run: mkdir -p _site && cp index.html _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        if: steps.commit.outputs.changed == 'true'
+      - id: deployment
         uses: actions/deploy-pages@v4
