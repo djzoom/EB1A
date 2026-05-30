@@ -613,7 +613,10 @@ function readDateGroup(prefix) {
   var yi = parseInt(y, 10), mi = parseInt(m, 10), di = parseInt(d, 10);
   if (isNaN(yi) || isNaN(mi) || isNaN(di)) return null;
   if (yi < 1990 || yi > 2099 || mi < 1 || mi > 12 || di < 1 || di > 31) return null;
-  return new Date(yi, mi - 1, di).getTime();
+  var dt = new Date(yi, mi - 1, di);
+  // 拒绝非法日期（如 2 月 31 日会被 Date 静默卷成 3 月）
+  if (dt.getFullYear() !== yi || dt.getMonth() !== mi - 1 || dt.getDate() !== di) return null;
+  return dt.getTime();
 }
 function writeDateGroup(prefix, ts) {
   if (!ts) return;
@@ -1513,11 +1516,12 @@ function renderBulletinPanel() {
     var months = (b.x - a.x) / (30.44 * MS_PER_DAY);
     return months > 0 ? Math.max(0, (b.y - a.y) / months) : 0;
   }
-  var nextA = aNow + monthlyAdv(HISTORY);
-  var nextB = bNow + monthlyAdv(HISTORY_B);
+  var advA = monthlyAdv(HISTORY), advB = monthlyAdv(HISTORY_B);
   var nm = VB_MON + 1, ny = VB_YEAR; if (nm > 12) { nm = 1; ny += 1; }
   var nextRel = new Date(new Date(VB_RELEASED).getTime() + 31 * MS_PER_DAY);
   function ymd(ts) { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  // 区间：低端=可能停滞(不前进)，高端=按 2 倍近期月推进的较快情形
+  function range(now, adv) { return ymd(now) + ' ~ ' + ymd(now + adv * 2); }
 
   el.innerHTML =
     '<p><span class="step">最新公告 · ' + VB_MONTH + '</span><br>' +
@@ -1526,7 +1530,7 @@ function renderBulletinPanel() {
       '本月 AOS 递交用：<b style="color:var(--blue)">表' + FILING_CHART + '</b></p>' +
     '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
       '预计发布：约 <b>' + ymd(nextRel.getTime()) + '</b>（历史规律：上月中旬工作日）<br>' +
-      '预测表A：约 <b>' + ymd(nextA) + '</b>　·　预测表B：约 <b>' + ymd(nextB) + '</b></p>' +
+      '预测表A：<b>' + range(aNow, advA) + '</b><br>预测表B：<b>' + range(bNow, advB) + '</b></p>' +
     '<p class="explain-note">下月数值为按近期推进速度的估算，月度移动有较大不确定性（常见停滞或跳进），一切以官方公告为准。</p>';
 }
 
