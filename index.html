@@ -49,6 +49,13 @@
   .hidden { display: none !important; }
 
   .result { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 4px; box-shadow: var(--shadow); }
+  .congrats { display: flex; gap: 10px; align-items: center; background: linear-gradient(135deg, var(--green-light), var(--blue-bg)); border: 1px solid var(--blue-light); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .congrats[hidden] { display: none; }
+  .congrats .confetti { font-size: 28px; line-height: 1; flex-shrink: 0; animation: congrats-pop 1.2s ease-in-out infinite; }
+  .congrats-title { font-size: 15px; font-weight: 800; color: var(--blue); margin-bottom: 2px; }
+  .congrats-sub { font-size: 11.5px; color: var(--text2); line-height: 1.5; }
+  .congrats-sub b { color: var(--text); }
+  @keyframes congrats-pop { 0%,100% { transform: scale(1) rotate(-6deg); } 50% { transform: scale(1.18) rotate(8deg); } }
   .result-main { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
   .result-date { font-size: 22px; font-weight: 800; color: var(--blue); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
   .result-sub { font-size: 12px; color: var(--text2); }
@@ -249,6 +256,13 @@
   </div>
 
   <div class="result">
+    <div class="congrats" id="congrats" hidden>
+      <span class="confetti">🎉</span>
+      <div>
+        <div class="congrats-title">恭喜！排期已到 🎊</div>
+        <div class="congrats-sub">你的优先日 <b id="congrats-pd">--</b> 已被表A（最终裁定）追上，EB-1A 中国大陆排期已 <b>current</b>——可进入最终裁定 / 准备拿绿卡了。一切以官方签证公告为准。</div>
+      </div>
+    </div>
     <div class="result-main">
       <span class="result-date" id="hero-value">--</span>
       <span class="result-sub" id="hero-sub">距今约 --</span>
@@ -1267,6 +1281,15 @@ function renderHero() {
   var cutoff = getCurrentCutoff(), pd = getYourPD();
   document.getElementById('progress-left').textContent = '叫号 ' + formatDate(cutoff);
   document.getElementById('progress-right').textContent = '你的 ' + formatDate(pd);
+
+  // 排期已到（表A 已追上你的 PD）：显示祝贺。输入或监测到该情况时都会触发（每次 render 都检查）。
+  var congratsEl = document.getElementById('congrats');
+  if (pd && cutoff && pd <= cutoff) {
+    document.getElementById('congrats-pd').textContent = formatDate(pd);
+    congratsEl.hidden = false;
+  } else {
+    congratsEl.hidden = true;
+  }
 
   var elapsed = TODAY - pd;
   var totalWait = p50 ? (p50 - pd) : (Math.max(0, elapsed) + 3 * 365 * MS_PER_DAY);
