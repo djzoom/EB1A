@@ -27,12 +27,15 @@ struct PredictionResult {
     static func date(_ ts: TimeInterval) -> Date { Date(timeIntervalSince1970: ts) }
 
     static func compute(pd: Date, params: ModelParams) -> PredictionResult {
+        // Seed the RNG from the PD so the same input always yields the same
+        // result (no jitter on re-run). Different PD -> different seed.
+        let seed = UInt64(bitPattern: Int64(pd.timeIntervalSince1970.rounded()))
         var engine = SimulationEngine(
             params: params,
             cutoffStart: VisaData.currentCutoffA,
             yourPD: pd,
             today: Date(),
-            generator: SystemRandomNumberGenerator())
+            generator: SplitMix64(seed: seed))
 
         let paths = engine.monteCarlo(500)
         let bands = engine.percentilePaths(paths)
