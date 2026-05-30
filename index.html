@@ -1197,13 +1197,15 @@ function drawWaitTimeChart(percentiles) {
   var allY = histWait.map(function(d) { return d.y; });
   [waitP10, waitP50, waitP90].forEach(function(a) { for (var i = 0; i < a.length; i++) allY.push(a[i].y); });
 
-  var xMin = Math.min.apply(null, allX), xMax = Math.max.apply(null, allX);
-  // PD 轴至少延伸到"当下"(即使你的 PD 更早)，与走势图覆盖的 PD 范围保持一致；等待轴据可见范围重算
-  xMax = Math.min(xMax, Math.max(yourPD, TODAY) + 365 * MS_PER_DAY);
+  // PD 轴范围固定：从"当前 cutoff 的前一年"到"今天的后一年"
+  // 例：cutoff 2023-04、今天 2026-06 → 2022-04 至 2027-06
+  var cutoffNow = getCurrentCutoff();
+  var xMin = cutoffNow - 365 * MS_PER_DAY;
+  var xMax = TODAY + 365 * MS_PER_DAY;
+  // 等待轴据可见区间内的等待值重算
   var visY = [0];
-  histWait.forEach(function(d) { if (d.x <= xMax) visY.push(d.y); });
-  [waitP10, waitP50, waitP90].forEach(function(a) { for (var vi = 0; vi < a.length; vi++) if (a[vi].x <= xMax) visY.push(a[vi].y); });
-  var xPd = (xMax - xMin) * 0.03; xMin -= xPd; xMax += xPd;
+  histWait.forEach(function(d) { if (d.x >= xMin && d.x <= xMax) visY.push(d.y); });
+  [waitP10, waitP50, waitP90].forEach(function(a) { for (var vi = 0; vi < a.length; vi++) if (a[vi].x >= xMin && a[vi].x <= xMax) visY.push(a[vi].y); });
   var yMin = 0, yMax = Math.max.apply(null, visY) * 1.15;
   if (yMax < 1) yMax = 1;
 
