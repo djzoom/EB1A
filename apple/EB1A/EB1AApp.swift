@@ -2,12 +2,12 @@ import SwiftUI
 
 @main
 struct EB1AApp: App {
-    @StateObject private var watcher = BulletinWatcher()
+    @StateObject private var store = ScheduleStore()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(watcher)
+                .environmentObject(store)
         }
     }
 }
