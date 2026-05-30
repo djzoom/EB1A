@@ -210,16 +210,17 @@ def main():
 
     if fad and dff and fad != "current":
         try:
-            update_index(ty, tm, fad, dff)
-            print("[index] 已更新 CUTOFF_DATA / HISTORY（FILING_CHART 仍需人工或扩展 USCIS 抓取）")
+            update_index(ty, tm, fad, dff, t.strftime("%Y-%m-%d"))
+            print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED 等（FILING_CHART 仍需人工或扩展 USCIS 抓取）")
         except Exception as e:
             print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
     else:
         print("[index] 解析不完整，仅记录命中时间；请检查 parse_eb1_china 是否需按真实 HTML 调整。")
 
 
-def update_index(ty, tm, fad, dff):
-    """把新一期表A/表B 写回 index.html：更新 CUTOFF_DATA 与追加 HISTORY/HISTORY_B。"""
+def update_index(ty, tm, fad, dff, released):
+    """把新一期表A/表B 写回 index.html：更新 CUTOFF_DATA、VB_* 公告元信息，并追加 HISTORY/HISTORY_B。
+    released: 本期实际探到/发布的日期，形如 '2026-05-13'。"""
     with open(INDEX, encoding="utf-8") as f:
         s = f.read()
     bull = f"{ty}-{tm:02d}-15"  # 该期对应的 bulletin 月（用 15 号作 x）
@@ -227,6 +228,12 @@ def update_index(ty, tm, fad, dff):
     # 1) 更新 EB-1A CN 的 A/B
     s = re.sub(r"('EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*')[0-9-]+(',\s*B:\s*')[0-9-]+(')",
                lambda m: m.group(1) + fad + m.group(2) + dff + m.group(3), s, count=1)
+
+    # 1b) 更新公告元信息 VB_MONTH / VB_YEAR / VB_MON / VB_RELEASED
+    s = re.sub(r"(var VB_MONTH = ')[^']*(')", lambda m: m.group(1) + f"{ty}年{tm}月" + m.group(2), s, count=1)
+    s = re.sub(r"(var VB_YEAR = )\d+(, VB_MON = )\d+(;)",
+               lambda m: m.group(1) + str(ty) + m.group(2) + str(tm) + m.group(3), s, count=1)
+    s = re.sub(r"(var VB_RELEASED = ')[^']*(')", lambda m: m.group(1) + released + m.group(2), s, count=1)
 
     # 2) 追加 HISTORY（表A）与 HISTORY_B（表B）最新点（若该 bulletin 月尚未存在）
     if bull not in s:
