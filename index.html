@@ -428,14 +428,14 @@ var PARAM_META = {
     source: { title: '一个主申请人平均用多少个签证名额', rows: [{ lbl: '单人', val: '1.0' },{ lbl: '夫妻', val: '2.0' },{ lbl: '夫妻+1孩子', val: '3.0' },{ lbl: '中国 EB-1 均值', val: '~1.9' }], methodology: '每个名额覆盖全家，中国 EB-1 多为已婚少子女，均值约 1.9', sources: ['USCIS Backlog Reports'] }
   },
   densityHigh: {
-    label: '排队密度 (2023-2024)', default: 12, min: 5, max: 40, step: 1,
+    label: '排队密度 (2023-2024)', default: 8, min: 4, max: 40, step: 1,
     unit: '人/天', format: function(v) { return v; },
-    source: { title: '这个时间段每天有多少人排队', rows: [{ lbl: 'I-140 收件', val: '~20 人/天' },{ lbl: '拒绝+放弃', val: '~40%' },{ lbl: '有效密度', val: '~12 人/天' }], methodology: 'I-140 递交量高但拒绝率~30%、放弃率~12%，有效排队约 12 人/天', sources: ['USCIS I-140 Reports'] }
+    source: { title: '这个时间段每天有多少人排队', rows: [{ lbl: 'I-485 pending 主申', val: '~9,208' },{ lbl: '覆盖 PD 跨度', val: '~3.5 年' },{ lbl: '有效密度', val: '~8 人/天' }], methodology: '按 I-485 pending(~9,208 主申)÷ 覆盖 PD 跨度(~3.5 年)≈ 8 人/天，与近年 cutoff 实际推进及律所共识一致', sources: ['USCIS I-485 Inventory'] }
   },
   densityPeak: {
-    label: '排队密度 (2024+)', default: 15, min: 5, max: 40, step: 1,
+    label: '排队密度 (2024+)', default: 9, min: 4, max: 40, step: 1,
     unit: '人/天', format: function(v) { return v; },
-    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: 'I-140 收件飙升', val: '~37 人/天' },{ lbl: '拒绝率上升', val: '~35%' },{ lbl: '有效密度', val: '~15 人/天' }], methodology: 'FY25 I-140 收件飙升但拒绝率也上升，有效排队约 15 人/天', sources: ['USCIS I-140 FY25 Q1-Q3'] }
+    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: 'I-140 收件略升', val: '更高' },{ lbl: '拒绝+放弃', val: '~40%' },{ lbl: '有效密度', val: '~9 人/天' }], methodology: '最近 PD 段有效排队约 9 人/天；校准后整体预测与律所共识(EB-1 中国 PD 等待~3 年)一致', sources: ['USCIS I-140 Reports'] }
   }
 };
 
