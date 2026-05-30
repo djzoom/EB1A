@@ -574,7 +574,6 @@ var currentParams = Object.assign({}, PRESETS.realistic);
 var selectedPercentile = 'p50';
 var crossingsByPct = null;
 var lastPercentiles = null;
-var chartZoom = { xMin: null, xMax: null, yMin: null, yMax: null };
 var chartBounds = null;
 var openSourceParam = null;
 var chartMode = 'trend';
@@ -653,153 +652,10 @@ function setupDateGroup(prefix, onChange) {
   });
 }
 
-// Zoom System
-function clampZoom() {
-  if (chartMode === 'wait') {
-    var XMIN = new Date('2015-01-01').getTime(), XMAX = new Date('2030-01-01').getTime();
-    var YMIN = 0, YMAX = 8, MINX = 180 * MS_PER_DAY, MINY = 0.3;
-    if (chartZoom.xMin !== null) {
-      if (chartZoom.xMax - chartZoom.xMin < MINX) { var mid = (chartZoom.xMin + chartZoom.xMax) / 2; chartZoom.xMin = mid - MINX / 2; chartZoom.xMax = mid + MINX / 2; }
-      chartZoom.xMin = Math.max(XMIN, chartZoom.xMin); chartZoom.xMax = Math.min(XMAX, chartZoom.xMax);
-    }
-    if (chartZoom.yMin !== null) {
-      if (chartZoom.yMax - chartZoom.yMin < MINY) { var mid = (chartZoom.yMin + chartZoom.yMax) / 2; chartZoom.yMin = mid - MINY / 2; chartZoom.yMax = mid + MINY / 2; }
-      chartZoom.yMin = Math.max(YMIN, chartZoom.yMin); chartZoom.yMax = Math.min(YMAX, chartZoom.yMax);
-    }
-  } else {
-    var XMIN = new Date('2016-01-01').getTime(), XMAX = TODAY + 12 * 365.25 * MS_PER_DAY;
-    var YMIN = new Date('2015-01-01').getTime(), YMAX = new Date('2032-01-01').getTime();
-    var MR = 60 * MS_PER_DAY;
-    if (chartZoom.xMin !== null) {
-      if (chartZoom.xMax - chartZoom.xMin < MR) { var mid = (chartZoom.xMin + chartZoom.xMax) / 2; chartZoom.xMin = mid - MR / 2; chartZoom.xMax = mid + MR / 2; }
-      chartZoom.xMin = Math.max(XMIN, chartZoom.xMin); chartZoom.xMax = Math.min(XMAX, chartZoom.xMax);
-    }
-    if (chartZoom.yMin !== null) {
-      if (chartZoom.yMax - chartZoom.yMin < MR) { var mid = (chartZoom.yMin + chartZoom.yMax) / 2; chartZoom.yMin = mid - MR / 2; chartZoom.yMax = mid + MR / 2; }
-      chartZoom.yMin = Math.max(YMIN, chartZoom.yMin); chartZoom.yMax = Math.min(YMAX, chartZoom.yMax);
-    }
-  }
-}
-
 function redrawChart() {
   if (!lastPercentiles) return;
   if (chartMode === 'wait') drawWaitTimeChart(lastPercentiles);
   else drawForecastChart(lastPercentiles);
-}
-
-function resetChartZoom() {
-  chartZoom = { xMin: null, xMax: null, yMin: null, yMax: null };
-  redrawChart();
-  updateZoomHint();
-}
-
-function smartZoomForecast() {
-  if (chartMode === 'wait') {
-    var pd = getYourPD(); if (!crossingsByPct || !pd) return;
-    var cutoff = getCurrentCutoff();
-    var p10w = crossingsByPct.p10 ? (crossingsByPct.p10 - pd) / (365.25 * MS_PER_DAY) : 1;
-    var p90w = crossingsByPct.p90 ? (crossingsByPct.p90 - pd) / (365.25 * MS_PER_DAY) : 5;
-    var xm = (pd - cutoff) * 0.3;
-    chartZoom.xMin = cutoff - xm; chartZoom.xMax = pd + xm * 2;
-    var ym = (p90w - p10w) * 0.4;
-    chartZoom.yMin = Math.max(0, p10w - ym); chartZoom.yMax = p90w + ym;
-  } else {
-    if (!crossingsByPct) return;
-    var cutoff = getCurrentCutoff(), pd = getYourPD();
-    var p10x = crossingsByPct.p10 || TODAY, p90x = crossingsByPct.p90 || (TODAY + 5 * 365 * MS_PER_DAY);
-    var xm = (p90x - p10x) * 0.3;
-    chartZoom.xMin = p10x - xm; chartZoom.xMax = p90x + xm;
-    var ym = (pd - cutoff) * 0.15;
-    chartZoom.yMin = pd - ym * 2; chartZoom.yMax = pd + ym * 3;
-  }
-  clampZoom();
-  redrawChart();
-  updateZoomHint();
-}
-
-function updateZoomHint() {
-  var el = document.getElementById('chart-zoom-hint');
-  if (!el) return;
-  el.style.display = (chartZoom.xMin !== null) ? 'flex' : 'none';
-}
-
-// Drag Zoom
-function setupDragZoom(svgId) {
-  var svg = document.getElementById(svgId);
-  var dragStart = null, selRect = null;
-  function svgPoint(e) {
-    var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-    var ctm = svg.getScreenCTM(); if (!ctm) return null;
-    return pt.matrixTransform(ctm.inverse());
-  }
-  function toData(svgPt) {
-    if (!chartBounds || !svgPt) return null;
-    var b = chartBounds;
-    return { dataX: b.xMin + (svgPt.x - b.PAD.left) / b.PW * (b.xMax - b.xMin), dataY: b.yMin + (1 - (svgPt.y - b.PAD.top) / b.PH) * (b.yMax - b.yMin), svgX: svgPt.x, svgY: svgPt.y };
-  }
-  function getCoords(e) { return toData(svgPoint(e)); }
-
-  svg.addEventListener('mousedown', function(e) {
-    if (e.button !== 0) return;
-    var c = getCoords(e); if (!c) return;
-    dragStart = c;
-    selRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    selRect.setAttribute('class', 'zoom-rect');
-    svg.appendChild(selRect);
-    e.preventDefault();
-  });
-  svg.addEventListener('mousemove', function(e) {
-    if (!dragStart || !selRect) return;
-    var c = getCoords(e); if (!c) return;
-    selRect.setAttribute('x', Math.min(dragStart.svgX, c.svgX));
-    selRect.setAttribute('y', Math.min(dragStart.svgY, c.svgY));
-    selRect.setAttribute('width', Math.abs(c.svgX - dragStart.svgX));
-    selRect.setAttribute('height', Math.abs(c.svgY - dragStart.svgY));
-    e.preventDefault();
-  });
-  function endDrag(e) {
-    if (!dragStart) return;
-    var c = getCoords(e);
-    if (selRect) { try { svg.removeChild(selRect); } catch(ex) {} selRect = null; }
-    if (!c) { dragStart = null; return; }
-    var b = chartBounds;
-    if (b && (Math.abs(c.dataX - dragStart.dataX) > (b.xMax - b.xMin) * 0.015 ||
-              Math.abs(c.dataY - dragStart.dataY) > (b.yMax - b.yMin) * 0.015)) {
-      chartZoom.xMin = Math.min(dragStart.dataX, c.dataX);
-      chartZoom.xMax = Math.max(dragStart.dataX, c.dataX);
-      chartZoom.yMin = Math.min(dragStart.dataY, c.dataY);
-      chartZoom.yMax = Math.max(dragStart.dataY, c.dataY);
-      clampZoom();
-      redrawChart();
-      updateZoomHint();
-    }
-    dragStart = null;
-  }
-  svg.addEventListener('mouseup', endDrag);
-  svg.addEventListener('mouseleave', function() {
-    if (selRect) { try { svg.removeChild(selRect); } catch(ex) {} selRect = null; }
-    dragStart = null;
-  });
-  svg.addEventListener('dblclick', function() { resetChartZoom(); });
-  svg.addEventListener('wheel', function(e) {
-    e.preventDefault();
-    if (!chartBounds) return;
-    var c = getCoords(e); if (!c) return;
-    var b = chartBounds, factor = e.deltaY > 0 ? 1.3 : 1/1.3;
-    var xRange = b.xMax - b.xMin, yRange = b.yMax - b.yMin;
-    var xR = Math.max(0, Math.min(1, (c.dataX - b.xMin) / xRange));
-    var yR = Math.max(0, Math.min(1, (c.dataY - b.yMin) / yRange));
-    chartZoom.xMin = c.dataX - xRange * factor * xR;
-    chartZoom.xMax = c.dataX + xRange * factor * (1 - xR);
-    chartZoom.yMin = c.dataY - yRange * factor * yR;
-    chartZoom.yMax = c.dataY + yRange * factor * (1 - yR);
-    clampZoom();
-    redrawChart();
-    updateZoomHint();
-  }, { passive: false });
-
-  // Pinch-to-zoom removed: on phones the chart uses a single-finger scrubber
-  // (see setupChartTooltip) plus the 聚焦/全图 preset buttons instead.
 }
 
 // Chart Utilities
@@ -905,15 +761,6 @@ function findNearestIdx(arr, targetX) {
   return best;
 }
 
-function zoomBy(factor) {
-  if (!chartBounds) return;
-  var b = chartBounds;
-  var cx = (b.xMin + b.xMax) / 2, cy = (b.yMin + b.yMax) / 2;
-  var hw = (b.xMax - b.xMin) / 2 * factor, hh = (b.yMax - b.yMin) / 2 * factor;
-  chartZoom.xMin = cx - hw; chartZoom.xMax = cx + hw;
-  chartZoom.yMin = cy - hh; chartZoom.yMax = cy + hh;
-  clampZoom(); redrawChart(); updateZoomHint();
-}
 
 // Chart Tooltip
 function setupChartTooltip() {
@@ -1066,8 +913,6 @@ function drawForecastChart(percentiles) {
   yMax = Math.min(yMax, Math.max(yourPD, cutoffNow) + 240 * MS_PER_DAY);
   var yPad = (yMax - yMin) * 0.05; yMin -= yPad; yMax += yPad;
 
-  if (chartZoom.xMin !== null) { xMin = chartZoom.xMin; xMax = chartZoom.xMax; }
-  if (chartZoom.yMin !== null) { yMin = chartZoom.yMin; yMax = chartZoom.yMax; }
   chartBounds = { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax, PAD: PAD, W: W, H: H, PW: PW, PH: PH };
 
   function sx(x) { return PAD.left + (x - xMin) / (xMax - xMin) * PW; }
@@ -1209,8 +1054,6 @@ function drawWaitTimeChart(percentiles) {
   var yMin = 0, yMax = Math.max.apply(null, visY) * 1.15;
   if (yMax < 1) yMax = 1;
 
-  if (chartZoom.xMin !== null) { xMin = chartZoom.xMin; xMax = chartZoom.xMax; }
-  if (chartZoom.yMin !== null) { yMin = chartZoom.yMin; yMax = chartZoom.yMax; }
   chartBounds = { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax, PAD: PAD, W: W, H: H, PW: PW, PH: PH };
 
   function sx(x) { return PAD.left + (x - xMin) / (xMax - xMin) * PW; }
@@ -1297,7 +1140,6 @@ function drawWaitTimeChart(percentiles) {
 // Chart Mode
 window.setChartMode = function(mode) {
   chartMode = mode;
-  chartZoom = { xMin: null, xMax: null, yMin: null, yMax: null };
   document.getElementById('mode-trend').classList.toggle('active', mode === 'trend');
   document.getElementById('mode-wait').classList.toggle('active', mode === 'wait');
   var legend = document.getElementById('chart-legend');
@@ -1307,7 +1149,6 @@ window.setChartMode = function(mode) {
     legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>表A裁定</span><span class="leg"><i class="dash" style="border-color:#64748B"></i>表B递交</span><span class="leg"><i style="background:#15734F"></i>预测</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>';
   }
   redrawChart();
-  updateZoomHint();
 };
 
 // UI Rendering
@@ -1489,8 +1330,6 @@ window.closeSource = function() {
 
 // Main Render
 function render() {
-  chartZoom = { xMin: null, xMax: null, yMin: null, yMax: null };
-  updateZoomHint();
 
   var paths = monteCarlo(currentParams, 500);
   var percentiles = percentilePaths(paths);
