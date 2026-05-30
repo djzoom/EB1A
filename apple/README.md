@@ -78,7 +78,7 @@ apple/
 | `percentilePaths(allPaths)` | `percentilePaths(_:)` |
 | `findCrossingsDistribution(allPaths)` | `findCrossingsDistribution(_:)` |
 
-为可复现，引擎对 RNG 泛型化：App 用 `SystemRandomNumberGenerator`，单测用可种子化的 `SplitMix64`。
+为可复现，引擎对 RNG 泛型化并统一用可种子化的 `SplitMix64`：App 以**用户 PD 派生种子**（同一 PD 每次结果一致、无抖动），单测用固定种子。
 
 ---
 
