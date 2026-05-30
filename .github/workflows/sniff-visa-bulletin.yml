@@ -63,7 +63,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main          # 取 sniff 刚 push 的最新提交
-      - run: mkdir -p _site && cp index.html _site/index.html
+      - run: mkdir -p _site && cp index.html manifest.json sw.js icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
