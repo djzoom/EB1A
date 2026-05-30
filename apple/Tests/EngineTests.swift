@@ -6,7 +6,7 @@ final class EngineTests: XCTestCase {
     private func engine(seed: UInt64 = 42, params: ModelParams = .realistic) -> SimulationEngine<SplitMix64> {
         SimulationEngine(
             params: params,
-            cutoffStart: VisaData.currentCutoffA,
+            cutoffStart: VisaData.defaultCutoffA,
             yourPD: EBDate.make(2024, 6, 20),
             today: EBDate.make(2026, 5, 30),
             generator: SplitMix64(seed: seed))
@@ -75,5 +75,22 @@ final class EngineTests: XCTestCase {
         for i in 0..<pa.count {
             XCTAssertEqual(pa[i].y, pb[i].y, accuracy: 1e-6)
         }
+    }
+
+    // M3: live schedule built from release_log entries.
+    func testScheduleFromEntries() {
+        let entries = [
+            ReleaseLogEntry(bulletin: "2026-06", fad: "2023-04-01", dff: "2023-12-01"),
+            ReleaseLogEntry(bulletin: "2026-07", fad: "2023-05-01", dff: "2024-01-01"),
+        ]
+        let sched = VisaSchedule.from(entries: entries)
+        XCTAssertNotNil(sched)
+        XCTAssertEqual(sched?.bulletinMonth, "2026-07")
+        XCTAssertEqual(sched?.currentCutoffA, EBDate.make(2023, 5, 1))
+        XCTAssertEqual(sched?.currentCutoffB, EBDate.make(2024, 1, 1))
+        // Merges bundled back-history with the live points.
+        XCTAssertGreaterThan(sched?.historyA.count ?? 0, 2)
+        // Newest live point becomes the last (sorted) Table A history point.
+        XCTAssertEqual(sched?.historyA.last?.y, EBDate.make(2023, 5, 1).timeIntervalSince1970)
     }
 }
