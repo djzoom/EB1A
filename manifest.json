@@ -1,0 +1,17 @@
+{
+  "name": "EB1A 排期预测",
+  "short_name": "EB1A",
+  "description": "EB-1A 中国大陆绿卡排期预测：输入优先日，估算何时轮到你，并第一时间同步最新签证公告。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f8f7",
+  "theme_color": "#15734f",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
