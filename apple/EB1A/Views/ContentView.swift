@@ -4,7 +4,7 @@ struct ContentView: View {
     @AppStorage("eb1a_pd") private var pdInterval: Double = 0
     @AppStorage("eb1a_notify") private var notify = true
     @Environment(\.scenePhase) private var phase
-    @EnvironmentObject private var watcher: BulletinWatcher
+    @EnvironmentObject private var store: ScheduleStore
     @StateObject private var vm = PredictionViewModel()
 
     @State private var showEdit = false
@@ -29,16 +29,20 @@ struct ContentView: View {
             SettingsView(vm: vm)
         }
         .task {
-            await watcher.requestAuthorization()
-            if let pd { vm.run(pd: pd) }
-            await watcher.check(notify: notify)
+            await store.requestAuthorization()
+            if let pd { vm.run(pd: pd, schedule: store.schedule) }
+            await store.check(notify: notify)
         }
         .onChange(of: pdInterval) { _ in
-            if let pd { vm.run(pd: pd) }
+            if let pd { vm.run(pd: pd, schedule: store.schedule) }
+        }
+        .onChange(of: store.schedule.bulletinMonth) { _ in
+            // Live data updated (new bulletin / cutoff) -> re-run on fresh data.
+            if let pd { vm.run(pd: pd, schedule: store.schedule) }
         }
         .onChange(of: phase) { newPhase in
             if newPhase == .active {
-                Task { await watcher.check(notify: notify) }
+                Task { await store.check(notify: notify) }
             }
         }
     }
@@ -51,16 +55,15 @@ private struct MainView: View {
     @ObservedObject var vm: PredictionViewModel
     @Binding var showEdit: Bool
     @Binding var showSettings: Bool
-    @EnvironmentObject private var watcher: BulletinWatcher
+    @EnvironmentObject private var store: ScheduleStore
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                TopBar(pd: pd, showEdit: $showEdit, showSettings: $showSettings)
+                TopBar(pd: pd, cutoff: store.schedule.currentCutoffA,
+                       showEdit: $showEdit, showSettings: $showSettings)
 
-                if let latest = watcher.latest {
-                    BulletinBanner(entry: latest)
-                }
+                BulletinBanner(schedule: store.schedule)
 
                 if let result = vm.result {
                     HeroCardView(result: result, pd: pd)
@@ -87,12 +90,13 @@ private struct MainView: View {
 /// Web-style topbar: stacked title + subtitle, then PD info + pill buttons.
 private struct TopBar: View {
     let pd: Date
+    let cutoff: Date
     @Binding var showEdit: Bool
     @Binding var showSettings: Bool
 
     private var pdLabel: String { Fmt.dateShort(pd.timeIntervalSince1970) }
     private var distanceDays: Int {
-        Int((pd.timeIntervalSince1970 - VisaData.currentCutoffA.timeIntervalSince1970) / 86_400)
+        Int((pd.timeIntervalSince1970 - cutoff.timeIntervalSince1970) / 86_400)
     }
 
     var body: some View {
@@ -146,17 +150,15 @@ private struct PillButton: View {
 }
 
 private struct BulletinBanner: View {
-    let entry: ReleaseLogEntry
+    let schedule: VisaSchedule
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "bell.badge.fill").foregroundColor(Theme.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("最新公告 · \(entry.bulletin)")
+                Text("最新公告 · \(schedule.bulletinMonth)")
                     .font(.subheadline).bold().foregroundColor(Theme.text)
-                if let fad = entry.fad, let dff = entry.dff {
-                    Text("表A \(fad) · 表B \(dff)")
-                        .font(.caption).foregroundColor(Theme.text2)
-                }
+                Text("表A \(schedule.fad) · 表B \(schedule.dff)")
+                    .font(.caption).foregroundColor(Theme.text2)
             }
             Spacer()
         }
