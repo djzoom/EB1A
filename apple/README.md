@@ -1,134 +1,113 @@
-# EB1A · macOS App（MAS 上架方案）
+# EB1A · 原生 iOS App
 
-> 状态：**方案文档（待审）**。本目录尚未包含 Xcode 工程；确认本方案后再生成工程文件。
-> 目标：把已上线的 EB1A PWA 包装成一个可在 **Mac App Store（MAS）** 上架的原生 macOS App。
-
----
-
-## 1. 总体策略
-
-**瘦壳（thin shell）+ 原生增值**：
-
-- 用 SwiftUI + `WKWebView` 加载线上地址 `https://djzoom.github.io/EB1A/`；
-- 网页（排期模型、文案、UI）一改，App 内容**自动同步**，无需为每次内容更新重新过审；
-- 在壳层补足**原生功能**，使其不构成 App Store 审核指南 4.2 所指的「纯套壳网站」。
-
-### 为什么不是打包离线资源
-打包离线（把 `index.html`／图标塞进 bundle 本地加载）会让每次内容更新都必须重新发版过审，与本项目「公告一出 30 分钟内自动上线」的节奏冲突。瘦壳让网页侧的自动部署继续发挥作用。
-
-### 为什么不是混合方案（暂不做）
-混合（本地兜底 + 线上优先）体验最好，但实现更复杂（缓存一致性、版本协商）。本工具的 PWA Service Worker 已提供浏览器侧离线兜底；Mac 壳首版先做纯线上，断网时显示友好的重试页即可。后续如有需要再升级为混合。
+> 状态：**Milestone 1 已落地**（核心引擎 + 数据 + SwiftUI 首版 UI + 公告通知 + 测试）。
+> 目标：把已上线的 EB1A 排期预测做成一个**原生 SwiftUI iOS App**——不是网页套壳，而是用 Swift 重新实现整套预测模型与界面。
 
 ---
 
-## 2. 过审关键：原生增值功能
+## 0. 为什么是原生（而非瘦壳）
 
-App Store 审核指南 **4.2（Minimum Functionality）**：纯粹加载网站的壳会被拒。本方案提供两类原生能力作为「存在理由」：
+| | 瘦壳 (WKWebView) | **原生 Swift（本方案）** |
+|---|---|---|
+| 本质 | 加载线上网页 | SwiftUI 重画 UI + Swift 重写模型 |
+| App Store 4.2 风险 | 高（易被判套壳） | 无（天然原生） |
+| 体验 | 受网页限制 | 原生手势/图表/通知 |
+| 代价 | 几乎零 | 模型与 UI 要维护「网页 JS + Swift」两份 |
 
-### 2.1 新签证公告推送通知（核心卖点）
-- App 后台**轮询**仓库的 `data/release_log.json`（GitHub raw，公开、无需鉴权）；
-- 发现新一期签证公告（`release_log` 出现新条目）时，发**本地通知**（`UNUserNotificationCenter`）：
-  「📢 {年月} 签证公告已发布 · 表A {FAD} / 表B {DFF}」；
-- 点击通知 → 唤起 App 并刷新到最新页面。
-
-> 数据来源已存在：网页侧的 self-learning 探测器会在公告发布后约 30 分钟内更新 `data/release_log.json` 并提交到仓库。Mac App 只需消费这个文件，不需要自己抓 USCIS/DOS。
-
-**轮询节奏（macOS）**：App 在前台时每 ~30 分钟查一次；进入后台用 `NSBackgroundActivityScheduler` 以「省电」优先级安排周期检查。不依赖服务器推送（无需自建后端、无 APNs 证书），实现最简。
-
-### 2.2 原生菜单栏 / Dock 角标 / 快捷键
-- 标准 macOS 菜单：**⌘R 刷新**、**⌘← / ⌘→ 前进后退**、**⌘L 跳转最新公告**、**⌘, 偏好设置**；
-- **Dock 角标**：显示「距你排到的估算天数」或「有新公告」红点（需用户先在网页里填过 PD，壳层通过 `WKScriptMessageHandler` 读取页面派发的数值）；
-- 「**通知设置**」偏好面板：开关公告推送、设定轮询频率。
-
-> 这些都是 Safari 打开网站做不到的原生体验，是 4.2 的有力佐证。
+代价的应对：**核心算法单独成模块**（`Core/`），与 UI 解耦，对照网页 `index.html` 的 `simulate()` 等函数逐行移植，便于日后同步。
 
 ---
 
-## 3. 工程结构（确认后生成）
+## 1. 构建方式（重要）
+
+本仓库容器是 Linux，**无 Xcode**，所以这里只提交源码，构建在你的 Mac 上完成。
+工程用 [XcodeGen](https://github.com/yonyz/XcodeGen) 描述（`project.yml`），`.xcodeproj` 在 Mac 上一键生成——避免手写易损坏的工程文件。
+
+```bash
+# 在 Mac 上：
+brew install xcodegen          # 仅首次
+cd apple
+xcodegen generate             # 由 project.yml 生成 EB1A.xcodeproj
+open EB1A.xcodeproj           # Xcode 打开 → 选模拟器 → ⌘R 运行
+```
+
+> 没装 XcodeGen 也行：在 Xcode 里新建一个 iOS App 工程，把 `EB1A/` 下的 `.swift` 全部拖进去即可——逻辑代码不依赖工程生成器。
+
+---
+
+## 2. 工程结构
 
 ```
 apple/
-├── README.md                      # 本文档
-├── EB1A.xcodeproj/                # Xcode 工程
-└── EB1A/
-    ├── EB1AApp.swift              # @main，App 生命周期、菜单命令
-    ├── ContentView.swift          # 承载 WebView 的根视图
-    ├── WebView.swift              # NSViewRepresentable 包装 WKWebView
-    ├── BulletinWatcher.swift      # 轮询 release_log.json + 发本地通知
-    ├── AppCommands.swift          # ⌘R / ⌘L 等菜单命令
-    ├── Preferences.swift          # 通知/频率偏好（@AppStorage）
-    ├── Info.plist                 # Bundle ID、权限、ATS
-    ├── EB1A.entitlements          # App Sandbox + 出站网络
-    └── Assets.xcassets/           # AppIcon（复用墨绿图标，见 §6）
+├── README.md
+├── project.yml                       # XcodeGen 工程描述（生成 .xcodeproj）
+├── EB1A/
+│   ├── EB1AApp.swift                 # @main 入口
+│   ├── Core/                         # ★ 纯 Swift，无 UI，对照 index.html 移植
+│   │   ├── EBDate.swift              # UTC 日历 / 造日期工具
+│   │   ├── ModelParams.swift         # 7 个模型参数 + 三套预设(现实/乐观/悲观)
+│   │   ├── VisaData.swift            # HISTORY / HISTORY_B / 当前 cutoff / 月权重
+│   │   ├── SimulationEngine.swift    # gaussian/getPDDensity/simulate/monteCarlo/percentilePaths/crossings
+│   │   ├── Formatters.swift          # 中文日期/等待时间格式化
+│   │   └── BulletinWatcher.swift     # 轮询 release_log.json + 本地通知
+│   ├── ViewModels/
+│   │   └── PredictionViewModel.swift # 后台跑 500 次蒙特卡洛
+│   └── Views/
+│       ├── ContentView.swift         # 根视图 + 欢迎/主界面切换
+│       ├── WelcomeView.swift         # 首次输入优先日
+│       ├── HeroCardView.swift        # 预计排到 + 快/中/慢
+│       ├── ForecastChartView.swift   # Swift Charts 走势图(历史+p10/p50/p90)
+│       └── SettingsView.swift        # 预设切换 + 通知开关
+└── Tests/
+    └── EngineTests.swift             # 引擎确定性单测(密度/路径长度/百分位单调)
 ```
 
 ---
 
-## 4. 关键实现要点
+## 3. 核心引擎移植对照
 
-### 4.1 WebView 壳
-```swift
-// WebView.swift（示意）
-struct WebView: NSViewRepresentable {
-    let url = URL(string: "https://djzoom.github.io/EB1A/")!
-    func makeNSView(context: Context) -> WKWebView {
-        let cfg = WKWebViewConfiguration()
-        // 注入桥：页面可 window.webkit.messageHandlers.eb1a.postMessage({...})
-        cfg.userContentController.add(context.coordinator, name: "eb1a")
-        let wv = WKWebView(frame: .zero, configuration: cfg)
-        wv.load(URLRequest(url: url))
-        return wv
-    }
-    // updateNSView / Coordinator(WKScriptMessageHandler) 略
-}
-```
+`SimulationEngine.swift` 严格对应 `index.html` 第 465–575 行：
 
-### 4.2 公告轮询 + 本地通知
-```swift
-// BulletinWatcher.swift（示意）
-let raw = URL(string: "https://raw.githubusercontent.com/djzoom/EB1A/main/data/release_log.json")!
-// 1. 拉取 JSON  2. 与上次记录的最新 published 比对（存 UserDefaults）
-// 3. 有新条目 → UNUserNotificationCenter 发本地通知
-// 前台 Timer(30min)；后台 NSBackgroundActivityScheduler(.utility, repeats)
-```
-
-### 4.3 权限 / 签名
-- **App Sandbox**：开启（MAS 强制）；
-- **出站网络**：`com.apple.security.network.client = true`（访问 github.io 与 raw.githubusercontent.com）；
-- **通知**：首启请求 `UNUserNotificationCenter` 授权；
-- **ATS**：两个域名均为 HTTPS，无需放宽 ATS。
-
----
-
-## 5. 上架步骤（MAS）
-
-1. App Store Connect 新建 App，Bundle ID（建议 `com.djwz.eb1a` 或你常用前缀）；
-2. Xcode 选 **Apple Distribution / Mac App Store** 签名（你已是 Apple Developer，证书可在 Xcode 自动管理）；
-3. Archive → Distribute App → App Store Connect 上传；
-4. 填写元数据：分类「工具 / 参考」；隐私问卷声明「不收集数据」（壳不采集，PD 仅存浏览器 localStorage）；
-5. 审核备注里**主动说明原生增值**：本地公告推送、原生菜单/快捷键/Dock 角标——预防 4.2 质疑；
-6. 提交审核。
-
-### 已知审核风险与对策
-| 风险 | 对策 |
+| 网页 JS | Swift |
 |---|---|
-| 4.2 纯套壳被拒 | 突出 §2 原生功能；审核备注明确列出 |
-| 隐私合规 | 声明不收集；PD 仅本地，链路 HTTPS |
-| 离线无内容 | 断网显示原生重试页（非白屏） |
+| `gaussian(mu, sigma)` (Box-Muller) | `gaussian(_:_:)` |
+| `getPDDensity(pdDate, params)` (5 段分段线性) | `getPDDensity(_:)` |
+| `MONTHLY_WEIGHTS` | `monthlyWeights` |
+| `simulate(params)` (144 月，路径级 regime 系数，10 月跳变，±30% 噪声) | `simulate()` |
+| `monteCarlo(params, n)` | `monteCarlo(_:)` |
+| `percentilePaths(allPaths)` | `percentilePaths(_:)` |
+| `findCrossingsDistribution(allPaths)` | `findCrossingsDistribution(_:)` |
+
+为可复现，引擎对 RNG 泛型化：App 用 `SystemRandomNumberGenerator`，单测用可种子化的 `SplitMix64`。
 
 ---
 
-## 6. App 图标
+## 4. 公告推送通知
 
-复用网页 PWA 的墨绿图标体系（仓库根目录 `icon-512.png` / `icon.svg`）。macOS AppIcon 需要 16/32/128/256/512 @1x@2x 全套，可由 `icon.svg` 用 `cairosvg` 或 `sips`/`iconutil` 批量导出为 `.icns` 放进 `Assets.xcassets`。设计 prompt 见仓库聊天记录（墨绿渐变底 + 上升白柱）。
+`BulletinWatcher` 轮询仓库的
+`https://raw.githubusercontent.com/djzoom/EB1A/main/data/release_log.json`，
+发现新一期公告（`bulletin` 字段出现更大的 `YYYY-MM`）时发**本地通知**：
+
+> 📢 2026年7月 签证公告已发布 · 表A 2023-04-01 / 表B 2023-12-01
+
+- **触发时机（M1）**：App 启动 + 每次回到前台时检查（`scenePhase == .active`）。无需自建后端/APNs。
+- **后台轮询（M2 待做）**：接 `BGAppRefreshTask`，需在 Info.plist 加
+  `BGTaskSchedulerPermittedIdentifiers` 与 `UIBackgroundModes=fetch`（XcodeGen 里补 `INFOPLIST_KEY_*` 或单独 plist）。
 
 ---
 
-## 7. 待你确认 / 决策项
+## 5. 路线图
 
-- [ ] Bundle ID 命名（默认建议 `com.djwz.eb1a`）
-- [ ] App 显示名（默认 `EB1A 排期预测`）
-- [ ] 最低 macOS 版本（建议 macOS 13 Ventura，覆盖广 + SwiftUI 成熟）
-- [ ] 是否需要 iPad/iPhone 版（本方案仅 macOS；iOS 可后续以同壳 + Catalyst/多平台 target 扩展）
+- [x] **M1**：核心引擎 + 数据 + 首版 UI（欢迎/结果卡/走势图）+ 前台公告通知 + 单测
+- [ ] **M2**：等待时间图、图表 tooltip/拖动取值、`BGAppRefreshTask` 后台轮询、参数滑杆与「数据来源」说明
+- [ ] **M3**：cutoff/历史数据从仓库远程同步（而非内置常量），与网页自动更新对齐
+- [ ] **M4**：App Icon 资产目录、App Store Connect 元数据、隐私问卷（不收集数据）、提交审核
 
-确认后我生成完整 Xcode 工程文件（你在本地 Mac 打开即可 Archive 上传）。
+---
+
+## 6. 待你确认
+
+- [ ] Bundle ID（默认 `com.djwz.eb1a`）
+- [ ] App 显示名（默认「EB1A 排期预测」）
+- [ ] 最低 iOS 版本（默认 **iOS 16**，Swift Charts 需 16+）
+- [ ] 是否同时出 iPad 版（当前 `TARGETED_DEVICE_FAMILY=1,2` 已含 iPad）
