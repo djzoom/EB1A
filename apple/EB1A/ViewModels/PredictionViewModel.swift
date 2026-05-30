@@ -32,6 +32,8 @@ struct PredictionResult {
     let yourPD: Date
     let today: Date
     let alreadyReached: Bool
+    let historyA: [SimPoint]   // live (merged) Table A history
+    let historyB: [SimPoint]   // live (merged) Table B history
 
     private static func dt(_ ts: TimeInterval) -> Date { Date(timeIntervalSince1970: ts) }
     private static let focusStart = EBDate.make(2023, 1, 1).timeIntervalSince1970
@@ -39,11 +41,11 @@ struct PredictionResult {
     // MARK: Trend rows (X = calendar date, Y = cutoff date)
 
     var historyATrend: [LineRow] {
-        VisaData.historyA.filter { $0.x >= Self.focusStart }
+        historyA.filter { $0.x >= Self.focusStart }
             .map { LineRow(x: Self.dt($0.x), y: Self.dt($0.y)) }
     }
     var historyBTrend: [LineRow] {
-        VisaData.historyB.filter { $0.x >= Self.focusStart }
+        historyB.filter { $0.x >= Self.focusStart }
             .map { LineRow(x: Self.dt($0.x), y: Self.dt($0.y)) }
     }
     var p50Line: [LineRow] { bands.p50.map { LineRow(x: Self.dt($0.x), y: Self.dt($0.y)) } }
@@ -69,8 +71,8 @@ struct PredictionResult {
     /// Y domain: clamp top to just above the user's PD / current cutoff. Mirrors web.
     var trendYDomain: ClosedRange<Date> {
         var ys: [Double] = [yourPD.timeIntervalSince1970]
-        for p in VisaData.historyA where p.x >= Self.focusStart { ys.append(p.y) }
-        for p in VisaData.historyB where p.x >= Self.focusStart { ys.append(p.y) }
+        for p in historyA where p.x >= Self.focusStart { ys.append(p.y) }
+        for p in historyB where p.x >= Self.focusStart { ys.append(p.y) }
         for p in bands.p50 { ys.append(p.y) }
         for p in bands.p10 { ys.append(p.y) }
         for p in bands.p90 { ys.append(p.y) }
@@ -85,7 +87,7 @@ struct PredictionResult {
     // MARK: Wait-time rows (X = priority date, Y = wait years)
 
     private func toWait(_ line: [SimPoint]) -> [WaitRow] {
-        let lastHistPD = VisaData.historyA.last?.y ?? 0
+        let lastHistPD = historyA.last?.y ?? 0
         return line.compactMap { p -> WaitRow? in
             let wait = (p.x - p.y) / kYear
             guard wait >= 0, p.y > lastHistPD else { return nil }
@@ -93,7 +95,7 @@ struct PredictionResult {
         }.sorted { $0.pd < $1.pd }
     }
     var historyWait: [WaitRow] {
-        VisaData.historyA.compactMap { p -> WaitRow? in
+        historyA.compactMap { p -> WaitRow? in
             let wait = (p.x - p.y) / kYear
             return wait >= 0 ? WaitRow(pd: Self.dt(p.y), wait: wait) : nil
         }.sorted { $0.pd < $1.pd }
@@ -114,13 +116,13 @@ struct PredictionResult {
         return (w >= 0 && w < 20) ? w : nil
     }
 
-    static func compute(pd: Date, params: ModelParams) -> PredictionResult {
+    static func compute(pd: Date, params: ModelParams, schedule: VisaSchedule) -> PredictionResult {
         // Seed the RNG from the PD so the same input always yields the same
         // result (no jitter on re-run). Different PD -> different seed.
         let seed = UInt64(bitPattern: Int64(pd.timeIntervalSince1970.rounded()))
         var engine = SimulationEngine(
             params: params,
-            cutoffStart: VisaData.currentCutoffA,
+            cutoffStart: schedule.currentCutoffA,
             yourPD: pd,
             today: Date(),
             generator: SplitMix64(seed: seed))
@@ -132,10 +134,12 @@ struct PredictionResult {
         return PredictionResult(
             crossings: crossings,
             bands: bands,
-            currentCutoff: VisaData.currentCutoffA,
+            currentCutoff: schedule.currentCutoffA,
             yourPD: pd,
             today: Date(),
-            alreadyReached: VisaData.currentCutoffA >= pd)
+            alreadyReached: schedule.currentCutoffA >= pd,
+            historyA: schedule.historyA,
+            historyB: schedule.historyB)
     }
 }
 
@@ -144,17 +148,23 @@ final class PredictionViewModel: ObservableObject {
     @Published var result: PredictionResult?
     @Published var isRunning = false
     @Published var preset: Preset = .realistic {
-        didSet { if oldValue != preset, let pd = lastPD { run(pd: pd) } }
+        didSet {
+            if oldValue != preset, let pd = lastPD, let schedule = lastSchedule {
+                run(pd: pd, schedule: schedule)
+            }
+        }
     }
 
     private var lastPD: Date?
+    private var lastSchedule: VisaSchedule?
 
-    func run(pd: Date) {
+    func run(pd: Date, schedule: VisaSchedule) {
         lastPD = pd
+        lastSchedule = schedule
         isRunning = true
         let params = preset.params
         Task.detached(priority: .userInitiated) {
-            let res = PredictionResult.compute(pd: pd, params: params)
+            let res = PredictionResult.compute(pd: pd, params: params, schedule: schedule)
             await MainActor.run {
                 self.result = res
                 self.isRunning = false

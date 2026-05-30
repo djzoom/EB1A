@@ -47,10 +47,11 @@ apple/
 │   │   ├── Theme.swift               # 配色板，1:1 对应网页 CSS :root（样式一致）
 │   │   ├── EBDate.swift              # UTC 日历 / 造日期工具
 │   │   ├── ModelParams.swift         # 7 个模型参数 + 三套预设(现实/乐观/悲观)
-│   │   ├── VisaData.swift            # HISTORY / HISTORY_B / 当前 cutoff / 月权重
+│   │   ├── VisaData.swift            # 内置兜底数据(老历史/默认 cutoff/月权重)
+│   │   ├── VisaSchedule.swift        # live 数据模型：从 release_log 构建 cutoff+合并历史
 │   │   ├── SimulationEngine.swift    # gaussian/getPDDensity/simulate/monteCarlo/percentilePaths/crossings
 │   │   ├── Formatters.swift          # 中文日期/等待时间格式化
-│   │   └── BulletinWatcher.swift     # 轮询 release_log.json + 本地通知
+│   │   └── ScheduleStore.swift       # 拉取 release_log + 缓存 + 本地通知（数据源）
 │   ├── ViewModels/
 │   │   └── PredictionViewModel.swift # 后台跑 500 次蒙特卡洛
 │   └── Views/
@@ -83,13 +84,19 @@ apple/
 
 ---
 
-## 4. 公告推送通知
+## 4. 数据来源与公告通知
 
-`BulletinWatcher` 轮询仓库的
+App **不直接爬 USCIS/DOS**——仓库里的 GitHub Action 探测器负责盯官网并提交
+`data/release_log.json`；App 只消费这份 JSON。
+
+`ScheduleStore` 拉取
 `https://raw.githubusercontent.com/djzoom/EB1A/main/data/release_log.json`，
-发现新一期公告（`bulletin` 字段出现更大的 `YYYY-MM`）时发**本地通知**：
+据此 ①重建预测用的当前 cutoff + 合并历史（`VisaSchedule`，M3），②发现新一期
+（`bulletin` 出现更大的 `YYYY-MM`）时发**本地通知**：
 
-> 📢 2026年7月 签证公告已发布 · 表A 2023-04-01 / 表B 2023-12-01
+> 📢 2026年7月 · 表A 2023-04-01 / 表B 2023-12-01
+
+数据缓存到 `UserDefaults`，离线时用上次结果；首启无网络则用内置兜底数据。
 
 - **触发时机（M1）**：App 启动 + 每次回到前台时检查（`scenePhase == .active`）。无需自建后端/APNs。
 - **后台轮询（M2 待做）**：接 `BGAppRefreshTask`，需在 Info.plist 加
@@ -107,7 +114,10 @@ apple/
   - [ ] 图表 tooltip / 拖动取值
   - [ ] 参数滑杆与「数据来源」说明（PARAM_META）
   - [ ] `BGAppRefreshTask` 后台轮询（需 Info.plist 背景模式，真机验证）
-- [ ] **M3**：cutoff/历史数据从仓库远程同步（而非内置常量），与网页自动更新对齐
+- [x] **M3**：cutoff/历史数据从仓库 `release_log.json` 实时同步（不再写死），与网页自动更新对齐
+  - `VisaSchedule` 从 release_log 构建当前 cutoff + 合并历史（live 覆盖近端，bundled 兜底老历史）
+  - `ScheduleStore` 拉取 → 缓存到 UserDefaults（离线用上次结果）→ 喂给引擎
+  - 新公告导致 cutoff 变化时，预测**不发版自动更新**
 - [ ] **M4**：App Icon 资产目录、App Store Connect 元数据、隐私问卷（不收集数据）、提交审核
 
 ---

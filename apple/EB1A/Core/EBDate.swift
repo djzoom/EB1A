@@ -31,7 +31,7 @@ enum EBDate {
 /// One simulated point: x = calendar month timestamp, y = cutoff timestamp
 /// (both in seconds since 1970, matching JS getTime()/1000 semantics — units
 /// are consistent throughout the engine so absolute scale is irrelevant).
-struct SimPoint {
+struct SimPoint: Codable, Equatable {
     var x: TimeInterval
     var y: TimeInterval
 }
