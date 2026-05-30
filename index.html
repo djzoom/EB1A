@@ -1100,9 +1100,9 @@ function drawWaitTimeChart(percentiles) {
   }
 
   // Prediction (smooth)
-  var lineP90 = waitP90.length ? '<path d="' + smoothPathD(waitP90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
-  var lineP10 = waitP10.length ? '<path d="' + smoothPathD(waitP10, sx, sy) + '" fill="none" stroke="#10B981" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
-  var lineP50 = waitP50.length ? '<path d="' + smoothPathD(waitP50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' : '';
+  var lineP90 = waitP90.length ? '<path d="' + linePathD(waitP90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
+  var lineP10 = waitP10.length ? '<path d="' + linePathD(waitP10, sx, sy) + '" fill="none" stroke="#10B981" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
+  var lineP50 = waitP50.length ? '<path d="' + linePathD(waitP50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' : '';
 
   // Cross marker with glow
   var crossMarker = '';
