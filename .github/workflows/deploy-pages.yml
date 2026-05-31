@@ -25,8 +25,9 @@ jobs:
 
       - name: Prepare site
         run: |
-          mkdir -p _site
+          mkdir -p _site/vendor
           cp index.html manifest.json sw.js icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png _site/
+          cp vendor/gsap.min.js _site/vendor/
 
       - name: Setup Pages (auto-enable if needed)
         uses: actions/configure-pages@v5

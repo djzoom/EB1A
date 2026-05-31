@@ -366,6 +366,7 @@
 
 </div>
 
+<script src="vendor/gsap.min.js"></script>
 <script>
 "use strict";
 
@@ -677,6 +678,34 @@ function setupDateGroup(prefix, onChange) {
       dEl.focus(); dEl.select();
     }
   });
+}
+
+// ===== 动效 (GSAP，渐进增强：未加载/离线时自动跳过) =====
+// 滑杆连续拖动时抑制动画，避免每帧重播卡顿；其它交互（输入PD/切档/选快中慢）正常播放。
+var SUPPRESS_ANIM = false;
+function gsapReady() { return typeof window !== 'undefined' && window.gsap && !SUPPRESS_ANIM; }
+
+function animateChart() {
+  if (!gsapReady()) return;
+  var line = document.getElementById('pred-line');
+  if (line && typeof line.getTotalLength === 'function') {
+    try {
+      var len = line.getTotalLength();
+      line.style.strokeDasharray = len;
+      window.gsap.fromTo(line, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.9, ease: 'power2.out',
+        onComplete: function () { line.style.strokeDasharray = ''; } });
+    } catch (e) {}
+  }
+  var marker = document.querySelector('#chart .cross-dot');
+  if (marker) window.gsap.from(marker, { scale: 0, transformOrigin: '50% 50%', duration: 0.4, delay: 0.6, ease: 'back.out(2)' });
+}
+
+function animateHero() {
+  if (!gsapReady()) return;
+  var hv = document.getElementById('hero-value');
+  if (hv) window.gsap.from(hv, { opacity: 0, y: 8, duration: 0.5, ease: 'power2.out' });
+  var fill = document.getElementById('progress-fill');
+  if (fill) window.gsap.from(fill, { width: 0, duration: 0.8, ease: 'power2.out' });
 }
 
 function redrawChart() {
@@ -1007,7 +1036,7 @@ function drawForecastChart(percentiles) {
   // Prediction lines (smooth)
   var lineP90 = '<path d="' + smoothPathD(percentiles.p90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>';
   var lineP10 = '<path d="' + smoothPathD(percentiles.p10, sx, sy) + '" fill="none" stroke="#10B981" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>';
-  var lineP50 = '<path d="' + smoothPathD(percentiles.p50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  var lineP50 = '<path id="pred-line" d="' + smoothPathD(percentiles.p50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
 
   // Cross marker with glow
   var crossMarker = '';
@@ -1018,7 +1047,7 @@ function drawForecastChart(percentiles) {
       if (selPath[c].y >= yourPD) {
         var cx = sx(selPath[c].x), color = selColors[selectedPercentile];
         crossMarker += '<circle cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="10" fill="' + color + '" opacity="0.12"/>';
-        crossMarker += '<circle cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
+        crossMarker += '<circle class="cross-dot" cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
         crossMarker += '<text x="' + cx + '" y="' + (pdY - 14) + '" fill="' + color + '" font-size="12" text-anchor="middle" font-weight="700">' + formatDate(selPath[c].x) + '</text>';
         break;
       }
@@ -1031,6 +1060,7 @@ function drawForecastChart(percentiles) {
   document.getElementById('chart').innerHTML = defs + bg + grid +
     '<g clip-path="url(#plot-clip)">' + band90 + band50 + histB + hist + pdLine + lineP90 + lineP10 + lineP50 + crossMarker + pdLabel + '</g>' +
     todayLine + todayLabel;
+  animateChart();
 }
 
 // Chart: Wait Time Mode (wait years vs PD)
@@ -1135,7 +1165,7 @@ function drawWaitTimeChart(percentiles) {
   // Prediction (smooth)
   var lineP90 = waitP90.length ? '<path d="' + linePathD(waitP90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
   var lineP10 = waitP10.length ? '<path d="' + linePathD(waitP10, sx, sy) + '" fill="none" stroke="#10B981" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
-  var lineP50 = waitP50.length ? '<path d="' + linePathD(waitP50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' : '';
+  var lineP50 = waitP50.length ? '<path id="pred-line" d="' + linePathD(waitP50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' : '';
 
   // Cross marker with glow
   var crossMarker = '';
@@ -1147,7 +1177,7 @@ function drawWaitTimeChart(percentiles) {
         var selColors = { p10: '#10B981', p25: '#5cbf99', p50: '#15734F', p75: '#F59E0B', p90: '#EF4444' };
         var color = selColors[selectedPercentile];
         crossMarker += '<circle cx="' + pdX.toFixed(1) + '" cy="' + sy(selWait).toFixed(1) + '" r="10" fill="' + color + '" opacity="0.12"/>';
-        crossMarker += '<circle cx="' + pdX.toFixed(1) + '" cy="' + sy(selWait).toFixed(1) + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
+        crossMarker += '<circle class="cross-dot" cx="' + pdX.toFixed(1) + '" cy="' + sy(selWait).toFixed(1) + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
         crossMarker += '<text x="' + pdX + '" y="' + (sy(selWait) - 14) + '" fill="' + color + '" font-size="12" text-anchor="middle" font-weight="700">' + selWait.toFixed(1) + '年</text>';
       }
     }
@@ -1158,6 +1188,7 @@ function drawWaitTimeChart(percentiles) {
 
   document.getElementById('chart').innerHTML = defs + bg + grid +
     '<g clip-path="url(#plot-clip)">' + band90 + band50 + hist + pdLine + lineP90 + lineP10 + lineP50 + crossMarker + pdLabel + '</g>';
+  animateChart();
 }
 
 // Chart Mode
@@ -1226,6 +1257,8 @@ function renderHero() {
     '<span' + bCls + '>表B递交 <b>' + formatDate(dateB) + '</b></span>' +
     '<span class="ab-sep">|</span>' +
     VB_MONTH + ' 递交用 <span class="open">' + chartLabel() + '</span>';
+
+  animateHero();
 }
 
 function renderStats() {
@@ -1335,7 +1368,11 @@ function renderParams() {
       document.getElementById('v-' + key).textContent = PARAM_META[key].format(currentParams[key]);
       // 合并连续拖动为每帧一次重算，避免 500 次蒙特卡洛在每个 input 事件都跑一遍卡顿
       if (window._renderRAF) cancelAnimationFrame(window._renderRAF);
-      window._renderRAF = requestAnimationFrame(render);
+      window._renderRAF = requestAnimationFrame(function () {
+        SUPPRESS_ANIM = true;          // 拖动时不重播入场动画
+        render();
+        SUPPRESS_ANIM = false;
+      });
     });
   });
 }
