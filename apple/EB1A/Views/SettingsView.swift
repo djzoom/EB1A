@@ -17,6 +17,12 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                     Text(presetHint)
                         .font(.caption).foregroundStyle(.secondary)
+                    Button {
+                        vm.preset = .realistic   // 重置为默认情景
+                    } label: {
+                        Label("重置为默认", systemImage: "arrow.counterclockwise")
+                    }
+                    .disabled(vm.preset == .realistic)
                 }
 
                 Section("签证公告通知") {
