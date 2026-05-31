@@ -63,13 +63,14 @@ private struct MainView: View {
                 TopBar(pd: pd, cutoff: store.schedule.currentCutoffA,
                        showEdit: $showEdit, showSettings: $showSettings)
 
-                BulletinBanner(schedule: store.schedule)
-
                 if let result = vm.result {
                     HeroCardView(result: result, pd: pd)
                     ChartCardView(result: result)
+                    // 签证公告卡放在图表下方（与网页一致）
+                    BulletinBanner(schedule: store.schedule)
                     ExplanationView(result: result, params: vm.preset.params)
                 } else {
+                    BulletinBanner(schedule: store.schedule)
                     ProgressView("正在运行 500 次蒙特卡洛模拟…")
                         .frame(maxWidth: .infinity, minHeight: 200)
                 }
