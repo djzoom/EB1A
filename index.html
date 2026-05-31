@@ -302,11 +302,6 @@
     <span id="hero-slow" style="display:none"></span>
   </div>
 
-  <details class="btm-detail about-card" id="bulletin-card">
-    <summary>📅 签证公告 · 下月预测</summary>
-    <div class="explain-content" id="bulletin-box"></div>
-  </details>
-
   <div class="chart-panel">
     <div class="chart-head">
       <div class="chart-modes">
@@ -328,6 +323,11 @@
     <div class="touch-hint">按住图表横向滑动，查看每个时间点的数值</div>
   </div>
 
+  <details class="btm-detail about-card" id="bulletin-card">
+    <summary>📅 签证公告 · 下月预测</summary>
+    <div class="explain-content" id="bulletin-box"></div>
+  </details>
+
   <div class="bottom-row">
     <details class="btm-detail">
       <summary>算法说明</summary>
@@ -338,6 +338,7 @@
       <div class="settings-content">
         <div class="settings-hint">默认参数基于公开数据估算，可手动微调看不同假设下的结果。</div>
         <div class="params" id="params-container"></div>
+        <button class="reset-btn" id="param-reset">↺ 重置为默认</button>
       </div>
     </details>
   </div>
@@ -1532,6 +1533,18 @@ setupChartTooltip();
 })();
 
 renderParams();
+
+// 高级设置「重置」：恢复默认参数
+(function () {
+  var resetBtn = document.getElementById('param-reset');
+  if (!resetBtn) return;
+  resetBtn.addEventListener('click', function () {
+    currentParams = Object.assign({}, PRESETS.realistic);
+    renderParams();
+    if (profile.pd) render();
+  });
+})();
+
 if (profile.pd) {
   render();
 }
