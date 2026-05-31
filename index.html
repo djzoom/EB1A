@@ -216,7 +216,7 @@
     /* declutter chart toolbar: presets (聚焦/全图) replace manual zoom buttons */
     .zoom-ctrls { display: none; }
     /* single-finger scrubbing reads values; disable native pan/zoom on the chart */
-    .chart-svg { cursor: default; touch-action: none; }
+    .chart-svg { cursor: default; touch-action: pan-y; }
     .touch-hint { display: block; }
   }
 </style>
@@ -918,16 +918,31 @@ function setupChartTooltip() {
   }
   svg.addEventListener('mousemove', updateHover);
 
-  // Touch scrubber: drag a finger across the chart to read values at any date
-  // (replaces pinch/drag zoom on phones — natural like the iOS Stocks/Health apps)
-  function touchScrub(e) {
-    if (e.touches.length !== 1) return;
-    e.preventDefault();
+  // Touch scrubber: drag a finger ACROSS (horizontally) the chart to read values.
+  // 方向智能判定：手指落下后先看首段移动方向——主要横向→取值并锁定该手势；
+  // 主要纵向→不拦截，交回浏览器做页面滚动（避免图表"吃掉"下滑）。
+  var tStartX = 0, tStartY = 0, tMode = null; // null=未定 / 'scrub' / 'scroll'
+  function onTouchStart(e) {
+    if (e.touches.length !== 1) { tMode = 'scroll'; return; }
     var t = e.touches[0];
-    updateHover({ clientX: t.clientX, clientY: t.clientY });
+    tStartX = t.clientX; tStartY = t.clientY; tMode = null;
   }
-  svg.addEventListener('touchstart', touchScrub, { passive: false });
-  svg.addEventListener('touchmove', touchScrub, { passive: false });
+  function onTouchMove(e) {
+    if (e.touches.length !== 1 || tMode === 'scroll') return;
+    var t = e.touches[0];
+    if (tMode === null) {
+      var dx = Math.abs(t.clientX - tStartX), dy = Math.abs(t.clientY - tStartY);
+      if (dx < 6 && dy < 6) return;          // 移动太小，方向未明，先等
+      tMode = dx > dy ? 'scrub' : 'scroll';  // 横向占优=取值；纵向占优=让页面滚
+      if (tMode === 'scroll') { hideTooltip(); return; }
+    }
+    if (tMode === 'scrub') {
+      e.preventDefault();                    // 仅在取值时阻止默认（不挡纵向滚动）
+      updateHover({ clientX: t.clientX, clientY: t.clientY });
+    }
+  }
+  svg.addEventListener('touchstart', onTouchStart, { passive: true });
+  svg.addEventListener('touchmove', onTouchMove, { passive: false });
   svg.addEventListener('touchend', hideTooltip);
   svg.addEventListener('touchcancel', hideTooltip);
 
