@@ -124,14 +124,17 @@
   .chart-tooltip .tt-sname { color: var(--text3); font-size: 10px; min-width: 14px; }
   .chart-tooltip .tt-sval { font-weight: 600; font-size: 11px; font-variant-numeric: tabular-nums; }
 
-  .bottom-row { display: block; margin-bottom: 0; }
-  .about-card { display: block; }
-  .btm-detail { display: block; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; }
-  .btm-detail summary { padding: 15px 16px; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
-  .btm-detail summary::-webkit-details-marker { display: none; }
-  .btm-detail summary::after { content: '▾'; color: var(--text3); font-size: 10px; }
-  .btm-detail[open] summary::after { content: '▴'; }
-  .btm-detail[open] summary { border-bottom: 1px solid var(--border); }
+  /* 并列标签卡 */
+  .tabs { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
+  .tab-strip { display: flex; border-bottom: 1px solid var(--border); }
+  .tab-btn { flex: 1; padding: 13px 8px; font-size: 13.5px; font-weight: 600; color: var(--text3); background: none; border: none; cursor: pointer; font-family: inherit; position: relative; transition: color 0.15s; }
+  .tab-btn:hover { color: var(--text2); }
+  .tab-btn.active { color: var(--blue); }
+  .tab-btn.active::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: var(--blue); border-radius: 2px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .tab-panel .explain-content { padding-top: 14px; }
+  .tab-panel .explain-static { border-top: 1px solid var(--border); margin-top: 4px; }
   .explain-content { padding: 4px 16px 16px; font-size: 13.5px; color: var(--text2); line-height: 1.7; }
   .explain-content p { margin: 0 0 7px; }
   .explain-content p:last-child { margin-bottom: 0; }
@@ -208,7 +211,7 @@
       min-height: 40px; display: inline-flex; align-items: center; justify-content: center;
     }
     .stat { min-height: 48px; padding: 8px 4px; }
-    .btm-detail summary { padding: 16px; }
+    .tab-btn { min-height: 44px; }
     .modal-box .start-btn { padding: 14px; }
     /* declutter chart toolbar: presets (聚焦/全图) replace manual zoom buttons */
     .zoom-ctrls { display: none; }
@@ -325,39 +328,36 @@
     <div class="touch-hint">按住图表横向滑动，查看每个时间点的数值</div>
   </div>
 
-  <details class="btm-detail about-card" id="bulletin-card">
-    <summary>📅 签证公告 · 下月预测</summary>
-    <div class="explain-content" id="bulletin-box"></div>
-  </details>
+  <div class="tabs">
+    <div class="tab-strip" role="tablist">
+      <button class="tab-btn active" data-tab="bulletin" role="tab">签证公告</button>
+      <button class="tab-btn" data-tab="explain" role="tab">原理说明</button>
+      <button class="tab-btn" data-tab="settings" role="tab">高级设置</button>
+    </div>
 
-  <div class="bottom-row">
-    <details class="btm-detail">
-      <summary>算法说明</summary>
+    <div class="tab-panel active" id="tab-bulletin" role="tabpanel">
+      <div class="explain-content" id="bulletin-box"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-explain" role="tabpanel">
       <div class="explain-content" id="explain-box"></div>
-    </details>
-    <details class="btm-detail" id="settings-card">
-      <summary>高级设置</summary>
+      <div class="explain-content explain-static">
+        <p><span class="step">表 A 与 表 B</span><br><b>表 A（Final Action Date，最终裁定日）</b>决定何时获批绿卡；<b>表 B（Dates for Filing，递交日期）</b>决定何时可递交 I-485。当月以官方公告指定的表为准，本工具同时呈现两者。</p>
+        <p><span class="step">数据更新</span><br>后台探测器在每期签证公告发布后约 30 分钟内捕获，自动更新表 A / 表 B 数据并重新部署；探测器记录历次发布时刻，逐月收窄探测窗口。</p>
+        <p><span class="step">隐私</span><br>优先日等信息仅存于本地浏览器（localStorage），不上传服务器。基础数据取自 USCIS 与 DOS 的公开发布。</p>
+        <p><span class="step">安装与作者</span><br>可作为 PWA 添加到主屏幕、离线打开。由 <a href="https://x.com/DJWZ" target="_blank" rel="noopener">0xGarfield · @DJWZ</a> 制作。</p>
+        <p class="explain-note">本工具为基于公开数据的统计估算，<b>不构成法律或移民建议</b>。结果受配额、政策、立法及个人情况影响，请以官方签证公告为准，并咨询持牌移民律师。</p>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-settings" role="tabpanel">
       <div class="settings-content">
-        <div class="settings-hint">默认参数基于公开数据估算，可手动微调看不同假设下的结果。</div>
+        <div class="settings-hint">默认参数基于公开数据估算，可手动微调以查看不同假设下的结果。</div>
         <div class="params" id="params-container"></div>
         <button class="reset-btn" id="param-reset">↺ 重置为默认</button>
       </div>
-    </details>
-  </div>
-
-  <details class="btm-detail about-card">
-    <summary>关于本工具 · 数据如何更新</summary>
-    <div class="explain-content">
-      <p>这是一个面向 <b>EB-1A 中国大陆</b>申请人的绿卡排期预测工具。输入你的优先日（Priority Date），即可估算排期大约何时轮到你；所有计算均在本地浏览器完成。</p>
-      <p><span class="step">怎么预测</span><br>它不外推历史趋势线，而是还原签证发放背后的供需逻辑：① 以"当前排期与你优先日之间的间隔 × 排队密度"估算你前方尚有多少人；② 以"每年可用签证数 ÷ 家庭系数"估算每年可消化的主申请人数；③ 两者相除，得到大致年数；④ 在此基础上运行 <b>500 次蒙特卡洛模拟</b>并叠加结构性波动，给出 <b>快 / 中 / 慢</b> 三档预测与置信区间。展开"算法说明"，可见代入你数字后的完整推算。</p>
-      <p><span class="step">表 A 与 表 B</span><br><b>表 A（最终裁定日，Final Action Date）</b>决定何时真正获批绿卡；<b>表 B（递交日期，Dates for Filing）</b>决定何时可递交 I-485。本工具同时呈现两者，并标注当月 USCIS 受理递交所依据的表。</p>
-      <p><span class="step">第一时间获取最新公告</span><br>工具内置自动探测：每期签证公告发布后（通常在美东工作日的月中），后台任务会在约 <b>30 分钟内</b>捕获，自动更新表 A / 表 B 并重新部署上线。探测器还会<b>自学习</b>历次公告的实际发布时刻，逐月收窄探测窗口——越用越准，也越省。</p>
-      <p><span class="step">装到主屏幕</span><br>本工具是一个可安装的 PWA：在 iPhone 用 Safari 打开后，点击底部「分享」→「添加到主屏幕」，即可像 App 一样从主屏幕全屏启动、离线打开（Android Chrome 选「添加到主屏幕 / 安装应用」）。装好后每次公告更新仍会自动同步，无需重新安装。</p>
-      <p><span class="step">隐私与数据</span><br>你的优先日、类别等信息仅保存在本地浏览器（localStorage），<b>绝不上传</b>。底层数据均取自 USCIS 与 DOS 的公开来源。</p>
-      <p><span class="step">作者</span><br>由 <a href="https://x.com/DJWZ" target="_blank" rel="noopener">0xGarfield · @DJWZ</a> 制作，欢迎在 X 交流反馈。</p>
-      <p class="explain-note">本工具仅为基于公开数据的统计估算，<b>不构成法律建议</b>。实际结果受配额政策、行政命令、立法变动及个人情况影响，请以官方签证公告为准，并咨询持牌移民律师。</p>
     </div>
-  </details>
+  </div>
 
   <div class="footer">
     EB-1A 中国大陆排期预测 · 自动同步最新签证公告 · 数据源 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a><br>
@@ -1321,21 +1321,20 @@ function renderExplanation() {
   }
 
   el.innerHTML =
-    '<p><b>这个时间是怎么推算出来的？</b>工具不是去拟合一条趋势线，而是还原签证发放的真实供需过程，分四步：</p>' +
-    '<p><span class="step">① 你前面还排着多少人</span><br>' +
-      '当前排期排到 <b>' + formatDate(cutoff) + '</b>，你的优先日是 <b>' + formatDate(pd) + '</b>，两者相差 <b>' +
-      gapDays.toLocaleString() + ' 天</b>。按这段优先日时期每天约 ' + densityRound +
-      ' 个中国大陆申请人估算，你前面大约还有 <b>' + queueAhead.toLocaleString() + ' 名主申请人</b>。</p>' +
-    '<p><span class="step">② 每年能消化多少人</span><br>' +
-      'EB-1 中国大陆每年可用签证号 ≈ 法定基础配额 ' + currentParams.chinaBaseQuota.toLocaleString() + ' ' + spillStr +
-      ' 个其他国家/类别溢出 = <b>' + totalSupply.toLocaleString() + ' 个</b>。但一个签证号要覆盖全家（平均 ' + fm +
-      ' 人），换算成主申请人约 <b>' + mainPerYear.toLocaleString() + ' 人/年</b>。</p>' +
-    '<p><span class="step">③ 相除得到大致年数</span><br>' +
-      queueAhead.toLocaleString() + ' 人 ÷ ' + mainPerYear.toLocaleString() + ' 人/年 ≈ <b>' + yearsEst +
-      ' 年</b>，这是一个粗略的中心估计。</p>' +
-    '<p><span class="step">④ 加入真实节奏与不确定性</span><br>' +
-      '实际发放并不匀速：财年前几个月发得猛、后段收紧；每年 10 月新财年配额释放时，排期常出现"跳进"（约四分之一的年份是大跳）；再叠加随机波动。工具据此跑 <b>500 次蒙特卡洛模拟</b>，记录每条路径里排期追上你 PD 的时间，取这些时间的分布，得到 <b>快 / 中 / 慢</b> 三档预测与置信区间。</p>' +
-    '<p class="explain-note">以上为基于公开数据的统计估算，非官方、非法律意见。配额政策、行政命令或申请人行为变化都会改变真实结果。</p>';
+    '<p>本工具不外推历史趋势线，而是基于签证供需关系建模，分四步代入你的数字推算：</p>' +
+    '<p><span class="step">① 估算队列长度</span><br>' +
+      '当前裁定日为 <b>' + formatDate(cutoff) + '</b>，你的优先日为 <b>' + formatDate(pd) + '</b>，相差 <b>' +
+      gapDays.toLocaleString() + ' 天</b>。以该时段的排队密度（约 ' + densityRound +
+      ' 人/天）估算，你前方约有 <b>' + queueAhead.toLocaleString() + ' 名主申请人</b>。</p>' +
+    '<p><span class="step">② 估算年消化量</span><br>' +
+      '年度可用签证数 ≈ 法定配额 ' + currentParams.chinaBaseQuota.toLocaleString() + ' ' + spillStr +
+      ' 跨国别/类别溢出 = <b>' + totalSupply.toLocaleString() + ' 个</b>。按家庭系数（平均 ' + fm +
+      ' 人/主申）折算，约可消化 <b>' + mainPerYear.toLocaleString() + ' 名主申请人/年</b>。</p>' +
+    '<p><span class="step">③ 得到中心估计</span><br>' +
+      queueAhead.toLocaleString() + ' ÷ ' + mainPerYear.toLocaleString() + ' ≈ <b>' + yearsEst +
+      ' 年</b>，作为粗略中心值。</p>' +
+    '<p><span class="step">④ 蒙特卡洛模拟</span><br>' +
+      '实际推进非匀速：财年前段发放较快、后段趋缓；每年 10 月新财年配额释放时常见"跳进"（约四分之一年份为大幅跳进）；叠加随机扰动。据此运行 <b>500 次蒙特卡洛模拟</b>，取各路径裁定日追上你优先日的时间分布，输出 <b>快（P10）/ 中（P50）/ 慢（P90）</b> 三档及置信区间。</p>';
 }
 
 function renderParams() {
@@ -1507,6 +1506,15 @@ document.addEventListener('click', function(e) {
 });
 
 setupChartTooltip();
+
+// 底部并列标签切换
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'tab-' + tab); });
+  });
+});
 
 (function() {
   var modal = document.getElementById('welcome-modal');
