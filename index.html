@@ -73,6 +73,7 @@
   .result-lead { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
   .result-date { display: block; font-size: 34px; line-height: 1.1; font-weight: 800; color: var(--blue); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
   .result-sub { display: block; font-size: 13px; color: var(--text2); margin-top: 6px; }
+  .result-note { display: block; font-size: 11px; color: var(--text3); margin-top: 8px; line-height: 1.4; }
   /* 快/中/慢 分段控件 */
   .result-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--blue-bg); padding: 4px; border-radius: 12px; margin-bottom: 12px; }
   .stat { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 4px; border-radius: 9px; cursor: pointer; border: none; background: transparent; transition: background 0.15s, box-shadow 0.15s; }
@@ -290,6 +291,7 @@
       <div class="result-lead">预计排到</div>
       <span class="result-date" id="hero-value">--</span>
       <span class="result-sub" id="hero-sub">距今约 --</span>
+      <span class="result-note">仅供参考的统计估算 · 非官方、非法律建议 · 以官方公告为准</span>
     </div>
     <div class="result-chips">
       <span class="stat green" data-pct="p10"><small>快</small> <b id="stat-p10">--</b></span>
