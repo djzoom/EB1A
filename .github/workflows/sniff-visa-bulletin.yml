@@ -8,8 +8,10 @@ on:
     - cron: '*/30 16-23 8-17 * *'   # 美东当日午后~晚（UTC 同日）
     - cron: '*/30 0 9-18 * *'       # 冬令时傍晚溢出到 UTC 次日 0 点
 
+# 命中后不再直接写 main，而是开 PR 待人工复核，避免误报数据自动上线/打包。
 permissions:
   contents: write
+  pull-requests: write
 
 # 让 checkout/setup-python 用 Node 24 运行，消除 Node 20 弃用警告
 env:
@@ -18,8 +20,6 @@ env:
 jobs:
   sniff:
     runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -30,43 +30,27 @@ jobs:
       - name: Sniff for new visa bulletin
         run: python scripts/sniff_visa_bulletin.py
 
-      - name: Commit if changed
-        id: commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/release_log.json index.html
-          if git diff --cached --quiet; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "无更新"
-          else
-            git commit -m "Auto: visa bulletin update $(date -u +%Y-%m-%d)"
-            git push
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
+      # 探测器若改动了数据，则开一个 PR；无改动时本步骤静默跳过（不建 PR）。
+      # 合并 PR → push 到 main → 由 deploy-pages.yml 自动部署、package-offline.yml 自动重打包。
+      - name: Open review PR if changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: |
+            data/release_log.json
+            index.html
+          branch: auto/visa-bulletin-update
+          delete-branch: true
+          commit-message: "Auto: visa bulletin update"
+          title: "🔎 探测到新签证公告，待人工复核"
+          body: |
+            探测器检测到可能的新一期签证公告，已自动更新 `data/release_log.json` 与 `index.html`。
 
-  # 仅在 sniff 真正更新了数据时才部署（避免空跑也挂上 github-pages 环境标记）
-  deploy:
-    needs: sniff
-    if: needs.sniff.outputs.changed == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main          # 取 sniff 刚 push 的最新提交
-      - run: mkdir -p _site && cp index.html manifest.json sw.js icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png _site/
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-      - id: deployment
-        uses: actions/deploy-pages@v4
+            ⚠️ **请先人工核对数据是否正确**（避免法律新闻误报、日期抓错）：
+            - 看本 PR diff 里的 `fad`（表A）/`dff`（表B）日期是否与官方公告一致；
+            - `data/release_log.json` 的 `note` 字段说明了命中来源。
+
+            确认无误后合并到 `main` —— 网页会自动部署、离线包会自动重新打包并刷新下载链接。
+            若是误报，直接关闭本 PR 即可，线上数据不受影响。
+          labels: |
+            visa-bulletin
+            needs-review
