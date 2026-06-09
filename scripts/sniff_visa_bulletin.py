@@ -48,8 +48,8 @@ FED_HOLIDAYS = {
     "2027-07-05", "2027-09-06", "2027-10-11", "2027-11-11", "2027-11-25", "2027-12-24",
 }
 
-# 冷启动默认高概率窗口（无足够历史时用）
-DEFAULT_DAY_LO, DEFAULT_DAY_HI = 9, 16
+# 冷启动默认高概率窗口（无足够历史时用）。日窗放宽到 8–20：防 DOS 偶发晚发(>16号)整月漏抓。
+DEFAULT_DAY_LO, DEFAULT_DAY_HI = 8, 20
 DEFAULT_HOUR_LO, DEFAULT_HOUR_HI = 12, 20   # 美东 12:00–20:00
 MIN_RECORDS_TO_TUNE = 3
 
