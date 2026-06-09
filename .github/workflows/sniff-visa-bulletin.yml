@@ -4,7 +4,11 @@ on:
   workflow_dispatch:        # 手动触发
     inputs:
       force:
-        description: '跳过时间门控，强制探测一次（调试/首次运行用）'
+        description: '跳过时间门控，强制探测下一期一次（调试/首次运行用）'
+        type: boolean
+        default: false
+      selftest:
+        description: '抓取已发布的当前那期，校验解析器是否正确（不写文件/不开 PR）'
         type: boolean
         default: false
   schedule:
@@ -33,7 +37,7 @@ jobs:
           python-version: '3.11'
 
       - name: Sniff for new visa bulletin
-        run: python scripts/sniff_visa_bulletin.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }}
+        run: python scripts/sniff_visa_bulletin.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }} ${{ (github.event_name == 'workflow_dispatch' && inputs.selftest) && '--selftest' || '' }}
 
       # 探测器若改动了数据，则开一个 PR；无改动时本步骤静默跳过（不建 PR）。
       # 合并 PR → push 到 main → 由 deploy-pages.yml 自动部署、package-offline.yml 自动重打包。
