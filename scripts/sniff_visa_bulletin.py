@@ -119,40 +119,54 @@ def fetch(url):
         return r.getcode(), r.read().decode("utf-8", "ignore")
 
 
-def parse_eb1_china(html):
-    """尽力解析 EB-1 中国大陆 表A/表B。返回 (fad, dff) 形如 '2023-04-01' 或 None。
-    注：bulletin 表格 HTML 结构可能调整；首次真实运行后按需校准本函数。"""
+def _china_from_row(seg):
+    """从某 preference 行文本里取第 2 列(中国)的日期。列顺序 All/CHINA/India/Mexico/Philippines。
+    返回 'YYYY-MM-DD' / 'current' / None。日期格式如 01APR23 / 01 APR 23 / C。"""
+    mon = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+           "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+    vals = []
+    for d, mo, yy, cur in re.findall(r"(\d{2})\s*([A-Za-z]{3})\s*(\d{2})|\b([Cc])\b", seg):
+        if cur:
+            vals.append("current")
+        else:
+            m = mon.get(mo.upper())
+            if m:
+                vals.append(f"20{yy}-{m:02d}-{int(d):02d}")
+    return vals[1] if len(vals) >= 2 else None
+
+
+def parse_eb1_china(html, debug=False):
+    """解析 EB-1 中国大陆 表A(Final Action)/表B(Dates for Filing)，返回 (fad, dff)。
+    锚定『...Employment...』表头以避开前面的 Family-Sponsored 表；preference 行用
+    『1st』标号(仅出现在 employment 表)。结构若再变，看 selftest 的 [debug] 段调正则。"""
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text)
 
-    def grab(after_label):
-        # 在 "Employment-based ... 1st ..." 行附近找中国列的日期；
-        # bulletin 日期格式如 "01APR23" 或 "01 APR 23"。
-        m = re.search(after_label + r".{0,400}?\b1st\b(.{0,200})", text, re.I)
+    def grab(label):
+        m = re.search(label + r".{0,80}?Employment", text, re.I)
         if not m:
+            if debug:
+                print(f"[debug] 未找到 {label!r} 的 Employment 表头")
             return None
-        seg = m.group(1)
-        dates = re.findall(r"(\d{2})\s*([A-Z]{3})\s*(\d{2})|(C\b|Current)", seg, re.I)
-        # 列顺序: All / CHINA / INDIA / MEXICO / PHILIPPINES → 取第 2 个（China）
-        vals = []
-        for d, mo, yy, cur in dates:
-            if cur:
-                vals.append("current")
-            elif d:
-                vals.append((d, mo, yy))
-        if len(vals) >= 2:
-            v = vals[1]
-            if v == "current":
-                return "current"
-            d, mo, yy = v
-            mon = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
-                   "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}.get(mo.upper())
-            if mon:
-                return f"20{yy}-{mon:02d}-{int(d):02d}"
-        return None
+        seg = text[m.end(): m.end() + 700]
+        m2 = re.search(r"\b1st\b(.{0,160})", seg, re.I)
+        if debug:
+            print(f"[debug] {label!r} 表头@{m.start()} → 1st 段: {(m2.group(1)[:90] if m2 else '未找到 1st')!r}")
+        return _china_from_row(m2.group(1)) if m2 else None
 
     fad = grab(r"Final Action Date")
     dff = grab(r"Dates for Filing")
+
+    # 兜底：employment 锚定失败时，用全文里第 1/2 个 '1st' 行(FA 在前、DF 在后)
+    if fad is None or dff is None:
+        rows = re.findall(r"\b1st\b(.{0,160})", text, re.I)
+        if debug:
+            print(f"[debug] 兜底：全文 '1st' 行数={len(rows)}")
+        if fad is None and len(rows) >= 1:
+            fad = _china_from_row(rows[0])
+        if dff is None and len(rows) >= 2:
+            dff = _china_from_row(rows[1])
+
     return fad, dff
 
 
@@ -216,7 +230,7 @@ def selftest():
         return "error", f"selftest 抓取 {vy}-{vm:02d} 返回 HTTP {e.code}（{'runner 被拦' if e.code == 403 else '该期 URL 异常'}）"
     except Exception as e:
         return "error", f"selftest 抓取失败：{type(e).__name__}: {str(e)[:120]}"
-    fad, dff = parse_eb1_china(html)
+    fad, dff = parse_eb1_china(html, debug=True)
     old_a, old_b = read_current_ab()
     ok = (fad == old_a and dff == old_b)
     detail = (f"selftest {vy}-{vm:02d}：解析 A={fad} B={dff} ／ index.html 现值 A={old_a} B={old_b} "
