@@ -11,6 +11,10 @@ on:
         description: '抓取已发布的当前那期，校验解析器是否正确（不写文件/不开 PR）'
         type: boolean
         default: false
+      backfill:
+        description: '用 Wayback 回填历史释出日到 release_log（开 PR 待复核）'
+        type: boolean
+        default: false
   schedule:
     # 探测间隔 = 每 30 分钟，仅在高概率 UTC 时段（覆盖美东 12:00–20:00，含夏/冬令时）。
     # 脚本再按美东时间精确门控（工作日 / 非假日 / 高概率日 / 高概率时段 / 命中即停）。
@@ -36,12 +40,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Sniff for new visa bulletin
-        run: python scripts/sniff_visa_bulletin.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }} ${{ (github.event_name == 'workflow_dispatch' && inputs.selftest) && '--selftest' || '' }}
+      # 三种模式：backfill(回填历史) / selftest+force(调试) / 默认(定时探测)。
+      - name: Sniff / selftest / backfill
+        run: |
+          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.backfill }}" = "true" ]; then
+            python scripts/backfill_release_dates.py --write
+          else
+            python scripts/sniff_visa_bulletin.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }} ${{ (github.event_name == 'workflow_dispatch' && inputs.selftest) && '--selftest' || '' }}
+          fi
 
-      # 探测器若改动了数据，则开一个 PR；无改动时本步骤静默跳过（不建 PR）。
+      # 数据若改动则开 PR；无改动时静默跳过（不建 PR）。
       # 合并 PR → push 到 main → 由 deploy-pages.yml 自动部署、package-offline.yml 自动重打包。
       - name: Open review PR if changed
+        id: cpr
         uses: peter-evans/create-pull-request@v7
         with:
           add-paths: |
@@ -63,3 +74,18 @@ jobs:
           labels: |
             visa-bulletin
             needs-review
+
+      # 仅当真的新开了复核 PR 时推送 Bark 到手机（需在仓库 Secrets 配 BARK_KEY）。
+      - name: Notify via Bark on new review PR
+        if: steps.cpr.outputs.pull-request-operation == 'created'
+        env:
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+        run: |
+          if [ -z "$BARK_KEY" ]; then
+            echo "未配置 BARK_KEY secret，跳过推送"; exit 0
+          fi
+          curl -fsS -X POST "https://api.day.app/push" \
+            -H "Content-Type: application/json" \
+            -d "{\"device_key\":\"$BARK_KEY\",\"title\":\"EB1A 新签证公告待复核\",\"body\":\"探测器开了复核 PR，请核对 fad/dff 后合并\",\"group\":\"EB1A\",\"url\":\"$PR_URL\"}" \
+            || echo "Bark 推送失败（忽略，不影响主流程）"
