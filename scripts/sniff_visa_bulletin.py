@@ -191,6 +191,40 @@ def plausible_cutoff(new_s, old_s):
     return True, "ok"
 
 
+def read_vb_month():
+    """从 index.html 读当前已发布公告对应的 (year, month)。"""
+    try:
+        with open(INDEX, encoding="utf-8") as f:
+            s = f.read()
+        m = re.search(r"var VB_YEAR = (\d+), VB_MON = (\d+);", s)
+        return (int(m.group(1)), int(m.group(2))) if m else (None, None)
+    except Exception:
+        return None, None
+
+
+def selftest():
+    """抓取『已发布的当前那期』公告，跑 parse_eb1_china 并与 index.html 现存值对比，
+    验证解析器对真实 HTML 端到端正确。不写任何文件。返回 (status, detail)。"""
+    vy, vm = read_vb_month()
+    if not vy:
+        return "error", "selftest: 读不到 VB_YEAR/VB_MON"
+    url = bulletin_url(vy, vm)
+    print(f"[selftest] 抓取已发布的 {vy}-{vm:02d} 公告校验解析器：{url}")
+    try:
+        code, html = fetch(url)
+    except urllib.error.HTTPError as e:
+        return "error", f"selftest 抓取 {vy}-{vm:02d} 返回 HTTP {e.code}（{'runner 被拦' if e.code == 403 else '该期 URL 异常'}）"
+    except Exception as e:
+        return "error", f"selftest 抓取失败：{type(e).__name__}: {str(e)[:120]}"
+    fad, dff = parse_eb1_china(html)
+    old_a, old_b = read_current_ab()
+    ok = (fad == old_a and dff == old_b)
+    detail = (f"selftest {vy}-{vm:02d}：解析 A={fad} B={dff} ／ index.html 现值 A={old_a} B={old_b} "
+              f"→ {'✅ 解析器对真实 HTML 正确' if ok else '❌ 不一致，需校准 parse_eb1_china'}")
+    print(f"[selftest] {detail}")
+    return ("hit" if ok else "error"), detail
+
+
 def write_run_summary(status, detail):
     """把本次运行结果写一行到 GitHub Actions 运行摘要（调试/首次运行可视化），并打印到日志。
     零仓库改动：仅在 CI 设置了 GITHUB_STEP_SUMMARY 时落盘。"""
@@ -279,9 +313,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--selftest", action="store_true",
+                    help="抓取已发布的当前那期，验证 parse_eb1_china 对真实 HTML 是否正确；不写文件")
     args = ap.parse_args()
 
-    status, detail = run(args)
+    if args.selftest:
+        status, detail = selftest()
+    else:
+        status, detail = run(args)
     write_run_summary(status, detail)
 
 
