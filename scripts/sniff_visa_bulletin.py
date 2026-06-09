@@ -191,12 +191,23 @@ def plausible_cutoff(new_s, old_s):
     return True, "ok"
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--force", action="store_true")
-    args = ap.parse_args()
+def write_run_summary(status, detail):
+    """把本次运行结果写一行到 GitHub Actions 运行摘要（调试/首次运行可视化），并打印到日志。
+    零仓库改动：仅在 CI 设置了 GITHUB_STEP_SUMMARY 时落盘。"""
+    line = f"- **{now_et():%Y-%m-%d %H:%M} ET** · `{status}` · {detail}"
+    print(f"[summary] {line}")
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception as e:
+        print(f"[summary] 写入运行摘要失败: {type(e).__name__}: {e}")
 
+
+def run(args):
+    """执行一次探测，返回 (status, detail) 供运行摘要使用。"""
     log = load_log()
     t = now_et()
 
@@ -206,12 +217,12 @@ def main():
 
     if any(r.get("bulletin") == tag for r in log):
         print(f"[skip] {tag} 已抓到，命中即停。")
-        return
+        return "skip", f"{tag} 已抓到，命中即停"
 
     ok, reason = gate(log, force=args.force)
     if not ok:
         print(f"[gate] 跳过：{reason}（ET {t:%Y-%m-%d %H:%M}）")
-        return
+        return "skip", f"门控跳过：{reason}"
     print(f"[gate] {reason} → 探测 {tag}")
 
     url = bulletin_url(ty, tm)
@@ -220,12 +231,12 @@ def main():
     except urllib.error.HTTPError as e:
         if e.code == 404:
             print(f"[probe] {tag} 尚未发布 (404)")
-            return
+            return "404", f"{tag} 尚未发布（404，URL 可达）"
         print(f"[probe] HTTP {e.code}（gov 可能屏蔽本环境；Actions runner 通常可访问）")
-        return
+        return "error", f"探测 {tag} 返回 HTTP {e.code}"
     except Exception as e:
         print(f"[probe] 失败 {type(e).__name__}: {str(e)[:160]}")
-        return
+        return "error", f"探测 {tag} 失败：{type(e).__name__}: {str(e)[:120]}"
 
     print(f"[hit] {tag} 已发布！{url}")
     fad, dff = parse_eb1_china(html)
@@ -237,7 +248,7 @@ def main():
 
     if args.dry_run:
         print("[dry-run] 不写文件。记录将是:", json.dumps(rec, ensure_ascii=False))
-        return
+        return "hit", f"{tag} 命中（dry-run，未写文件）表A={fad} 表B={dff}"
 
     log.append(rec)
     save_log(log)
@@ -251,14 +262,27 @@ def main():
         if not (ok_a and ok_b):
             print(f"[guard] 解析结果未通过理智门禁，放弃写入（疑似解析错误）。表A: {why_a}；表B: {why_b}")
             print("        已记录命中时间，请人工核对 parse_eb1_china 与官方公告后再更新。")
-        else:
-            try:
-                update_index(ty, tm, fad, dff, t.strftime("%Y-%m-%d"))
-                print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 置为待确认(?)")
-            except Exception as e:
-                print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
+            return "hit", f"{tag} 命中但未过理智门禁，仅记录命中。表A: {why_a}；表B: {why_b}"
+        try:
+            update_index(ty, tm, fad, dff, t.strftime("%Y-%m-%d"))
+            print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 置为待确认(?)")
+            return "hit", f"{tag} 命中并已写回 index.html：表A={fad} 表B={dff}（待 PR 复核）"
+        except Exception as e:
+            print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
+            return "hit", f"{tag} 命中但写回失败：{type(e).__name__}: {e}"
     else:
         print("[index] 解析不完整，仅记录命中时间；请检查 parse_eb1_china 是否需按真实 HTML 调整。")
+        return "hit", f"{tag} 命中但解析不完整（表A={fad} 表B={dff}），仅记录命中，请核对 parse_eb1_china"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--force", action="store_true")
+    args = ap.parse_args()
+
+    status, detail = run(args)
+    write_run_summary(status, detail)
 
 
 def update_index(ty, tm, fad, dff, released):
