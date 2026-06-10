@@ -9,9 +9,12 @@
 
 需在能访问 web.archive.org 的环境运行（GitHub runner / 有外网的本机；本仓库沙箱会 403）。
 
+注：本工具为「分析用」——不写 release_log。日窗已固定为安全网(见 sniffer 的
+DEFAULT_DAY_LO/HI)，核心高发区固化为 CORE_DAY_LO/HI；本脚本用于定期复核这些常量
+是否仍贴合最新历史分布。
+
 用法：
-  python scripts/backfill_release_dates.py            # 仅分析并打印推荐窗口/频率
-  python scripts/backfill_release_dates.py --write    # 并把 day 样本写入 release_log（已存在的月份跳过）
+  python scripts/backfill_release_dates.py            # 拉 Wayback 历史并打印推荐窗口/核心区
   python scripts/backfill_release_dates.py --months 30
 """
 import argparse
@@ -26,7 +29,7 @@ import urllib.error
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sniff_visa_bulletin import bulletin_url, load_log, save_log, ET
+from sniff_visa_bulletin import bulletin_url, ET
 
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
 CDX = ("https://web.archive.org/cdx/search/cdx?url={url}"
@@ -62,7 +65,6 @@ def pct(sorted_vals, p):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--months", type=int, default=24)
-    ap.add_argument("--write", action="store_true")
     args = ap.parse_args()
 
     now = datetime.now(ET) if ET else datetime.utcnow()
@@ -108,27 +110,9 @@ def main():
     print(f"   活跃时段 DEFAULT_HOUR_LO/HI = 12, 18           （DOS 多在午后上线；真实命中后自动收窄）")
     print(f"   探测频率 = 活跃窗口内每 15 分钟一次            （窗口外门控零请求）")
     print(f"   预计请求量 ≤ {24 * span} 次/期(最坏，整窗未命中)；命中即停后期望 ≈ {24 * exp_days} 次/期")
-    print(f"   → 对应 cron: 仅覆盖 ET12–18 的 UTC 时段、日范围 {rec_lo}-{rec_hi}（含跨日溢出 ±1）")
-
-    if args.write:
-        log = load_log()
-        have = {r.get("bulletin") for r in log}
-        added = 0
-        for s in samples:
-            if s["bulletin"] in have:
-                continue
-            et = s["et"]
-            log.append({"bulletin": s["bulletin"],
-                        "detected_et": et.strftime("%Y-%m-%d %H:%M"),
-                        "day": et.day, "hour": None, "weekday": et.weekday(),
-                        "fad": None, "dff": None,
-                        "note": "backfill: wayback first-snapshot date (approx; hour omitted)"})
-            added += 1
-        log.sort(key=lambda r: r.get("bulletin", ""))
-        save_log(log)
-        print(f"\n[write] 并入 release_log：新增 {added} 条（已存在的月份跳过）。")
-    else:
-        print("\n(仅分析。加 --write 才把 day 样本并入 release_log。)")
+    print(f"   建议核心高发区 CORE_DAY_LO/HI = {max(1, p10 - 1)}, {min(28, p90 + 1)}（密探）；"
+          f"安全窗 DEFAULT_DAY 应更宽以兜住尾部晚发")
+    print("\n(分析用：不写 release_log。如发现分布与现有 CORE_DAY/安全窗常量明显偏离，再据此手动调常量。)")
 
 
 if __name__ == "__main__":
