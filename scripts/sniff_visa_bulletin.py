@@ -417,6 +417,8 @@ def update_index(ty, tm, fad, dff, detected):
                lambda m: m.group(1) + str(ty) + m.group(2) + str(tm) + m.group(3), s, count=1)
     s = re.sub(r"(var VB_RELEASED = ')[^']*(')", lambda m: m.group(1) + released + m.group(2), s, count=1)
     s = re.sub(r"(var VB_RELEASED_TS = )\d+", lambda m: m.group(1) + str(released_ms), s, count=1)
+    # 真实探测到的时刻是精确的 → 去掉「约」
+    s = re.sub(r"(var VB_RELEASED_EST = )(?:true|false)", lambda m: m.group(1) + "false", s, count=1)
     # A2) 本月递交开放哪张表是 USCIS 另发的公告，探测器无从得知 → 置为待确认 '?'
     s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + "?" + m.group(2), s, count=1)
 
