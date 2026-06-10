@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python (for V22)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Node (in case)
+node_modules/
+package-lock.json
+
+# Data (processed/derived are regenerated)
+*.parquet
+data/processed/
+data/derived/
+
+# Build
+dist/
+build/
+*.log

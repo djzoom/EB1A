@@ -1,0 +1,77 @@
+name: Package Offline Build
+
+# 每当 index.html（含 CI 自动更新的排期数据）或图标/打包脚本变更推到 main，
+# 自动打包离线单文件并发布为 GitHub Release 资产，提供稳定下载链接：
+#   https://github.com/djzoom/eb1a/releases/download/offline-latest/EB1A-offline.zip
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'icon-192.png'
+      - 'scripts/build_offline.py'
+      - '.github/workflows/package-offline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build offline single-file
+        run: python scripts/build_offline.py
+
+      - name: Read bulletin month
+        id: vb
+        run: |
+          MONTH=$(grep -oP "var VB_MONTH = '\K[^']*" index.html || echo "")
+          echo "month=${MONTH}" >> "$GITHUB_OUTPUT"
+
+      - name: Make distributable zip
+        run: |
+          cat > dist/使用说明.txt << 'TXT'
+          EB-1A 中国申请人绿卡排期预测器（离线版）
+
+          【如何使用】
+          用浏览器打开 EB1A.html 即可（双击文件，或拖进 Chrome / Edge / Safari）。
+          完全离线运行，无需联网、无需安装。输入你的优先日（Priority Date），
+          即可估算大约何时排到，并给出快 / 中 / 慢三档预测与置信区间。
+
+          【关于数据】
+          本文件为离线快照，签证公告数据截至打包当月，不会自动同步未来公告。
+          如需最新数据，请获取新一期的离线文件。
+
+          【免责声明】
+          本工具为基于公开数据（USCIS / DOS）的统计估算，仅供参考，
+          不构成法律或移民建议，亦不对预测准确性作任何保证。
+          实际排期以美国国务院官方签证公告为准，重要决策请咨询持牌移民律师。
+          TXT
+          cd dist
+          zip -q EB1A-offline.zip EB1A.html 使用说明.txt
+          ls -la
+
+      - name: Publish to rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: offline-latest
+          name: 离线版（最新快照）
+          body: |
+            EB-1A 排期预测器 · 离线单文件版（双击即用、完全离线）。
+
+            数据快照：${{ steps.vb.outputs.month }}
+            下载 `EB1A-offline.zip`，内含 `EB1A.html` 与使用说明。
+
+            注意：离线文件为月度快照，不会自动同步未来公告。
+          files: dist/EB1A-offline.zip
+          fail_on_unmatched_files: true
