@@ -205,6 +205,34 @@ def plausible_cutoff(new_s, old_s):
     return True, "ok"
 
 
+def _movement(old, new):
+    """新值相对旧值的移动文案：前进/倒退 N 天 / 未动。"""
+    od, nd = parse_iso(old), parse_iso(new)
+    if od and nd:
+        d = (nd - od).days
+        return f"前进{d}天" if d > 0 else (f"倒退{-d}天" if d < 0 else "未动")
+    return "—"
+
+
+def notify_bark(title, body, url="https://github.com/djzoom/EB1A/pulls"):
+    """经 Bark 推送到手机。需环境变量 BARK_KEY；未配置则跳过。返回是否成功。"""
+    key = os.environ.get("BARK_KEY")
+    if not key:
+        print("[bark] 未配置 BARK_KEY，跳过推送")
+        return False
+    payload = json.dumps({"device_key": key, "title": title, "body": body,
+                          "group": "EB1A", "url": url}).encode("utf-8")
+    req = urllib.request.Request("https://api.day.app/push", data=payload,
+                                 headers={"Content-Type": "application/json", "User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            print(f"[bark] 推送成功 HTTP {r.getcode()}")
+        return True
+    except Exception as e:
+        print(f"[bark] 推送失败: {type(e).__name__}: {str(e)[:160]}")
+        return False
+
+
 def read_vb_month():
     """从 index.html 读当前已发布公告对应的 (year, month)。"""
     try:
@@ -252,24 +280,9 @@ def drill():
         vbm = "?"
     title = "EB1A 最新排期报告（演习）"
     body = f"截至 {vbm}：表A(裁定) {a} ／ 表B(递交) {b}。这是演习推送，链路正常 ✅"
-
-    key = os.environ.get("BARK_KEY")
-    if not key:
-        print("[drill] 未配置 BARK_KEY，无法推送。请先在仓库 Settings → Secrets 添加 BARK_KEY。")
-        return "error", "演习失败：未配置 BARK_KEY（请先加 secret）"
-
-    payload = json.dumps({"device_key": key, "title": title, "body": body,
-                          "group": "EB1A", "url": "https://djzoom.github.io/EB1A/"}).encode("utf-8")
-    req = urllib.request.Request("https://api.day.app/push", data=payload,
-                                 headers={"Content-Type": "application/json", "User-Agent": UA})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            code = r.getcode()
-        print(f"[drill] 已发送演习推送 (HTTP {code})：{title} | {body}")
+    if notify_bark(title, body, url="https://djzoom.github.io/EB1A/"):
         return "hit", f"演习推送已发送：{body}"
-    except Exception as e:
-        print(f"[drill] 推送失败：{type(e).__name__}: {str(e)[:160]}")
-        return "error", f"演习推送失败（检查 BARK_KEY 是否正确）：{type(e).__name__}"
+    return "error", "演习推送失败或未配置 BARK_KEY（详见日志）"
 
 
 def write_run_summary(status, detail):
@@ -347,6 +360,10 @@ def run(args):
         try:
             update_index(ty, tm, fad, dff, t.strftime("%Y-%m-%d"))
             print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 置为待确认(?)")
+            # 命中即推送：带具体日期 + 较上期移动天数
+            notify_bark("EB1A 排期更新待复核",
+                        f"{ty}年{tm}月公告：表A(裁定) {fad}（{_movement(old_a, fad)}）"
+                        f" ／ 表B(递交) {dff}（{_movement(old_b, dff)}）。请核对后合并。")
             return "hit", f"{tag} 命中并已写回 index.html：表A={fad} 表B={dff}（待 PR 复核）"
         except Exception as e:
             print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
