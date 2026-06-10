@@ -25,7 +25,7 @@ import re
 import sys
 import urllib.request
 import urllib.error
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 try:
     from zoneinfo import ZoneInfo
@@ -361,7 +361,7 @@ def run(args):
             print("        已记录命中时间，请人工核对 parse_eb1_china 与官方公告后再更新。")
             return "hit", f"{tag} 命中但未过理智门禁，仅记录命中。表A: {why_a}；表B: {why_b}"
         try:
-            update_index(ty, tm, fad, dff, t.strftime("%Y-%m-%d"))
+            update_index(ty, tm, fad, dff, t)
             print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 置为待确认(?)")
             # 命中即推送：带具体日期 + 较上期移动天数
             notify_bark("EB1A 排期更新待复核",
@@ -395,12 +395,17 @@ def main():
     write_run_summary(status, detail)
 
 
-def update_index(ty, tm, fad, dff, released):
+def update_index(ty, tm, fad, dff, detected):
     """把新一期表A/表B 写回 index.html：更新 CUTOFF_DATA、VB_* 公告元信息，并追加 HISTORY/HISTORY_B。
-    released: 本期实际探到/发布的日期，形如 '2026-05-13'。"""
+    detected: 本期探测到的时刻(aware datetime, ET)；既写显示用日期 VB_RELEASED，也写精确时刻 VB_RELEASED_TS。"""
     with open(INDEX, encoding="utf-8") as f:
         s = f.read()
     bull = f"{ty}-{tm:02d}-15"  # 该期对应的 bulletin 月（用 15 号作 x）
+    released = detected.strftime("%Y-%m-%d")
+    if detected.tzinfo is not None:
+        released_ms = int(detected.astimezone(timezone.utc).timestamp() * 1000)
+    else:
+        released_ms = int(detected.timestamp() * 1000)
 
     # 1) 更新 EB-1A CN 的 A/B
     s = re.sub(r"('EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*')[0-9-]+(',\s*B:\s*')[0-9-]+(')",
@@ -411,6 +416,7 @@ def update_index(ty, tm, fad, dff, released):
     s = re.sub(r"(var VB_YEAR = )\d+(, VB_MON = )\d+(;)",
                lambda m: m.group(1) + str(ty) + m.group(2) + str(tm) + m.group(3), s, count=1)
     s = re.sub(r"(var VB_RELEASED = ')[^']*(')", lambda m: m.group(1) + released + m.group(2), s, count=1)
+    s = re.sub(r"(var VB_RELEASED_TS = )\d+", lambda m: m.group(1) + str(released_ms), s, count=1)
     # A2) 本月递交开放哪张表是 USCIS 另发的公告，探测器无从得知 → 置为待确认 '?'
     s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + "?" + m.group(2), s, count=1)
 

@@ -437,7 +437,8 @@ var HISTORY_B = [
 // 2026年6月：USCIS 要求用表A（Final Action），已连续第二个月
 var VB_MONTH = '2026年6月';      // 最新已发布公告对应的月份
 var VB_YEAR = 2026, VB_MON = 6;  // 同上，数值形式（用于推下月）
-var VB_RELEASED = '2026-05-13';  // 该期实际发布日期（探测器命中后会更新）
+var VB_RELEASED = '2026-05-13';  // 该期发布日期（显示用；探测器命中后更新）
+var VB_RELEASED_TS = 0;          // 该期精确发布/探测时刻（epoch 毫秒, UTC）；0=未知则退回按日期算
 var FILING_CHART = 'A'; // 'A'=用表A递交；'B'=用表B递交；'?'=自动更新后待 USCIS 确认
 function chartLabel() { return (FILING_CHART === 'A' || FILING_CHART === 'B') ? '表' + FILING_CHART : '待确认'; }
 
@@ -1453,9 +1454,23 @@ function updateBulletinDot() {
   else if (dot) { dot.parentNode.removeChild(dot); }
 }
 // 发布相对时间：<24h 只显示小时；24–72h 显示小时+天数(1位小数)；>72h 只显示天数
-function relReleaseText(releasedStr) {
-  var rel = new Date(releasedStr).getTime();
-  if (isNaN(rel)) return '';
+function releasedMs() {
+  if (typeof VB_RELEASED_TS === 'number' && VB_RELEASED_TS > 0) return VB_RELEASED_TS;
+  var t = new Date(VB_RELEASED).getTime();
+  return isNaN(t) ? 0 : t;
+}
+function releasedDisplay() {
+  if (typeof VB_RELEASED_TS === 'number' && VB_RELEASED_TS > 0) {
+    try {
+      return new Date(VB_RELEASED_TS).toLocaleString('zh-CN', { timeZone: 'America/New_York', hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' ET';
+    } catch (e) {}
+  }
+  return VB_RELEASED;
+}
+function relReleaseText() {
+  var rel = releasedMs();
+  if (!rel) return '';
   var h = (Date.now() - rel) / 3600000;
   if (h < 0) h = 0;
   if (h < 1) return '刚刚发布';
@@ -1488,7 +1503,7 @@ function renderBulletinPanel() {
     '<div class="vb-latest' + (isNew ? ' is-new' : '') + '">' +
     '<p style="margin:0"><span class="step">最新公告 · ' + VB_MONTH + '</span>' +
       (isNew ? '<span class="vb-badge">🆕 有新公告</span>' : '') + '<br>' +
-      '发布日期：<b>' + VB_RELEASED + '</b> <span style="color:var(--text3)">· ' + relReleaseText(VB_RELEASED) + '</span><br>' +
+      '发布：<b>' + releasedDisplay() + '</b> <span style="color:var(--text3)">· ' + relReleaseText() + '</span><br>' +
       '表A 最终裁定：<b>' + ymd(aNow) + '</b>　·　表B 递交：<b>' + ymd(bNow) + '</b><br>' +
       '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p></div>' +
     '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
