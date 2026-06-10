@@ -438,7 +438,8 @@ var HISTORY_B = [
 var VB_MONTH = '2026年6月';      // 最新已发布公告对应的月份
 var VB_YEAR = 2026, VB_MON = 6;  // 同上，数值形式（用于推下月）
 var VB_RELEASED = '2026-05-13';  // 该期发布日期（显示用；探测器命中后更新）
-var VB_RELEASED_TS = 0;          // 该期精确发布/探测时刻（epoch 毫秒, UTC）；0=未知则退回按日期算
+var VB_RELEASED_TS = 1778698800000; // 该期发布/探测时刻（epoch 毫秒, UTC）；0=未知则退回按日期算
+var VB_RELEASED_EST = true;      // true=该时刻为估计值(显示加「约」)；探测器命中真实时刻时置 false
 var FILING_CHART = 'A'; // 'A'=用表A递交；'B'=用表B递交；'?'=自动更新后待 USCIS 确认
 function chartLabel() { return (FILING_CHART === 'A' || FILING_CHART === 'B') ? '表' + FILING_CHART : '待确认'; }
 
@@ -1462,8 +1463,9 @@ function releasedMs() {
 function releasedDisplay() {
   if (typeof VB_RELEASED_TS === 'number' && VB_RELEASED_TS > 0) {
     try {
-      return new Date(VB_RELEASED_TS).toLocaleString('zh-CN', { timeZone: 'America/New_York', hour12: false,
+      var t = new Date(VB_RELEASED_TS).toLocaleString('zh-CN', { timeZone: 'America/New_York', hour12: false,
         year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' ET';
+      return (typeof VB_RELEASED_EST !== 'undefined' && VB_RELEASED_EST ? '约 ' : '') + t;
     } catch (e) {}
   }
   return VB_RELEASED;
