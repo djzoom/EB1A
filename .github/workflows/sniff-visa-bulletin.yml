@@ -85,3 +85,11 @@ jobs:
           labels: |
             visa-bulletin
             needs-review
+
+      # 仅当"确实新建了复核 PR"时推送一次 Bark（避免合并前每次探测重复命中刷屏）。需配 BARK_KEY。
+      # 通知正文 BARK_BODY 由上面的 sniff 步骤经 $GITHUB_ENV 传入（带具体日期+移动天数）。
+      - name: Notify via Bark on new review PR
+        if: steps.cpr.outputs.pull-request-operation == 'created'
+        env:
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+        run: python scripts/sniff_visa_bulletin.py --send-bark

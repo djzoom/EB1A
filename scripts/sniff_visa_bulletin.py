@@ -236,6 +236,18 @@ def notify_bark(title, body, url="https://github.com/djzoom/EB1A/pulls"):
         return False
 
 
+def _emit_env(key, val):
+    """把变量写进 $GITHUB_ENV，供后续 workflow 步骤读取(命中通知正文)。"""
+    p = os.environ.get("GITHUB_ENV")
+    if not p:
+        return
+    try:
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(f"{key}<<__EOF__\n{val}\n__EOF__\n")
+    except Exception as e:
+        print(f"[env] 写 {key} 失败: {type(e).__name__}: {e}")
+
+
 def read_vb_month():
     """从 index.html 读当前已发布公告对应的 (year, month)。"""
     try:
@@ -363,10 +375,11 @@ def run(args):
         try:
             update_index(ty, tm, fad, dff, t)
             print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 置为待确认(?)")
-            # 命中即推送：带具体日期 + 较上期移动天数
-            notify_bark("EB1A 排期更新待复核",
-                        f"{ty}年{tm}月公告：表A(裁定) {fad}（{_movement(old_a, fad)}）"
-                        f" ／ 表B(递交) {dff}（{_movement(old_b, dff)}）。请核对后合并。")
+            # 把通知正文写进 GITHUB_ENV；由 workflow 在"确实新建了复核 PR"时才推送一次，
+            # 避免合并前每次探测重复命中导致 Bark 刷屏。
+            _emit_env("BARK_BODY",
+                      f"{ty}年{tm}月公告：表A(裁定) {fad}（{_movement(old_a, fad)}）"
+                      f" ／ 表B(递交) {dff}（{_movement(old_b, dff)}）。请核对后合并。")
             return "hit", f"{tag} 命中并已写回 index.html：表A={fad} 表B={dff}（待 PR 复核）"
         except Exception as e:
             print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
@@ -384,9 +397,15 @@ def main():
                     help="抓取已发布的当前那期，验证 parse_eb1_china 对真实 HTML 是否正确；不写文件")
     ap.add_argument("--drill", action="store_true",
                     help="演习：发一条测试 Bark 推送(用当前排期快照)验证推送链路；需环境变量 BARK_KEY")
+    ap.add_argument("--send-bark", action="store_true",
+                    help="读取环境变量 BARK_BODY 发一条命中通知(由 workflow 在新建复核 PR 后调用)")
     args = ap.parse_args()
 
-    if args.drill:
+    if args.send_bark:
+        body = os.environ.get("BARK_BODY") or "探测到新签证公告，已开复核 PR，请核对后合并。"
+        ok = notify_bark("EB1A 排期更新待复核", body)
+        status, detail = ("hit" if ok else "error"), ("Bark 已发送" if ok else "Bark 未发送(未配置/失败)")
+    elif args.drill:
         status, detail = drill()
     elif args.selftest:
         status, detail = selftest()
