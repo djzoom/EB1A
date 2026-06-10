@@ -48,13 +48,13 @@ FED_HOLIDAYS = {
     "2027-07-05", "2027-09-06", "2027-10-11", "2027-11-11", "2027-11-25", "2027-12-24",
 }
 
-# 冷启动安全日窗（无足够历史时用）。7–20：覆盖历史释出日 8–17 ±缓冲，绝不漏抓。
-DEFAULT_DAY_LO, DEFAULT_DAY_HI = 7, 20
+# 固定安全日窗（不因有限历史收窄，防早发/晚发漏抓）。7–26：历史多在 8–17，但偶有 20 号及其后。
+DEFAULT_DAY_LO, DEFAULT_DAY_HI = 7, 26
 DEFAULT_HOUR_LO, DEFAULT_HOUR_HI = 12, 20   # 美东 12:00–20:00（DOS 多在午后上线）
 MIN_RECORDS_TO_TUNE = 3
 # 分层探测：核心日(历史释出高发 10–17)全时段密探；窗口内其余为肩部日，仅少数时点稀疏探，省请求。
 CORE_DAY_LO, CORE_DAY_HI = 10, 17
-SHOULDER_HOURS = (13, 16)   # 肩部日只在这些 ET 整点(及其 :30)探测
+SHOULDER_HOURS = (13, 16, 19)   # 肩部日只在这些 ET 整点(及其 :30)探测；含傍晚 19 点以兜住晚发
 
 
 def now_et():
@@ -86,16 +86,12 @@ def save_log(rows):
 
 
 def learned_window(log):
-    """从真实命中记录学习窗口；不足则用默认。返回 (day_lo,day_hi,hour_lo,hour_hi,tuned?)。"""
-    days = [r["day"] for r in log if r.get("day")]
-    hours = [r["hour"] for r in log if r.get("hour") is not None]  # 仅在线探到的有 hour
-    if len(days) >= MIN_RECORDS_TO_TUNE:
-        dlo, dhi = max(1, min(days) - 1), min(28, max(days) + 2)  # 上界 +2 缓冲：防 holiday 季偶发晚发
-        if len(hours) >= MIN_RECORDS_TO_TUNE:
-            hlo, hhi = max(0, min(hours) - 1), min(23, max(hours) + 1)
-        else:
-            hlo, hhi = DEFAULT_HOUR_LO, DEFAULT_HOUR_HI
-        return dlo, dhi, hlo, hhi, True
+    """日窗固定为安全网（绝不因有限历史收窄 → 不漏早发/晚发）；仅从真实命中的『小时』收窄时段窗口。
+    返回 (day_lo,day_hi,hour_lo,hour_hi,tuned?)。tuned 表示时段是否已按真实命中收窄。"""
+    hours = [r["hour"] for r in log if r.get("hour") is not None]  # 仅在线真实命中的有 hour
+    if len(hours) >= MIN_RECORDS_TO_TUNE:
+        hlo, hhi = max(0, min(hours) - 1), min(23, max(hours) + 2)
+        return DEFAULT_DAY_LO, DEFAULT_DAY_HI, hlo, hhi, True
     return DEFAULT_DAY_LO, DEFAULT_DAY_HI, DEFAULT_HOUR_LO, DEFAULT_HOUR_HI, False
 
 

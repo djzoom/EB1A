@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       backfill:
-        description: '用 Wayback 回填历史释出日到 release_log（开 PR 待复核）'
+        description: '用 Wayback 拉历史释出日分布并打印推荐窗口/核心区（仅分析，不改文件）'
         type: boolean
         default: false
       drill:
@@ -20,10 +20,13 @@ on:
         type: boolean
         default: false
   schedule:
-    # 探测间隔 = 每 30 分钟，仅在高概率 UTC 时段（覆盖美东 12:00–20:00，含夏/冬令时）。
+    # 基础间隔 = 每 30 分钟，仅在高概率 UTC 时段（覆盖美东 12:00–20:00，含夏/冬令时）。
     # 脚本再按美东时间精确门控（工作日 / 非假日 / 高概率日 / 高概率时段 / 命中即停）。
-    - cron: '*/30 16-23 7-20 * *'   # 美东当日午后~晚（UTC 同日）；日范围覆盖 ET 安全窗 7–20 号
-    - cron: '*/30 0 8-21 * *'       # 冬令时傍晚溢出到 UTC 次日 0 点
+    - cron: '*/30 16-23 7-26 * *'   # 美东当日午后~晚（UTC 同日）；日范围覆盖 ET 安全窗 7–26 号
+    - cron: '*/30 0 8-27 * *'       # 冬令时傍晚溢出到 UTC 次日 0 点
+    # 提速：核心日(10–17号)下午 ET12–17（≈UTC16–21）补 :10/:20/:40/:50，与上面 :00/:30 合成每 10 分钟。
+    # 用显式分钟避免与 */30 在 :00/:30 重复触发。发布高发时段延迟降到 ≤10 分钟。
+    - cron: '10,20,40,50 16-21 10-17 * *'
 
 # 命中后不再直接写 main，而是开 PR 待人工复核，避免误报数据自动上线/打包。
 permissions:
@@ -52,7 +55,7 @@ jobs:
           if [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
             python scripts/sniff_visa_bulletin.py --drill
           elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.backfill }}" = "true" ]; then
-            python scripts/backfill_release_dates.py --write
+            python scripts/backfill_release_dates.py
           else
             python scripts/sniff_visa_bulletin.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }} ${{ (github.event_name == 'workflow_dispatch' && inputs.selftest) && '--selftest' || '' }}
           fi
