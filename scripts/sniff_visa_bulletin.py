@@ -48,10 +48,13 @@ FED_HOLIDAYS = {
     "2027-07-05", "2027-09-06", "2027-10-11", "2027-11-11", "2027-11-25", "2027-12-24",
 }
 
-# 冷启动默认高概率窗口（无足够历史时用）。日窗放宽到 8–20：防 DOS 偶发晚发(>16号)整月漏抓。
-DEFAULT_DAY_LO, DEFAULT_DAY_HI = 8, 20
-DEFAULT_HOUR_LO, DEFAULT_HOUR_HI = 12, 20   # 美东 12:00–20:00
+# 冷启动安全日窗（无足够历史时用）。7–20：覆盖历史释出日 8–17 ±缓冲，绝不漏抓。
+DEFAULT_DAY_LO, DEFAULT_DAY_HI = 7, 20
+DEFAULT_HOUR_LO, DEFAULT_HOUR_HI = 12, 20   # 美东 12:00–20:00（DOS 多在午后上线）
 MIN_RECORDS_TO_TUNE = 3
+# 分层探测：核心日(历史释出高发 10–17)全时段密探；窗口内其余为肩部日，仅少数时点稀疏探，省请求。
+CORE_DAY_LO, CORE_DAY_HI = 10, 17
+SHOULDER_HOURS = (13, 16)   # 肩部日只在这些 ET 整点(及其 :30)探测
 
 
 def now_et():
@@ -87,7 +90,7 @@ def learned_window(log):
     days = [r["day"] for r in log if r.get("day")]
     hours = [r["hour"] for r in log if r.get("hour") is not None]  # 仅在线探到的有 hour
     if len(days) >= MIN_RECORDS_TO_TUNE:
-        dlo, dhi = max(1, min(days) - 1), min(28, max(days) + 1)
+        dlo, dhi = max(1, min(days) - 1), min(28, max(days) + 2)  # 上界 +2 缓冲：防 holiday 季偶发晚发
         if len(hours) >= MIN_RECORDS_TO_TUNE:
             hlo, hhi = max(0, min(hours) - 1), min(23, max(hours) + 1)
         else:
@@ -110,7 +113,11 @@ def gate(log, force=False):
         return False, f"非高概率日({t.day}不在{dlo}-{dhi})"
     if not (hlo <= t.hour < hhi):
         return False, f"非高概率时段(ET {t.hour}点不在{hlo}-{hhi})"
-    return True, f"窗口内({'已自学习' if tuned else '默认'} {dlo}-{dhi}号 ET{hlo}-{hhi})"
+    # 分层：肩部日(高发区外的安全缓冲)仅在 SHOULDER_HOURS 探测；核心日全时段密探。
+    if not (CORE_DAY_LO <= t.day <= CORE_DAY_HI) and t.hour not in SHOULDER_HOURS:
+        return False, f"肩部日({t.day})稀疏探测：仅 ET{list(SHOULDER_HOURS)}点，本时{t.hour}点跳过"
+    tier = "核心日密探" if CORE_DAY_LO <= t.day <= CORE_DAY_HI else "肩部日稀探"
+    return True, f"{tier}({'已自学习' if tuned else '默认'}窗 {dlo}-{dhi}号 ET{hlo}-{hhi})"
 
 
 def fetch(url):
