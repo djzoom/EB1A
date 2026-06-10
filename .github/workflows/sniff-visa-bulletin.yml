@@ -82,18 +82,3 @@ jobs:
           labels: |
             visa-bulletin
             needs-review
-
-      # 仅当真的新开了复核 PR 时推送 Bark 到手机（需在仓库 Secrets 配 BARK_KEY）。
-      - name: Notify via Bark on new review PR
-        if: steps.cpr.outputs.pull-request-operation == 'created'
-        env:
-          BARK_KEY: ${{ secrets.BARK_KEY }}
-          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
-        run: |
-          if [ -z "$BARK_KEY" ]; then
-            echo "未配置 BARK_KEY secret，跳过推送"; exit 0
-          fi
-          curl -fsS -X POST "https://api.day.app/push" \
-            -H "Content-Type: application/json" \
-            -d "{\"device_key\":\"$BARK_KEY\",\"title\":\"EB1A 新签证公告待复核\",\"body\":\"探测器开了复核 PR，请核对 fad/dff 后合并\",\"group\":\"EB1A\",\"url\":\"$PR_URL\"}" \
-            || echo "Bark 推送失败（忽略，不影响主流程）"
