@@ -1,5 +1,105 @@
 [
   {
+    "bulletin": "2024-08",
+    "detected_et": "2024-07-09 00:00",
+    "day": 9,
+    "hour": null,
+    "weekday": 1,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2024-09",
+    "detected_et": "2024-08-08 00:00",
+    "day": 8,
+    "hour": null,
+    "weekday": 3,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2024-10",
+    "detected_et": "2024-09-11 00:00",
+    "day": 11,
+    "hour": null,
+    "weekday": 2,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2025-03",
+    "detected_et": "2025-02-11 00:00",
+    "day": 11,
+    "hour": null,
+    "weekday": 1,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2025-07",
+    "detected_et": "2025-06-10 00:00",
+    "day": 10,
+    "hour": null,
+    "weekday": 1,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2025-08",
+    "detected_et": "2025-07-14 00:00",
+    "day": 14,
+    "hour": null,
+    "weekday": 0,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2025-09",
+    "detected_et": "2025-08-13 00:00",
+    "day": 13,
+    "hour": null,
+    "weekday": 2,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2025-10",
+    "detected_et": "2025-09-15 00:00",
+    "day": 15,
+    "hour": null,
+    "weekday": 0,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2025-12",
+    "detected_et": "2025-11-14 00:00",
+    "day": 14,
+    "hour": null,
+    "weekday": 4,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
+    "bulletin": "2026-01",
+    "detected_et": "2025-12-17 00:00",
+    "day": 17,
+    "hour": null,
+    "weekday": 2,
+    "fad": null,
+    "dff": null,
+    "note": "backfill: Murthy law-firm same-day article date (approx; hour omitted)"
+  },
+  {
     "bulletin": "2026-05",
     "detected_et": "2026-04-14",
     "day": 14,
