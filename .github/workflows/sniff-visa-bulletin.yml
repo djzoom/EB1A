@@ -15,6 +15,10 @@ on:
         description: '用 Wayback 回填历史释出日到 release_log（开 PR 待复核）'
         type: boolean
         default: false
+      drill:
+        description: '演习：发一条测试 Bark 推送验证手机能收到（需先配 BARK_KEY）'
+        type: boolean
+        default: false
   schedule:
     # 探测间隔 = 每 30 分钟，仅在高概率 UTC 时段（覆盖美东 12:00–20:00，含夏/冬令时）。
     # 脚本再按美东时间精确门控（工作日 / 非假日 / 高概率日 / 高概率时段 / 命中即停）。
@@ -40,10 +44,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 三种模式：backfill(回填历史) / selftest+force(调试) / 默认(定时探测)。
-      - name: Sniff / selftest / backfill
+      # 模式：drill(演习推送) / backfill(回填历史) / selftest+force(调试) / 默认(定时探测)。
+      - name: Sniff / selftest / backfill / drill
+        env:
+          BARK_KEY: ${{ secrets.BARK_KEY }}
         run: |
-          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.backfill }}" = "true" ]; then
+          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
+            python scripts/sniff_visa_bulletin.py --drill
+          elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.backfill }}" = "true" ]; then
             python scripts/backfill_release_dates.py --write
           else
             python scripts/sniff_visa_bulletin.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }} ${{ (github.event_name == 'workflow_dispatch' && inputs.selftest) && '--selftest' || '' }}

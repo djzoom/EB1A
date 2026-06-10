@@ -239,6 +239,39 @@ def selftest():
     return ("hit" if ok else "error"), detail
 
 
+def drill():
+    """演习：用当前排期快照发一条测试 Bark 推送，验证 BARK_KEY secret + 推送链路 + 手机接收。
+    需 runner 环境变量 BARK_KEY。返回 (status, detail)。"""
+    a, b = read_current_ab()
+    try:
+        with open(INDEX, encoding="utf-8") as f:
+            s = f.read()
+        mm = re.search(r"var VB_MONTH = '([^']*)'", s)
+        vbm = mm.group(1) if mm else "?"
+    except Exception:
+        vbm = "?"
+    title = "EB1A 最新排期报告（演习）"
+    body = f"截至 {vbm}：表A(裁定) {a} ／ 表B(递交) {b}。这是演习推送，链路正常 ✅"
+
+    key = os.environ.get("BARK_KEY")
+    if not key:
+        print("[drill] 未配置 BARK_KEY，无法推送。请先在仓库 Settings → Secrets 添加 BARK_KEY。")
+        return "error", "演习失败：未配置 BARK_KEY（请先加 secret）"
+
+    payload = json.dumps({"device_key": key, "title": title, "body": body,
+                          "group": "EB1A", "url": "https://djzoom.github.io/EB1A/"}).encode("utf-8")
+    req = urllib.request.Request("https://api.day.app/push", data=payload,
+                                 headers={"Content-Type": "application/json", "User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            code = r.getcode()
+        print(f"[drill] 已发送演习推送 (HTTP {code})：{title} | {body}")
+        return "hit", f"演习推送已发送：{body}"
+    except Exception as e:
+        print(f"[drill] 推送失败：{type(e).__name__}: {str(e)[:160]}")
+        return "error", f"演习推送失败（检查 BARK_KEY 是否正确）：{type(e).__name__}"
+
+
 def write_run_summary(status, detail):
     """把本次运行结果写一行到 GitHub Actions 运行摘要（调试/首次运行可视化），并打印到日志。
     零仓库改动：仅在 CI 设置了 GITHUB_STEP_SUMMARY 时落盘。"""
@@ -329,9 +362,13 @@ def main():
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--selftest", action="store_true",
                     help="抓取已发布的当前那期，验证 parse_eb1_china 对真实 HTML 是否正确；不写文件")
+    ap.add_argument("--drill", action="store_true",
+                    help="演习：发一条测试 Bark 推送(用当前排期快照)验证推送链路；需环境变量 BARK_KEY")
     args = ap.parse_args()
 
-    if args.selftest:
+    if args.drill:
+        status, detail = drill()
+    elif args.selftest:
         status, detail = selftest()
     else:
         status, detail = run(args)
