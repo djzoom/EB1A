@@ -132,6 +132,13 @@
   .tab-btn:hover { color: var(--text2); }
   .tab-btn.active { color: var(--blue); }
   .tab-btn.active::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: var(--blue); border-radius: 2px; }
+  /* 新公告提示：tab 红点角标 + 面板徽标 + 高亮 */
+  .tab-btn .tab-dot { position: absolute; top: 7px; right: 9px; width: 7px; height: 7px; background: #ef4444; border-radius: 50%; animation: vbpulse 1.8s infinite; }
+  @keyframes vbpulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+  @keyframes vbblink { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  .vb-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #ef4444, #f97316); border-radius: 999px; vertical-align: middle; animation: vbblink 1.6s ease-in-out infinite; }
+  .vb-latest { padding: 10px 12px; background: var(--blue-bg); border-left: 3px solid var(--blue); border-radius: 8px; margin-bottom: 10px; }
+  .vb-latest.is-new { border-left-color: #f97316; background: rgba(249,115,22,0.10); }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
   .tab-panel .explain-content { padding-top: 14px; }
@@ -1425,6 +1432,38 @@ function render() {
   renderMonthlyTable(percentiles);
 }
 
+// 新公告"已读"判定（localStorage 记住上次看过的公告月；首访不算新，避免无意义提示）
+var VB_SEEN_KEY = 'eb1a_seen_vb';
+function isNewBulletin() {
+  try {
+    var seen = localStorage.getItem(VB_SEEN_KEY);
+    if (seen === null) { localStorage.setItem(VB_SEEN_KEY, VB_MONTH); return false; }
+    return seen !== VB_MONTH;
+  } catch (e) { return false; }
+}
+function markBulletinSeen() {
+  try { localStorage.setItem(VB_SEEN_KEY, VB_MONTH); } catch (e) {}
+  updateBulletinDot();
+}
+function updateBulletinDot() {
+  var btn = document.querySelector('.tab-btn[data-tab="bulletin"]');
+  if (!btn) return;
+  var dot = btn.querySelector('.tab-dot');
+  if (isNewBulletin()) { if (!dot) { dot = document.createElement('span'); dot.className = 'tab-dot'; btn.appendChild(dot); } }
+  else if (dot) { dot.parentNode.removeChild(dot); }
+}
+// 发布相对时间：<24h 只显示小时；24–72h 显示小时+天数(1位小数)；>72h 只显示天数
+function relReleaseText(releasedStr) {
+  var rel = new Date(releasedStr).getTime();
+  if (isNaN(rel)) return '';
+  var h = (Date.now() - rel) / 3600000;
+  if (h < 0) h = 0;
+  if (h < 1) return '刚刚发布';
+  if (h < 24) return Math.floor(h) + ' 小时前发布';
+  var d = h / 24;
+  if (h < 72) return Math.floor(h) + ' 小时（' + d.toFixed(1) + ' 天）前发布';
+  return Math.floor(d) + ' 天前发布';
+}
 function renderBulletinPanel() {
   var el = document.getElementById('bulletin-box');
   if (!el) return;
@@ -1444,15 +1483,21 @@ function renderBulletinPanel() {
   // 区间：低端=可能停滞(不前进)，高端=按 2 倍近期月推进的较快情形
   function range(now, adv) { return ymd(now) + ' ~ ' + ymd(now + adv * 2); }
 
+  var isNew = isNewBulletin();
   el.innerHTML =
-    '<p><span class="step">最新公告 · ' + VB_MONTH + '</span><br>' +
-      '发布日期：<b>' + VB_RELEASED + '</b><br>' +
+    '<div class="vb-latest' + (isNew ? ' is-new' : '') + '">' +
+    '<p style="margin:0"><span class="step">最新公告 · ' + VB_MONTH + '</span>' +
+      (isNew ? '<span class="vb-badge">🆕 有新公告</span>' : '') + '<br>' +
+      '发布日期：<b>' + VB_RELEASED + '</b> <span style="color:var(--text3)">· ' + relReleaseText(VB_RELEASED) + '</span><br>' +
       '表A 最终裁定：<b>' + ymd(aNow) + '</b>　·　表B 递交：<b>' + ymd(bNow) + '</b><br>' +
-      '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p>' +
+      '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p></div>' +
     '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
       '预计发布：约 <b>' + ymd(nextRel.getTime()) + '</b>（历史规律：上月中旬工作日）<br>' +
       '预测表A：<b>' + range(aNow, advA) + '</b><br>预测表B：<b>' + range(bNow, advB) + '</b></p>' +
     '<p class="explain-note">下月数值为按近期推进速度的估算，月度移动有较大不确定性（常见停滞或跳进），一切以官方公告为准。</p>';
+  updateBulletinDot();
+  // 看过几秒后自动标记已读（仅本次加载调度一次）：徽标本次仍显示，下次加载不再提示
+  if (isNew && !window._vbSeenScheduled) { window._vbSeenScheduled = true; setTimeout(markBulletinSeen, 3500); }
 }
 
 // Events
@@ -1530,6 +1575,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     var tab = btn.dataset.tab;
     document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
     document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'tab-' + tab); });
+    if (tab === 'bulletin') markBulletinSeen();
   });
 });
 
