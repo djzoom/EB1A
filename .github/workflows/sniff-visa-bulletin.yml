@@ -19,10 +19,6 @@ on:
         description: '演习：发一条测试 Bark 推送验证手机能收到（需先配 BARK_KEY）'
         type: boolean
         default: false
-      prtest:
-        description: 'PR 权限自检：开一个无害 throwaway PR，确认 Actions 可创建 PR（看到后关闭即可）'
-        type: boolean
-        default: false
   schedule:
     # 基础间隔 = 每 30 分钟，仅在高概率 UTC 时段（覆盖美东 12:00–20:00，含夏/冬令时）。
     # 脚本再按美东时间精确门控（工作日 / 非假日 / 高概率日 / 高概率时段 / 命中即停）。
@@ -56,9 +52,7 @@ jobs:
         env:
           BARK_KEY: ${{ secrets.BARK_KEY }}
         run: |
-          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.prtest }}" = "true" ]; then
-            echo "PR 权限自检模式：跳过探测，仅由后续步骤开 throwaway PR"
-          elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
+          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
             python scripts/sniff_visa_bulletin.py --drill
           elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.backfill }}" = "true" ]; then
             python scripts/backfill_release_dates.py
@@ -99,24 +93,3 @@ jobs:
         env:
           BARK_KEY: ${{ secrets.BARK_KEY }}
         run: python scripts/sniff_visa_bulletin.py --send-bark
-
-      # —— 一次性 PR 权限自检（勾选 prtest 时）：写一个无害标记文件并开 throwaway PR。
-      # 看到该 PR = Actions 可创建 PR（权限闸门已通）。关闭它即可（分支自动删除）。确认后可删除本自检。
-      - name: PR-permission self-test · write marker
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prtest }}
-        run: printf '%s\n' "PR 权限自检 $(date -u +%FT%TZ)：看到本 PR 即证明 GitHub Actions 可创建 PR。关闭即可。" > prtest-marker.txt
-      - name: PR-permission self-test · open throwaway PR
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prtest }}
-        uses: peter-evans/create-pull-request@v7
-        with:
-          add-paths: prtest-marker.txt
-          branch: test/actions-pr-permission
-          delete-branch: true
-          commit-message: "test: Actions PR-permission self-check"
-          title: "✅ PR 权限自检（确认权限通过后关闭本 PR 即可）"
-          body: |
-            你能看到这个 PR，就说明 **GitHub Actions 已被允许创建 PR**（权限闸门已通）。
-
-            这是一次性自检，无任何实质改动（只加了一个标记文件）。直接 **Close** 本 PR 即可，分支会自动删除。
-            确认后告诉我，我会把这个 `prtest` 自检模式从工作流里删掉。
-          labels: prtest
