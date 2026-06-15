@@ -440,6 +440,16 @@ var VB_YEAR = 2026, VB_MON = 6;  // 同上，数值形式（用于推下月）
 var VB_RELEASED = '2026-05-13';  // 该期发布日期（显示用；探测器命中后更新）
 var VB_RELEASED_TS = 1778698800000; // 该期发布/探测时刻（epoch 毫秒, UTC）；0=未知则退回按日期算
 var VB_RELEASED_EST = true;      // true=该时刻为估计值(显示加「约」)；探测器命中真实时刻时置 false
+
+// 历史发布日（bulletin月 → 实际发布日，来源律所同日文章）。探测器命中后自动追加；
+// 供"下月发布预测(近3次均值→工作日)"与未来研究。结尾哨兵注释勿删（探测器按它追加）。
+var RELEASE_HISTORY = [
+  ['2024-08','2024-07-09'],['2024-09','2024-08-08'],['2024-10','2024-09-11'],
+  ['2025-03','2025-02-11'],['2025-07','2025-06-10'],['2025-08','2025-07-14'],
+  ['2025-09','2025-08-13'],['2025-10','2025-09-15'],['2025-12','2025-11-14'],
+  ['2026-01','2025-12-17'],['2026-02','2026-01-13'],['2026-03','2026-02-20'],
+  ['2026-04','2026-03-18'],['2026-05','2026-04-14'],['2026-06','2026-05-13']
+]; // RELEASE_HISTORY_END
 var FILING_CHART = 'A'; // 'A'=用表A递交；'B'=用表B递交；'?'=自动更新后待 USCIS 确认
 function chartLabel() { return (FILING_CHART === 'A' || FILING_CHART === 'B') ? '表' + FILING_CHART : '待确认'; }
 
@@ -1481,6 +1491,27 @@ function relReleaseText() {
   if (h < 72) return Math.floor(h) + ' 小时（' + d.toFixed(1) + ' 天）前发布';
   return Math.floor(d) + ' 天前发布';
 }
+// 下月发布预测：取近 3 次实际发布日的"日"均值，落到对应月份，遇周末顺延到工作日
+var WD = ['日', '一', '二', '三', '四', '五', '六'];
+function pLocal(s) { var a = s.split('-'); return new Date(+a[0], +a[1] - 1, +a[2]); }
+function sortedReleases() { return RELEASE_HISTORY.slice().sort(function(a, b) { return pLocal(a[1]) - pLocal(b[1]); }); }
+function predictNextRelease() {
+  var ds = sortedReleases().map(function(p) { return pLocal(p[1]); });
+  if (!ds.length) return null;
+  var last3 = ds.slice(-3);
+  var avgDay = Math.round(last3.reduce(function(s, d) { return s + d.getDate(); }, 0) / last3.length);
+  var latest = ds[ds.length - 1];
+  var cand = new Date(latest.getFullYear(), latest.getMonth() + 1, Math.min(avgDay, 28));
+  var wd = cand.getDay();
+  if (wd === 6) cand.setDate(cand.getDate() - 1);        // 周六 → 周五
+  else if (wd === 0) cand.setDate(cand.getDate() + 1);   // 周日 → 周一
+  return cand;
+}
+function recentReleasesText(n) {
+  return sortedReleases().slice(-n).reverse().map(function(p) {
+    var d = pLocal(p[1]); return (d.getMonth() + 1) + '/' + d.getDate() + '(周' + WD[d.getDay()] + ')';
+  }).join('、');
+}
 function renderBulletinPanel() {
   var el = document.getElementById('bulletin-box');
   if (!el) return;
@@ -1495,7 +1526,7 @@ function renderBulletinPanel() {
   }
   var advA = monthlyAdv(HISTORY), advB = monthlyAdv(HISTORY_B);
   var nm = VB_MON + 1, ny = VB_YEAR; if (nm > 12) { nm = 1; ny += 1; }
-  var nextRel = new Date(new Date(VB_RELEASED).getTime() + 31 * MS_PER_DAY);
+  var nextRel = predictNextRelease() || new Date(new Date(VB_RELEASED).getTime() + 31 * MS_PER_DAY);
   function ymd(ts) { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   // 区间：低端=可能停滞(不前进)，高端=按 2 倍近期月推进的较快情形
   function range(now, adv) { return ymd(now) + ' ~ ' + ymd(now + adv * 2); }
@@ -1509,7 +1540,8 @@ function renderBulletinPanel() {
       '表A 最终裁定：<b>' + ymd(aNow) + '</b>　·　表B 递交：<b>' + ymd(bNow) + '</b><br>' +
       '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p></div>' +
     '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
-      '预计发布：约 <b>' + ymd(nextRel.getTime()) + '</b>（历史规律：上月中旬工作日）<br>' +
+      '预计发布：约 <b>' + ymd(nextRel.getTime()) + '（周' + WD[nextRel.getDay()] + '）</b>（近3次发布日均值，落到工作日）<br>' +
+      '近期发布：<span style="color:var(--text3)">' + recentReleasesText(4) + '</span><br>' +
       '预测表A：<b>' + range(aNow, advA) + '</b><br>预测表B：<b>' + range(bNow, advB) + '</b></p>' +
     '<p class="explain-note">下月数值为按近期推进速度的估算，月度移动有较大不确定性（常见停滞或跳进），一切以官方公告为准。</p>';
   updateBulletinDot();
