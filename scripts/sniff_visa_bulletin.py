@@ -456,6 +456,12 @@ def update_index(ty, tm, fad, dff, detected):
                    r" y: new Date\(p\[1\]\)\.getTime\(\) \}; \}\);\s*\n\s*// 当前签证公告状态)",
                    f",\n  ['{bull}','{dff}']\\1", s, count=1)
 
+    # 3) 追加发布日到 RELEASE_HISTORY（供"下月发布预测"和未来研究），若该期尚未记录
+    rel_tag = f"{ty}-{tm:02d}"
+    if f"['{rel_tag}'," not in s:
+        s = re.sub(r"(\n)(\]; // RELEASE_HISTORY_END)",
+                   f",\n  ['{rel_tag}','{released}']\\1\\2", s, count=1)
+
     with open(INDEX, "w", encoding="utf-8") as f:
         f.write(s)
 
