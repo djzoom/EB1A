@@ -18,5 +18,14 @@
     "fad": "2023-04-01",
     "dff": "2023-12-01",
     "note": "seed: law-firm same-day date (Wed); exact time unknown"
+  },
+  {
+    "bulletin": "2026-07",
+    "detected_et": "2026-06-16 14:29",
+    "day": 16,
+    "hour": 14,
+    "weekday": 1,
+    "fad": "2023-06-01",
+    "dff": "2023-12-01"
   }
 ]
