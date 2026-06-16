@@ -50,11 +50,11 @@ FED_HOLIDAYS = {
 
 # 固定安全日窗（不因有限历史收窄，防早发/晚发漏抓）。7–26：历史多在 8–17，但偶有 20 号及其后。
 DEFAULT_DAY_LO, DEFAULT_DAY_HI = 7, 26
-DEFAULT_HOUR_LO, DEFAULT_HOUR_HI = 12, 20   # 美东 12:00–20:00（DOS 多在午后上线）
+DEFAULT_HOUR_LO, DEFAULT_HOUR_HI = 9, 21    # 美东 09:00–21:00（含上午：DOS 偶在 ET 上午上线）
 MIN_RECORDS_TO_TUNE = 3
 # 分层探测：核心日(历史释出高发 10–17)全时段密探；窗口内其余为肩部日，仅少数时点稀疏探，省请求。
 CORE_DAY_LO, CORE_DAY_HI = 10, 17
-SHOULDER_HOURS = (13, 16, 19)   # 肩部日只在这些 ET 整点(及其 :30)探测；含傍晚 19 点以兜住晚发
+SHOULDER_HOURS = (10, 13, 16, 19)   # 肩部日只在这些 ET 整点(及其 :30)探测；含上午 10 点兜住早发
 
 
 def now_et():
