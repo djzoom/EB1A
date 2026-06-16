@@ -382,7 +382,7 @@ def run(args):
             _emit_env("BARK_TITLE", f"EB1A · {ty}年{tm}月排期已更新")
             _emit_env("BARK_BODY",
                       f"表A(裁定) {fad}（{_movement(old_a, fad)}） ／ 表B(递交) {dff}（{_movement(old_b, dff)}）。"
-                      f"\n本月递交用表：待 USCIS 确认。请核对后合并。")
+                      f"\n本月递交用表：待 USCIS 确认。已自动更新上线（如有误可回滚）。")
             return "hit", f"{tag} 命中并已写回 index.html：表A={fad} 表B={dff}（待 PR 复核）"
         except Exception as e:
             print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")

@@ -71,19 +71,17 @@ jobs:
           branch: auto/visa-bulletin-update
           delete-branch: true
           commit-message: "Auto: visa bulletin update"
-          title: "🔎 探测到新签证公告，待人工复核"
+          title: "🔎 探测到新签证公告（自动更新）"
           body: |
-            探测器检测到可能的新一期签证公告，已自动更新 `data/release_log.json` 与 `index.html`。
+            探测器检测到新一期签证公告，已自动更新 `data/release_log.json` 与 `index.html`，
+            **本 PR 将自动合并上线**（保留作审计记录）。
 
-            ⚠️ **请先人工核对数据是否正确**（避免法律新闻误报、日期抓错）：
-            - 看本 PR diff 里的 `fad`（表A）/`dff`（表B）日期是否与官方公告一致；
-            - `data/release_log.json` 的 `note` 字段说明了命中来源。
-
-            确认无误后合并到 `main` —— 网页会自动部署、离线包会自动重新打包并刷新下载链接。
-            若是误报，直接关闭本 PR 即可，线上数据不受影响。
+            数据已过理智门禁（合法日期 / 区间 / 移动幅度校验）。如发现有误：
+            - 在 commit 历史回滚本次提交，或手动改回；
+            - 并按需校准 `scripts/sniff_visa_bulletin.py` 的 `parse_eb1_china`。
           labels: |
             visa-bulletin
-            needs-review
+            auto-merged
 
       # 仅当"确实新建了复核 PR"时推送一次 Bark（避免合并前每次探测重复命中刷屏）。需配 BARK_KEY。
       # 通知正文 BARK_BODY 由上面的 sniff 步骤经 $GITHUB_ENV 传入（带具体日期+移动天数）。
@@ -92,3 +90,13 @@ jobs:
         env:
           BARK_KEY: ${{ secrets.BARK_KEY }}
         run: python scripts/sniff_visa_bulletin.py --send-bark
+
+      # 自动合并刚创建的 PR → push 到 main → 触发 deploy-pages 部署 + package-offline 重打包。
+      # 数据已过理智门禁；如有误可在 commit 历史回滚。合并失败则保留 PR 供手动合并。
+      - name: Auto-merge the update PR
+        if: steps.cpr.outputs.pull-request-operation == 'created'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ steps.cpr.outputs.pull-request-number }} --merge --delete-branch \
+            || { echo "::error::自动合并失败，PR 已保留，请手动合并 ${{ steps.cpr.outputs.pull-request-url }}"; exit 1; }
