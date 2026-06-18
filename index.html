@@ -463,7 +463,7 @@ var PARAM_META = {
     source: { title: '法定基础配额 (不可调)', rows: [{ lbl: '全球年配额', val: '140,000' },{ lbl: 'EB-1 占比', val: '×28.6% = 40,040' },{ lbl: '中国上限', val: '×7% = 2,803' }], methodology: '法律规定: 140,000 × 28.6% × 7% = 2,803', sources: ['INA Section 201-203'] }
   },
   spilloverROW: {
-    label: '其他国家溢出', default: 500, min: 0, max: 3000, step: 100,
+    label: '其他国家溢出', default: 800, min: 0, max: 3000, step: 100,
     unit: '签证/年', format: function(v) { return v; },
     source: { title: '世界其他国家未用完的配额', rows: [{ lbl: '其他国家仅用 ~12% 配额', val: '大量余量' },{ lbl: 'FY24 中国实际', val: '~4,900' },{ lbl: 'FY26 中国实际', val: '~2,600' }], methodology: '其他国家用不完的名额会分给中国和印度，金额每年波动很大', sources: ['DOS IV Issuance'] }
   },
@@ -495,7 +495,7 @@ var PARAM_META = {
 };
 
 var PRESETS = {
-  realistic: { chinaBaseQuota:2803, spilloverROW:500, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9 },
+  realistic: { chinaBaseQuota:2803, spilloverROW:800, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9 },
   optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12 },
   pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20 }
 };
@@ -530,7 +530,12 @@ function getPDDensity(pdDate, params) {
   if (pdDate < d_2023_01) return d_med;
   if (pdDate < d_2024_06) return d_med + (d_high - d_med) * (pdDate - d_2023_01) / (d_2024_06 - d_2023_01);
   if (pdDate < d_2025) return d_high + (d_peak - d_high) * (pdDate - d_2024_06) / (d_2025 - d_2024_06);
-  return d_peak;
+  // 需求随时间继续走高（AI 时代内卷：华人 PhD 暴涨 / NIW 印度化 / 大量转 EB1A / citation 内卷），
+  // 密度 2025→2027 再升 ~25% 后趋平。修掉旧版"2025 后封顶"导致越往后越失真的问题。
+  var d_2027 = new Date('2027-06-01').getTime();
+  var d_peak2 = d_peak * 1.25;
+  if (pdDate < d_2027) return d_peak + (d_peak2 - d_peak) * (pdDate - d_2025) / (d_2027 - d_2025);
+  return d_peak2;
 }
 
 var MONTHLY_WEIGHTS = [0.338, 0.183, 0.139, 0.110, 0.057, 0.037, 0.047, 0.017, 0.022, 0.026, 0.020, 0.004];
@@ -543,7 +548,7 @@ function simulate(params) {
   var currentFY = null, mainPerFY = 0;
   // 路径级"情景系数"（整条路径不变）：捕捉结构性不确定性，避免逐年/逐月噪声在长路径上被平均掉，
   // 否则每条路径趋同、快/中/慢挤在一起。供给整体偏好/偏差 + 排队密度整体偏高/偏低。
-  var regimeSupply = Math.max(0.4, gaussian(1.0, 0.30));
+  var regimeSupply = Math.max(0.4, gaussian(1.0, 0.38));  // σ 上调：供给年际波动大(FY26~2600 / FY24~4900 / 2026 偶发 ~4万张冲击)
   var regimeDensity = Math.max(0.6, gaussian(1.0, 0.15));
 
   for (var i = 0; i < months; i++) {
