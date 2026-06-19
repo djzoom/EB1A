@@ -1,30 +1,31 @@
 #!/usr/bin/env python3
-"""回测校准 (Charlie calibration) —— 用真实数据检验/校准排期模型。
+"""回测校准 v2 —— 时点匹配快照（Charlie calibration）。
 
-输入(真实):
-  1) cutoff 轨迹  : index.html 的 HISTORY(表A)
-  2) PD 月需求密度: data/raw/uscis/I485_Pending_Inventory_*.xlsx (China EB1, Available+Awaiting)
-  3) 未来需求池   : I-140 approved-awaiting-visa (China EB1, 仅国别总数) → 缩放因子
+相比 v1：每个回测步用「当时的」I-485 库存快照读密度，消除快照偏差
+（同一 PD 的库存随 DFF 放开而累积、随裁定而消耗，不能用单一晚快照代替历史）。
 
-做三件事:
-  A. 观测推进率 + 用真实 I-485 密度反解"有效签证吞吐"，与模型/官方实际对照；
-  B. rolling-holdout：用训练窗口拟合年供给，前推预测留出窗口，报预测误差(天)；
-  C. 输出校准建议(有效年供给 / 近端密度 / 未来需求膨胀因子)。
+输入(真实)：
+  1) cutoff 轨迹  : index.html HISTORY(表A)
+  2) PD 月密度    : data/raw/uscis/I485_Pending_Inventory_*.xlsx 多份快照(按 as-of 时点匹配)
+  3) 未来需求池   : I-140 China EB1 awaiting = 13,598
 
-仅标准库 + openpyxl。用法：python scripts/backtest_calibrate.py
+输出：
+  A. 用时点匹配密度，拟合近窗口有效年供给，与模型/官方对照；
+  B. rolling-holdout(不泄露未来快照)：预测误差；
+  C. 未来需求膨胀因子。
 """
-import re, os, sys
-from datetime import date
+import re, os, glob
+from datetime import date, timedelta
 from collections import defaultdict
 import openpyxl
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX = os.path.join(ROOT, "index.html")
-INV = os.path.join(ROOT, "data/raw/uscis/I485_Pending_Inventory_april_2026.xlsx")
-I140_CHINA_EB1 = 13598  # As of Dec 2025（无 PD 维度）
+SNAP_GLOB = os.path.join(ROOT, "data/raw/uscis/I485_Pending_Inventory_*.xlsx")
+I140_CHINA_EB1 = 13598
 MO = ['January','February','March','April','May','June','July','August','September','October','November','December']
 MI = {m: i + 1 for i, m in enumerate(MO)}
-WEIGHTS = [0.338,0.183,0.139,0.110,0.057,0.037,0.047,0.017,0.022,0.026,0.020,0.004]  # FY 月权重(Oct起)
+W = [0.338,0.183,0.139,0.110,0.057,0.037,0.047,0.017,0.022,0.026,0.020,0.004]
 
 
 def parse_history():
@@ -34,111 +35,99 @@ def parse_history():
     return [(date.fromisoformat(a), date.fromisoformat(b)) for a, b in pts]
 
 
-def load_density_grid():
-    wb = openpyxl.load_workbook(INV, read_only=True, data_only=True)
-    ws = wb['China']; rows = list(ws.iter_rows(values_only=True)); hdr = rows[3]
-    yc = {h.split('- ')[-1]: j for j, h in enumerate(hdr) if isinstance(h, str) and 'Priority Date Year - 2' in h}
-    g = defaultdict(int)
-    for r in rows[4:]:
-        pref, st, mon = r[1], r[2], r[3]
-        if not pref or 'EB1' not in str(pref) or mon not in MI:
+def load_snapshots():
+    snaps = []
+    for f in glob.glob(SNAP_GLOB):
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        if 'China' not in wb.sheetnames:
             continue
-        for y, j in yc.items():
-            v = r[j]
-            if isinstance(v, (int, float)):
-                g[(int(y), MI[mon])] += v
-    return g
+        ws = wb['China']; rows = list(ws.iter_rows(values_only=True)); asof = None
+        for r in rows[:4]:
+            if r[0] and 'As of' in str(r[0]):
+                mm = re.search(r'As of (\w+) (\d+), (\d+)', str(r[0]))
+                if mm: asof = date(int(mm.group(3)), MI[mm.group(1)], int(mm.group(2)))
+        if not asof:
+            continue
+        hdr = rows[3]; yc = {h.split('- ')[-1]: j for j, h in enumerate(hdr) if isinstance(h, str) and 'Priority Date Year - 2' in h}
+        g = defaultdict(int)
+        for r in rows[4:]:
+            pref, st, mon = r[1], r[2], r[3]
+            if not pref or 'EB1' not in str(pref) or mon not in MI:
+                continue
+            for y, j in yc.items():
+                v = r[j]
+                if isinstance(v, (int, float)): g[(int(y), MI[mon])] += v
+        snaps.append((asof, dict(g)))
+    snaps.sort(key=lambda x: x[0])
+    return snaps
 
 
-def months_between(d0, d1):
-    return (d1.year - d0.year) * 12 + (d1.month - d0.month) + (d1.day - d0.day) / 30.4
+def grid_asof(snaps, t, max_asof):
+    cap = min(t, max_asof)
+    pick = None
+    for asof, g in snaps:
+        if asof <= cap: pick = g
+    return pick or snaps[0][1]
 
 
-def density_per_day(grid, cutoff):
-    """cutoff 所在 PD 月的真实库存(人) / 30.4 = 人/PD天。网格外(更晚PD,不可递交)回退到最近端值。"""
-    key = (cutoff.year, cutoff.month)
-    v = grid.get(key, 0)
-    if v == 0:  # 网格外或被压制：用 2023 核心区均值兜底
-        core = [grid[(2023, m)] for m in range(1, 8) if grid.get((2023, m))]
-        v = sum(core) / len(core) if core else 500
+def dpd(g, cut):
+    """该 PD 月真实库存/30.4 = 人/PD天；为 0 时回退到该快照非零均值。"""
+    v = g.get((cut.year, cut.month), 0)
+    if v == 0:
+        nz = [x for x in g.values() if x > 0]
+        v = (sum(nz) / len(nz)) if nz else 400
     return v / 30.4
 
 
-def simulate_det(grid, start_bd, start_cut, end_bd, annual_visas):
-    """确定性前推：从 start 到 end，每月按 真实密度 + 年供给 推进 cutoff。返回末期 cutoff。"""
-    cut = start_cut
-    cur = date(start_bd.year, start_bd.month, 15)
-    end = date(end_bd.year, end_bd.month, 15)
+def add_days(d, n): return d + timedelta(days=n)
+def nm(d): return date(d.year + d.month // 12, d.month % 12 + 1, 15)
+
+
+def simulate(snaps, start_bd, start_cut, end_bd, annual, max_asof):
+    cut = start_cut; cur = date(start_bd.year, start_bd.month, 15); end = date(end_bd.year, end_bd.month, 15)
     while cur < end:
-        fy_month = (cur.month - 10) % 12
-        monthly_visas = annual_visas * WEIGHTS[fy_month]
-        adv = monthly_visas / density_per_day(grid, cut)   # PD天/月
-        cut = date.fromordinal(cut.toordinal() + round(adv))
-        # 下一个日历月
-        y, m = (cur.year + (cur.month // 12)), (cur.month % 12 + 1)
-        cur = date(y, m, 15)
+        g = grid_asof(snaps, cur, max_asof)
+        adv = annual * W[(cur.month - 10) % 12] / dpd(g, cut)
+        cut = add_days(cut, round(adv)); cur = nm(cur)
     return cut
 
 
-def fit_annual_visas(grid, start, end, target_cut):
-    """二分拟合年供给，使确定性前推到 end 的 cutoff ≈ target。"""
-    lo, hi = 500, 20000
-    for _ in range(40):
+def fit(snaps, start, end, target, max_asof):
+    lo, hi = 300, 20000
+    for _ in range(44):
         mid = (lo + hi) / 2
-        got = simulate_det(grid, start[0], start[1], end[0], mid)
-        if got < target_cut:  # 推进不够 → 加供给
-            lo = mid
-        else:
-            hi = mid
+        got = simulate(snaps, start[0], start[1], end[0], mid, max_asof)
+        if got < target: lo = mid
+        else: hi = mid
     return (lo + hi) / 2
 
 
 def main():
-    hist = parse_history()
-    grid = load_density_grid()
-    win = hist[-8:]
+    hist = parse_history(); snaps = load_snapshots(); win = hist[-8:]
+    print("快照 as-of:", ", ".join(str(a) for a, _ in snaps))
 
-    print("=" * 64)
-    print("A. 观测推进率 + 真实密度反解吞吐")
-    print("=" * 64)
+    print("\n" + "=" * 60 + "\nA. 时点匹配密度 → 拟合近窗口有效年供给\n" + "=" * 60)
+    av = fit(snaps, win[0], win[-1], win[-1][1], max_asof=win[-1][0])
     (b0, c0), (b1, c1) = win[0], win[-1]
-    cal = months_between(b0, b1); adv = (c1 - c0).days
-    print(f"近窗口 {b0}→{b1}: cutoff {c0}→{c1}  +{adv}天 / {cal:.1f}月 = {adv/cal:.1f} 天/月")
-    cleared = 0; y, mn = c0.year, c0.month
-    while (y, mn) <= (c1.year, c1.month):
-        cleared += grid.get((y, mn), 0); mn += 1
-        if mn > 12: mn = 1; y += 1
-    print(f"真实 I-485 清空(快照下界) ≈ {cleared} 人 / {cal:.1f}月 = {cleared/cal*12:.0f} 人/年(有效吞吐)")
-    print("  对照: 中国EB1实际签证 ~3500–4900；模型 totalVisas≈3803 → 三者吻合 ✅")
+    print(f"窗口 {b0}→{b1}: cutoff {c0}→{c1}  (+{(c1-c0).days}天)")
+    print(f"时点匹配拟合的有效年供给 = {av:.0f} 人/年")
+    print("  对照: 官方实际 ~3500–4900；模型 totalVisas≈3803")
 
-    print("\n" + "=" * 64)
-    print("B. Rolling-holdout（用训练窗拟合，预测留出窗，对比真实）")
-    print("=" * 64)
-    print("[v1 局限] 密度用的是 Apr2026 单一快照；早期 PD 已被消耗 → 拟合的"
-          "绝对年供给偏低、不可单独取信。重点看『预测误差』和『shock 漏报』。")
-    # 训练: win[0] → split ; 测试: split → win[-1]
+    print("\n" + "=" * 60 + "\nB. Rolling-holdout（不泄露未来快照）\n" + "=" * 60)
     for split_i in (3, 5):
-        train_end = win[split_i]
-        av = fit_annual_visas(grid, win[0], train_end, train_end[1])
-        print(f"\n训练 {win[0][0]}→{train_end[0]} 拟合年供给 = {av:.0f}")
-        # 预测后续每个真实 bulletin 月
+        te = win[split_i]
+        av_t = fit(snaps, win[0], te, te[1], max_asof=te[0])
+        print(f"\n训练 {win[0][0]}→{te[0]}  拟合年供给={av_t:.0f}  (只用 ≤{te[0]} 的快照)")
         errs = []
-        for (bd, actual) in win[split_i + 1:]:
-            pred = simulate_det(grid, train_end[0], train_end[1], bd, av)
-            e = (pred - actual).days
-            errs.append(abs(e))
-            print(f"  预测 {bd}: 模型 {pred}  实际 {actual}  误差 {e:+d} 天")
-        if errs:
-            print(f"  平均绝对误差 = {sum(errs)/len(errs):.0f} 天")
+        for bd, actual in win[split_i + 1:]:
+            pred = simulate(snaps, te[0], te[1], bd, av_t, max_asof=te[0])
+            e = (pred - actual).days; errs.append(abs(e))
+            print(f"  预测 {bd}: 模型 {pred} 实际 {actual} 误差 {e:+d} 天")
+        if errs: print(f"  平均绝对误差 = {sum(errs)/len(errs):.0f} 天")
 
-    print("\n" + "=" * 64)
-    print("C. 未来需求膨胀因子（关键风险）")
-    print("=" * 64)
-    i485_total = sum(grid.values())
-    ratio = I140_CHINA_EB1 / i485_total
-    print(f"I-485 总库存(已可递交PD) = {i485_total};  I-140 awaiting(未来需求池) = {I140_CHINA_EB1}")
-    print(f"→ 当 cutoff 推进到 2024+ PD(目前不可递交)，需求或膨胀 ×{ratio:.2f} → 推进将显著放慢")
-    print("  含义: 近端模型已准；未来(2024+ PD)是主要不确定性，应据此因子建模放慢。")
+    print("\n" + "=" * 60 + "\nC. 未来需求膨胀因子\n" + "=" * 60)
+    latest = snaps[-1][1]; tot = sum(latest.values())
+    print(f"最新 I-485 库存={tot}; I-140 awaiting={I140_CHINA_EB1} → 未来(2024+PD)需求 ×{I140_CHINA_EB1/tot:.2f} 风险")
 
 
 if __name__ == "__main__":
