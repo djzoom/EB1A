@@ -352,7 +352,7 @@
       <div class="explain-content" id="explain-box"></div>
       <div class="explain-content explain-static">
         <p><span class="step">表 A 与 表 B</span><br><b>表 A（Final Action Date，最终裁定日）</b>决定何时获批绿卡；<b>表 B（Dates for Filing，递交日期）</b>决定何时可递交 I-485。当月以官方公告指定的表为准，本工具同时呈现两者。</p>
-        <p><span class="step">数据更新</span><br>后台探测器在每期签证公告发布后约 30 分钟内捕获，自动更新表 A / 表 B 数据并重新部署；探测器记录历次发布时刻，逐月收窄探测窗口。</p>
+        <p><span class="step">数据更新</span><br>后台探测器在每期签证公告发布的高发时段（工作日午后）约 10 分钟内捕获，自动更新表 A / 表 B 并部署上线、刷新离线包；并按 USCIS I-485 库存与 I-140 数据持续校准模型。</p>
         <p><span class="step">隐私</span><br>优先日等信息仅存于本地浏览器（localStorage），不上传服务器。基础数据取自 USCIS 与 DOS 的公开发布。</p>
         <p><span class="step">安装与作者</span><br>可作为 PWA 添加到主屏幕、离线打开。由 <a href="https://x.com/DJWZ" target="_blank" rel="noopener">0xGarfield · @DJWZ</a> 制作。</p>
         <p class="explain-note">本工具为基于公开数据的统计估算，<b>不构成法律或移民建议</b>。结果受配额、政策、立法及个人情况影响，请以官方签证公告为准，并咨询持牌移民律师。</p>
@@ -453,7 +453,7 @@ var RELEASE_HISTORY = [
   ['2026-04','2026-03-18'],['2026-05','2026-04-14'],['2026-06','2026-05-13'],
   ['2026-07','2026-06-16']
 ]; // RELEASE_HISTORY_END
-var FILING_CHART = '?'; // 'A'=用表A递交；'B'=用表B递交；'?'=自动更新后待 USCIS 确认
+var FILING_CHART = 'A'; // 'A'=用表A递交；'B'=用表B递交；'?'=自动更新后待 USCIS 确认（July 2026：USCIS 指定职业类用表A/Final Action）
 function chartLabel() { return (FILING_CHART === 'A' || FILING_CHART === 'B') ? '表' + FILING_CHART : '待确认'; }
 
 var PARAM_META = {
@@ -485,12 +485,12 @@ var PARAM_META = {
   densityHigh: {
     label: '排队密度 (2023-2024)', default: 8, min: 4, max: 40, step: 1,
     unit: '人/天', format: function(v) { return v; },
-    source: { title: '这个时间段每天有多少人排队', rows: [{ lbl: 'I-485 pending 主申', val: '~9,208' },{ lbl: '覆盖 PD 跨度', val: '~3.5 年' },{ lbl: '有效密度', val: '~8 人/天' }], methodology: '按 I-485 pending(~9,208 主申)÷ 覆盖 PD 跨度(~3.5 年)≈ 8 人/天，与近年 cutoff 实际推进及律所共识一致', sources: ['USCIS I-485 Inventory'] }
+    source: { title: '这个时间段每天有多少人排队', rows: [{ lbl: 'I-485 库存核心 PD 月', val: '~400–680/月' },{ lbl: '有效密度', val: '~8 人/天' },{ lbl: '回测吞吐', val: '~3,700/年' }], methodology: '2026 实测 China EB1 I-485 库存核心 PD 月约 400–680/月；回测(真实 cutoff 轨迹×真实密度)反解有效吞吐 ~3,700/年，与官方实际及本模型一致', sources: ['USCIS I-485 Inventory (2026)'] }
   },
   densityPeak: {
     label: '排队密度 (2024+)', default: 9, min: 4, max: 40, step: 1,
     unit: '人/天', format: function(v) { return v; },
-    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: 'I-140 收件略升', val: '更高' },{ lbl: '拒绝+放弃', val: '~40%' },{ lbl: '有效密度', val: '~9 人/天' }], methodology: '最近 PD 段有效排队约 9 人/天；校准后整体预测与律所共识(EB-1 中国 PD 等待~3 年)一致', sources: ['USCIS I-140 Reports'] }
+    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: 'I-140 待签存量', val: '~13,600' },{ lbl: '未来需求膨胀', val: '×2.45' },{ lbl: '有效密度', val: '~9 人/天' }], methodology: '最近 PD 段有效排队约 9 人/天；I-140 待签池(China EB1 ~13,600)是未来需求(×2.45)，cutoff 进入 2024+ PD 后将放慢。现提交者预计约等 4 年', sources: ['USCIS I-140 Awaiting Visa'] }
   }
 };
 
