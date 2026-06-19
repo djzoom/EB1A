@@ -305,21 +305,10 @@ def resolve_filing_chart():
     return "hit", f"FILING_CHART 补判为 {chart}（{vy}-{vm:02d}）"
 
 
-def read_vb_month():
-    """从 index.html 读当前已发布公告对应的 (year, month)。"""
-    try:
-        with open(INDEX, encoding="utf-8") as f:
-            s = f.read()
-        m = re.search(r"var VB_YEAR = (\d+), VB_MON = (\d+);", s)
-        return (int(m.group(1)), int(m.group(2))) if m else (None, None)
-    except Exception:
-        return None, None
-
-
 def selftest():
     """抓取『已发布的当前那期』公告，跑 parse_eb1_china 并与 index.html 现存值对比，
     验证解析器对真实 HTML 端到端正确。不写任何文件。返回 (status, detail)。"""
-    vy, vm = read_vb_month()
+    vy, vm, _ = read_vb_state()
     if not vy:
         return "error", "selftest: 读不到 VB_YEAR/VB_MON"
     url = bulletin_url(vy, vm)
