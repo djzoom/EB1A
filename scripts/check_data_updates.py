@@ -107,7 +107,7 @@ def check_i140_quarterly(dry_run: bool) -> list[str]:
     current_fy = now.year if now.month >= 10 else now.year
     # e.g. May 2026 -> FY2026, Nov 2026 -> FY2027
 
-    for fy in range(2024, current_fy + 2):
+    for fy in range(2022, current_fy + 2):
         for q in range(1, 5):
             local = USCIS_DIR / f"I140_FY{fy}_Q{q}.xlsx"
             if local.exists():
@@ -135,7 +135,7 @@ def check_i140_approved(dry_run: bool) -> list[str]:
     now = datetime.now()
     current_fy = now.year if now.month >= 10 else now.year
 
-    for fy in range(2025, current_fy + 2):
+    for fy in range(2024, current_fy + 2):
         for q in range(1, 5):
             local = USCIS_DIR / f"I140_I360_I526_Approved_FY{fy}_Q{q}.xlsx"
             if local.exists():
