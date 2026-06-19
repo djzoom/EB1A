@@ -77,37 +77,44 @@ def main():
     args = ap.parse_args()
     your_pd = date.fromisoformat(args.pd)
     today = date.today()
+    L = []
+    def p(s=""): print(s); L.append(str(s))
 
     pool = latest_pool(); cutoff = cutoff_from_index(); rec = annual_receipts()
-    print(f"输入: 池(China EB1 awaiting)={pool[1]:,} (as of {pool[0]});  当前 cutoff={cutoff};  你的 PD={your_pd}")
-    print(f"      Supply={args.supply:.0f} 人/年;  家庭系数={args.family}")
-    print("      年收件(China EB-1, 验证流入平稳): " + ", ".join(f"{t}:{v}" for t, v in rec))
+    p(f"## f 估计 (China EB-1, {today})")
+    p(f"输入: 池(awaiting)={pool[1]:,} (as of {pool[0]});  cutoff={cutoff};  你的 PD={your_pd};  Supply={args.supply:.0f}/年;  家庭={args.family}")
+    p("年收件(验证流入平稳): " + ", ".join(f"{t}:{v}" for t, v in rec))
 
     POOL = pool[1]
-    # 池 PD 跨度 = [cutoff, 今天](I-140 至今才能收件，PD 不超过今天)
     span = months(cutoff, today)
     window = months(cutoff, your_pd)
-    base = window / span  # 均匀假设
-    print(f"\n池 PD 跨度 ≈ [{cutoff} → {today}] = {span:.0f} 月;  你前方窗口 [{cutoff} → {your_pd}] = {window:.0f} 月")
-    print(f"均匀分布 f = {window:.0f}/{span:.0f} = {base:.2f}")
+    base = window / span
+    p(f"池 PD 跨度 [{cutoff}→{today}]={span:.0f}月; 你前方[{cutoff}→{your_pd}]={window:.0f}月; 均匀 f={base:.2f}")
 
-    # 形状不确定性:收件温和增长→近端(高PD)略重→你窗口占比略低;领事滞后→略平→略高。带 ±20%
-    scen = {"近端加权(偏乐观)": base * 0.8, "均匀(中枢)": base, "前端加权(偏保守)": min(1.0, base * 1.2)}
-    print(f"\n{'情形':<18}{'f':>6}{'前方厚度(人)':>14}{'T(年)':>8}{'排到':>10}")
+    scen = {"近端加权(乐观)": base * 0.8, "均匀(中枢)": base, "前端加权(保守)": min(1.0, base * 1.2)}
+    p(f"\n| 情形 | f | 前方厚度(人) | T(年) | 排到 |")
+    p("|---|---|---|---|---|")
     for name, f in scen.items():
         thick = POOL * args.family * f
         T = thick / args.supply
         m_total = today.month - 1 + round(T * 12)
         eta = f"{today.year + m_total // 12}-{m_total % 12 + 1:02d}"
-        print(f"{name:<18}{f:>6.2f}{round(thick):>14,}{T:>8.2f}{eta:>10}")
+        p(f"| {name} | {f:.2f} | {round(thick):,} | {T:.2f} | {eta} |")
 
-    # 数据自洽校验:收件率 vs 池总量
     if rec:
-        rate = max(v for _, v in rec)  # 取最高年化作上界估计
+        rate = max(v for _, v in rec)
         implied_span = POOL / (rate / 12)
-        print(f"\n[自洽校验] 池/收件率 ⇒ 跨度≈{implied_span:.0f}月，而 [cutoff→今天]={span:.0f}月。"
-              f"\n  若前者明显更大 ⇒ 池含早于 cutoff 的领事积压(都排你前面)⇒ f 偏高、排到更晚；"
-              f"\n  这是 f 最大的不确定来源，须待 cutoff 进入 2024 PD 后由 I-485 库存实测收敛。")
+        p(f"\n[自洽校验] 池/收件率 ⇒ 跨度≈{implied_span:.0f}月 vs [cutoff→今天]={span:.0f}月。"
+          f" 若前者更大 ⇒ 池含早于 cutoff 的领事积压(都排你前面)⇒ f 偏高、排到更晚；"
+          f"须待 cutoff 进入 2024 PD 由 I-485 库存实测收敛。")
+
+    sp = os.environ.get("GITHUB_STEP_SUMMARY")
+    if sp:
+        try:
+            with open(sp, "a", encoding="utf-8") as fh:
+                fh.write("\n".join(L) + "\n")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
