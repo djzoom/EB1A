@@ -59,6 +59,12 @@ jobs:
             python scripts/sniff_visa_bulletin.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }} ${{ (github.event_name == 'workflow_dispatch' && inputs.selftest) && '--selftest' || '' }}
           fi
 
+      # 补判本月递交用表：FILING_CHART 仍为 '?' 时从 USCIS AOS 页确认(USCIS 常滞后公告 1-2 天)。
+      # 仅 '?' 时才抓 USCIS；判定到则改 index.html → 下面的 create-PR 自动收口、自动合并上线。
+      - name: Resolve filing chart if pending
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.drill && !inputs.backfill && !inputs.selftest) }}
+        run: python scripts/sniff_visa_bulletin.py --filing-chart
+
       # 数据若改动则开 PR；无改动时静默跳过（不建 PR）。
       # 合并 PR → push 到 main → 由 deploy-pages.yml 自动部署、package-offline.yml 自动重打包。
       - name: Open review PR if changed

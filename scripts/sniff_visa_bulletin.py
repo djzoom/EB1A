@@ -248,6 +248,63 @@ def _emit_env(key, val):
         print(f"[env] 写 {key} 失败: {type(e).__name__}: {e}")
 
 
+def fetch_filing_chart(ty, tm):
+    """从 USCIS AOS filing-charts 页判断 (ty,tm) 月职业类(EB)用表A(Final Action)还是表B(Dates for Filing)。
+    仅在能确认页面对应该月、且明确 EB 用表时返回 'A'/'B'；否则 None(保持待确认，人工兜底)。"""
+    url = ("https://www.uscis.gov/green-card/green-card-processes-and-procedures/"
+           "visa-availability-priority-dates/adjustment-of-status-filing-charts-from-the-visa-bulletin")
+    month_name = MONTHS[tm - 1].capitalize()
+    try:
+        code, html = fetch(url)
+    except Exception as e:
+        print(f"[chart] 抓 USCIS AOS 页失败: {type(e).__name__}: {str(e)[:120]}")
+        return None
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"\s+", " ", text)
+    if f"{month_name} {ty}" not in text:
+        print(f"[chart] AOS 页尚未更新到 {month_name} {ty}（USCIS 常滞后公告 1-2 天），保持 '?'")
+        return None
+    m = re.search(r"Employment[- ]?Based.{0,200}?(Dates for Filing|Final Action)", text, re.I)
+    if not m:
+        m = re.search(r"(Dates for Filing|Final Action)[^.]{0,120}?[Ee]mployment", text)
+    if not m:
+        print("[chart] 未能在 AOS 页定位 EB 用表，保持 '?'")
+        return None
+    chart = 'B' if 'dates for filing' in m.group(1).lower() else 'A'
+    print(f"[chart] USCIS {month_name} {ty} 职业类用表 → {chart}")
+    return chart
+
+
+def read_vb_state():
+    """读 index.html 当前 VB_YEAR / VB_MON / FILING_CHART。"""
+    try:
+        s = open(INDEX, encoding="utf-8").read()
+        y = re.search(r"var VB_YEAR = (\d+), VB_MON = (\d+);", s)
+        c = re.search(r"var FILING_CHART = '([^']*)'", s)
+        return (int(y.group(1)), int(y.group(2)), c.group(1)) if (y and c) else (None, None, None)
+    except Exception:
+        return None, None, None
+
+
+def resolve_filing_chart():
+    """补判模式：若当前 FILING_CHART 仍为 '?'，尝试从 USCIS 确认并写回(供滞后场景每日补判)。"""
+    vy, vm, cur = read_vb_state()
+    if cur in ('A', 'B'):
+        return "skip", f"FILING_CHART 已是 {cur}，无需补判"
+    if not vy:
+        return "error", "读不到 VB_YEAR/VB_MON"
+    chart = fetch_filing_chart(vy, vm)
+    if not chart:
+        return "skip", f"{vy}-{vm:02d} AOS 用表未确认/页面未更新，保持待确认"
+    s = open(INDEX, encoding="utf-8").read()
+    s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
+    open(INDEX, "w", encoding="utf-8").write(s)
+    label = 'Final Action(表A)' if chart == 'A' else 'Dates for Filing(表B)'
+    _emit_env("BARK_TITLE", f"EB1A · {vy}年{vm}月递交用表已确认")
+    _emit_env("BARK_BODY", f"USCIS 确认 {vy}年{vm}月职业类递交用 {label}。已自动更新上线。")
+    return "hit", f"FILING_CHART 补判为 {chart}（{vy}-{vm:02d}）"
+
+
 def read_vb_month():
     """从 index.html 读当前已发布公告对应的 (year, month)。"""
     try:
@@ -376,7 +433,7 @@ def run(args):
             return "hit", f"{tag} 命中但未过理智门禁，仅记录命中。表A: {why_a}；表B: {why_b}"
         try:
             update_index(ty, tm, fad, dff, t)
-            print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 置为待确认(?)")
+            print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 已自动判定(A/B 或待确认)")
             # 把标题+正文写进 GITHUB_ENV；由 workflow 在"确实新建了复核 PR"时才推送一次，
             # 避免合并前每次探测重复命中导致 Bark 刷屏。标题带月份，锁屏一眼看清是哪期。
             _emit_env("BARK_TITLE", f"EB1A · {ty}年{tm}月排期已更新")
@@ -404,8 +461,14 @@ def main():
                     help="演习：发一条测试 Bark 推送(用当前排期快照)验证推送链路；需环境变量 BARK_KEY")
     ap.add_argument("--send-bark", action="store_true",
                     help="读取环境变量 BARK_BODY 发一条命中通知(由 workflow 在新建复核 PR 后调用)")
+    ap.add_argument("--filing-chart", action="store_true",
+                    help="若当前 FILING_CHART 为 '?'，尝试从 USCIS 补判本月职业类用表(滞后场景每日补判)")
     args = ap.parse_args()
 
+    if args.filing_chart:
+        status, detail = resolve_filing_chart()
+        write_run_summary(status, detail)
+        return
     if args.send_bark:
         title = os.environ.get("BARK_TITLE") or "EB1A 排期更新待复核"
         body = os.environ.get("BARK_BODY") or "探测到新签证公告，已开复核 PR，请核对后合并。"
@@ -444,8 +507,9 @@ def update_index(ty, tm, fad, dff, detected):
     s = re.sub(r"(var VB_RELEASED_TS = )\d+", lambda m: m.group(1) + str(released_ms), s, count=1)
     # 真实探测到的时刻是精确的 → 去掉「约」
     s = re.sub(r"(var VB_RELEASED_EST = )(?:true|false)", lambda m: m.group(1) + "false", s, count=1)
-    # A2) 本月递交开放哪张表是 USCIS 另发的公告，探测器无从得知 → 置为待确认 '?'
-    s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + "?" + m.group(2), s, count=1)
+    # A2) 本月递交用哪张表是 USCIS 另发的决定：尝试从 USCIS AOS 页自动判定；判不准则 '?' 待确认
+    chart = fetch_filing_chart(ty, tm) or "?"
+    s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
 
     # 2) 追加 HISTORY（表A）与 HISTORY_B（表B）最新点（若该 bulletin 月尚未存在）
     if bull not in s:
