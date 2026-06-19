@@ -27,6 +27,27 @@ USCIS_BASE = "https://www.uscis.gov/sites/default/files/document/data"
 DOS_BASE = "https://travel.state.gov/content/dam/visas/Statistics/Immigrant-Statistics/MonthlyIVIssuances/Excel"
 
 
+def emit_env(key: str, val: str):
+    """写 $GITHUB_ENV，供 workflow 后续步骤(Bark 通知)读取。"""
+    p = os.environ.get("GITHUB_ENV")
+    if not p:
+        return
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(f"{key}<<__EOF__\n{val}\n__EOF__\n")
+
+
+def newest_inventory_month():
+    """本地已有的最新 I-485 Inventory 月份 (year, month)，用于逾期告警。"""
+    latest = None
+    for f in USCIS_DIR.glob("I485_Pending_Inventory_*.xlsx"):
+        m = __import__("re").search(r"I485_Pending_Inventory_([a-z]+)_(\d{4})", f.name)
+        if m and m.group(1) in MONTHS:
+            d = (int(m.group(2)), MONTHS.index(m.group(1)) + 1)
+            if latest is None or d > latest:
+                latest = d
+    return latest
+
+
 def probe_url(url: str) -> bool:
     req = urllib.request.Request(url, method="HEAD")
     req.add_header("User-Agent", "EB1A-DataUpdater/1.0")
@@ -209,6 +230,23 @@ def main():
             print(f"  {f}")
     else:
         print("=== All data is up to date ===")
+
+    # 通知 + 逾期告警：写入 $GITHUB_ENV，供 workflow 用 Bark 推送
+    notes = []
+    if all_new:
+        names = "、".join(Path(f).name for f in all_new)
+        notes.append(f"新增 {len(all_new)} 个数据文件：{names}")
+    inv = newest_inventory_month()
+    if inv:
+        now = datetime.now()
+        behind = (now.year - inv[0]) * 12 + (now.month - inv[1])
+        if behind >= 2:
+            notes.append(f"⚠️ I-485 Inventory 最新仅到 {inv[0]}-{inv[1]:02d}（落后 {behind} 个月）"
+                         "，可能 USCIS 改了命名或漏抓，请核查 check_data_updates.py 的 URL。")
+    if notes:
+        emit_env("BARK_TITLE", "EB1A 数据更新" + ("（含告警⚠️）" if any("⚠️" in n for n in notes) else ""))
+        emit_env("BARK_BODY", "；".join(notes))
+        emit_env("DATA_NOTIFY", "1")
 
     # Set GitHub Actions output
     if os.environ.get("GITHUB_OUTPUT"):
