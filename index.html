@@ -500,9 +500,9 @@ var PARAM_META = {
 };
 
 var PRESETS = {
-  realistic: { chinaBaseQuota:2803, spilloverROW:650, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9, demandWall:1.8 },
-  optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12, demandWall:1.3 },
-  pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20, demandWall:2.45 }
+  realistic: { chinaBaseQuota:2803, spilloverROW:650, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9, demandWall:1.8, demandWallSigma:0.5 },
+  optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12, demandWall:1.3, demandWallSigma:0.4 },
+  pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20, demandWall:2.45, demandWallSigma:0.6 }
 };
 
 // Simulation Engine
@@ -522,7 +522,7 @@ function gaussian(mu, sigma) {
   return mu + Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * sigma;
 }
 
-function getPDDensity(pdDate, params) {
+function getPDDensity(pdDate, params, wall) {
   var d_2021 = new Date('2021-01-01').getTime();
   var d_2022_06 = new Date('2022-06-01').getTime();
   var d_2023_01 = new Date('2023-01-01').getTime();
@@ -532,7 +532,7 @@ function getPDDensity(pdDate, params) {
   var d_high = params.densityHigh || 12, d_peak = params.densityPeak || 15;
   // I-140 需求墙：2024+ 的 PD 大多还在 I-140 待签池(China EB1 ~13,600)、尚未进 I-485；待 DFF 放开会涌入。
   // 原始 待签/库存 ≈ 2.45，阻尼到 demandWall(默认 1.8)避免用上界过拟合。cutoff 推进进入 2024 PD 后变慢。
-  var d_wall = d_peak * (params.demandWall || 1.8);
+  var d_wall = d_peak * (wall || params.demandWall || 1.8);
   if (pdDate < d_2021) return d_low;
   if (pdDate < d_2022_06) return d_low + (d_med - d_low) * (pdDate - d_2021) / (d_2022_06 - d_2021);
   if (pdDate < d_2023_01) return d_med;
@@ -553,6 +553,9 @@ function simulate(params) {
   // 否则每条路径趋同、快/中/慢挤在一起。供给整体偏好/偏差 + 排队密度整体偏高/偏低。
   var regimeSupply = Math.max(0.4, gaussian(1.0, 0.38));  // σ 上调：供给年际波动大(FY26~2600 / FY24~4900 / 2026 偶发 ~4万张冲击)
   var regimeDensity = Math.max(0.6, gaussian(1.0, 0.15));
+  // 路径级抽一个 demandWall(≈抽一个 f)：把"待签池前方占比 f"的真实不确定注入快/慢区间。
+  // 近 PD(走 2023 已验证密度区)几乎不受影响；深 PD(2024+)区间据此变宽，并随数据收窄。
+  var regimeWall = Math.max(1.0, gaussian(params.demandWall || 1.8, params.demandWallSigma || 0.5));
 
   for (var i = 0; i < months; i++) {
     var monthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 15);
@@ -570,7 +573,7 @@ function simulate(params) {
     }
 
     var monthlyMain = mainPerFY * MONTHLY_WEIGHTS[fyMonth];
-    var density = getPDDensity(cutoff, params) * regimeDensity;
+    var density = getPDDensity(cutoff, params, regimeWall) * regimeDensity;
     var advanceDays = monthlyMain / density;
 
     if (fyMonth === 0) {
