@@ -490,14 +490,19 @@ var PARAM_META = {
   densityPeak: {
     label: '排队密度 (2024+)', default: 9, min: 4, max: 40, step: 1,
     unit: '人/天', format: function(v) { return v; },
-    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: 'I-140 待签存量', val: '~13,600' },{ lbl: '未来需求膨胀', val: '×2.45' },{ lbl: '有效密度', val: '~9 人/天' }], methodology: '最近 PD 段有效排队约 9 人/天；I-140 待签池(China EB1 ~13,600)是未来需求(×2.45)，cutoff 进入 2024+ PD 后将放慢。现提交者预计约等 4 年', sources: ['USCIS I-140 Awaiting Visa'] }
+    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: 'I-485 库存核心 PD 月', val: '~400–680/月' },{ lbl: '有效密度', val: '~9 人/天' }], methodology: '2023 PD 段有效排队约 9 人/天(回测已校准)；2024+ PD 的额外需求由下方"未来需求墙"承载', sources: ['USCIS I-485 Inventory'] }
+  },
+  demandWall: {
+    label: '未来需求墙 (I-140 池)', default: 1.8, min: 1.0, max: 2.5, step: 0.1,
+    unit: '×', format: function(v) { return v.toFixed(1); },
+    source: { title: '2024+ PD 的隐藏需求 (I-140 待签池)', rows: [{ lbl: 'I-140 待签 (China EB1)', val: '~13,600' },{ lbl: 'I-485 库存', val: '~5,550' },{ lbl: '原始比', val: '×2.45' },{ lbl: '阻尼后(默认)', val: '×1.8' }], methodology: '2024+ 的 PD 大多还在 I-140 待签池、尚未进 I-485；待 DFF 放开会涌入，使 cutoff 推进进入 2024 PD 后变慢。原始 待签/库存≈2.45，阻尼到 ~1.8 避免用上界过拟合(回测护栏)', sources: ['USCIS I-140 Awaiting Visa', 'USCIS I-485 Inventory'] }
   }
 };
 
 var PRESETS = {
-  realistic: { chinaBaseQuota:2803, spilloverROW:650, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9 },
-  optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12 },
-  pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20 }
+  realistic: { chinaBaseQuota:2803, spilloverROW:650, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9, demandWall:1.8 },
+  optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12, demandWall:1.3 },
+  pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20, demandWall:2.45 }
 };
 
 // Simulation Engine
@@ -521,21 +526,19 @@ function getPDDensity(pdDate, params) {
   var d_2021 = new Date('2021-01-01').getTime();
   var d_2022_06 = new Date('2022-06-01').getTime();
   var d_2023_01 = new Date('2023-01-01').getTime();
-  var d_2024_06 = new Date('2024-06-01').getTime();
-  var d_2025 = new Date('2025-01-01').getTime();
+  var d_2024_01 = new Date('2024-01-01').getTime();
+  var d_2025_01 = new Date('2025-01-01').getTime();
   var d_low = 5, d_med = 10;
   var d_high = params.densityHigh || 12, d_peak = params.densityPeak || 15;
+  // I-140 需求墙：2024+ 的 PD 大多还在 I-140 待签池(China EB1 ~13,600)、尚未进 I-485；待 DFF 放开会涌入。
+  // 原始 待签/库存 ≈ 2.45，阻尼到 demandWall(默认 1.8)避免用上界过拟合。cutoff 推进进入 2024 PD 后变慢。
+  var d_wall = d_peak * (params.demandWall || 1.8);
   if (pdDate < d_2021) return d_low;
   if (pdDate < d_2022_06) return d_low + (d_med - d_low) * (pdDate - d_2021) / (d_2022_06 - d_2021);
   if (pdDate < d_2023_01) return d_med;
-  if (pdDate < d_2024_06) return d_med + (d_high - d_med) * (pdDate - d_2023_01) / (d_2024_06 - d_2023_01);
-  if (pdDate < d_2025) return d_high + (d_peak - d_high) * (pdDate - d_2024_06) / (d_2025 - d_2024_06);
-  // 需求随时间继续走高（AI 时代内卷：华人 PhD 暴涨 / NIW 印度化 / 大量转 EB1A / citation 内卷），
-  // 密度 2025→2027 再升 ~25% 后趋平。修掉旧版"2025 后封顶"导致越往后越失真的问题。
-  var d_2027 = new Date('2027-06-01').getTime();
-  var d_peak2 = d_peak * 1.25;
-  if (pdDate < d_2027) return d_peak + (d_peak2 - d_peak) * (pdDate - d_2025) / (d_2027 - d_2025);
-  return d_peak2;
+  if (pdDate < d_2024_01) return d_med + (d_high - d_med) * (pdDate - d_2023_01) / (d_2024_01 - d_2023_01);   // 2023 PD：I-485 实测、回测已校准
+  if (pdDate < d_2025_01) return d_high + (d_wall - d_high) * (pdDate - d_2024_01) / (d_2025_01 - d_2024_01);  // 2024 PD：需求墙渐显
+  return d_wall;  // 2025+ PD：待签池满负荷
 }
 
 var MONTHLY_WEIGHTS = [0.338, 0.183, 0.139, 0.110, 0.057, 0.037, 0.047, 0.017, 0.022, 0.026, 0.020, 0.004];
