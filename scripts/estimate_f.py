@@ -65,6 +65,13 @@ def cutoff_from_index():
     return date.fromisoformat(m.group(1)) if m else date(2023, 6, 1)
 
 
+def read_live_wall():
+    """读线上 PRESETS.realistic 的 demandWall / demandWallSigma。"""
+    s = open(INDEX, encoding="utf-8").read()
+    m = re.search(r"realistic:\s*\{[^}]*?demandWall:\s*([\d.]+),\s*demandWallSigma:\s*([\d.]+)", s)
+    return (float(m.group(1)), float(m.group(2))) if m else (1.8, 0.5)
+
+
 def months(a, b):
     return (b.year - a.year) * 12 + (b.month - a.month) + (b.day - a.day) / 30.4
 
@@ -101,12 +108,33 @@ def main():
         eta = f"{today.year + m_total // 12}-{m_total % 12 + 1:02d}"
         p(f"| {name} | {f:.2f} | {round(thick):,} | {T:.2f} | {eta} |")
 
+    implied_span = None
     if rec:
         rate = max(v for _, v in rec)
         implied_span = POOL / (rate / 12)
         p(f"\n[自洽校验] 池/收件率 ⇒ 跨度≈{implied_span:.0f}月 vs [cutoff→今天]={span:.0f}月。"
           f" 若前者更大 ⇒ 池含早于 cutoff 的领事积压(都排你前面)⇒ f 偏高、排到更晚；"
           f"须待 cutoff 进入 2024 PD 由 I-485 库存实测收敛。")
+
+    # —— demandWall σ 建议(顾问性,不自动改线上)——
+    wall0, sig0 = read_live_wall()
+    fc = base
+    f_lo, f_hi = base * 0.8, min(1.0, base * 1.2)
+    if implied_span and implied_span > span:               # 领事积压 → 上调 f 上界
+        extra = (implied_span - span) / implied_span
+        f_hi = min(1.0, f_hi + extra * (1 - f_hi))
+    wall_lo, wall_hi = wall0 * f_lo / fc, wall0 * f_hi / fc
+    sug_center = (wall_lo + wall_hi) / 2
+    sug_sigma = max(0.1, (wall_hi - wall_lo) / 4)
+    pinned = cutoff.year >= 2024                            # cutoff 进入 2024 PD = f 可被库存实测
+    p(f"\n## demandWall 建议(顾问性)")
+    p(f"f 诚实区间 ≈ [{f_lo:.2f}, {f_hi:.2f}](含领事积压上调) → 建议 中心≈{sug_center:.2f}、σ≈{sug_sigma:.2f}")
+    p(f"线上现行: 中心={wall0}、σ={sig0}")
+    if not pinned:
+        p("⚠️ cutoff 尚未进入 2024 PD → f 未被数据钉死,**暂不收紧 σ**(避免假精度);"
+          "待 I-485 库存开始报 2024 PD 人数后,本建议转为可执行(届时可据实调 σ/中心或自动开 PR)。")
+    else:
+        p("✅ cutoff 已进入 2024 PD → f 可由库存实测,建议据上值调整线上 demandWall/σ。")
 
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
     if sp:
