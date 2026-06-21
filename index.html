@@ -24,6 +24,19 @@
     --shadow: 0 1px 2px rgba(16,40,30,0.05), 0 10px 28px -16px rgba(16,40,30,0.16);
     --shadow-lg: 0 12px 34px -12px rgba(16,40,30,0.20);
     --radius: 16px;
+    --input-bg: #f9fafb; --chart-grid: #f0f0f0; --chart-box: #e5e7eb;
+  }
+  /* 暗色模式：跟随系统或夜间(由 <head> 脚本设 data-theme) */
+  :root[data-theme="dark"] {
+    --bg: #0e1512; --card: #16201c; --border: #2a3b34;
+    --text: #e8efeb; --text2: #aebcb4; --text3: #8a9a91;
+    --blue: #2ea579; --blue-light: #2a5544; --blue-bg: #173a2b;
+    --orange: #e0992f; --orange-light: #3a2c16;
+    --green: #14c98c; --green-light: #16382a;
+    --red: #f0635a; --red-light: #3a1c1a;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 28px -16px rgba(0,0,0,0.6);
+    --shadow-lg: 0 12px 34px -12px rgba(0,0,0,0.7);
+    --input-bg: #1d2a25; --chart-grid: #27332e; --chart-box: #33453d;
   }
   html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; font-size: 15px; line-height: 1.55; }
   body { padding: 12px; padding-top: calc(12px + env(safe-area-inset-top)); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
@@ -43,11 +56,11 @@
   .profile-edit.active { display: block; }
   .pe-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
   .pe-label { font-size: 10px; color: var(--text3); font-weight: 500; margin-bottom: 2px; display: block; }
-  .pe-input { padding: 6px 8px; background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text); font-family: inherit; -webkit-appearance: none; appearance: none; }
+  .pe-input { padding: 6px 8px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text); font-family: inherit; -webkit-appearance: none; appearance: none; }
   .pe-input:focus { outline: none; border-color: var(--blue); }
   select.pe-input { padding-right: 24px; }
   .date-group { display: flex; gap: 4px; align-items: center; }
-  .date-group input { text-align: center; font-variant-numeric: tabular-nums; padding: 6px 2px; font-size: 13px; font-family: inherit; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: #f9fafb; -webkit-appearance: none; appearance: none; }
+  .date-group input { text-align: center; font-variant-numeric: tabular-nums; padding: 6px 2px; font-size: 13px; font-family: inherit; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--input-bg); -webkit-appearance: none; appearance: none; }
   .date-group input:focus { outline: none; border-color: var(--blue); }
   .date-group .dg-year { width: 56px; }
   .date-group .dg-month, .date-group .dg-day { width: 38px; }
@@ -58,7 +71,7 @@
   .date-group.invalid input { border-color: var(--red); }
   .pe-btn { padding: 6px 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .pe-btn-primary { background: var(--blue); color: #fff; }
-  .pe-btn-secondary { background: #f3f4f6; color: var(--text2); border: 1px solid var(--border); }
+  .pe-btn-secondary { background: var(--input-bg); color: var(--text2); border: 1px solid var(--border); }
   .hidden { display: none !important; }
 
   .result { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 18px 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
@@ -115,11 +128,11 @@
   .leg i.band { height: 6px; opacity: 0.5; }
   .leg i.dash { border-top: 1.5px dashed; height: 0; }
   .zoom-ctrls { display: flex; gap: 2px; }
-  .zoom-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: #f9fafb; color: var(--text2); font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: system-ui; line-height: 1; transition: all 0.12s; user-select: none; }
+  .zoom-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text2); font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: system-ui; line-height: 1; transition: all 0.12s; user-select: none; }
   .zoom-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
   .zoom-btn:active { transform: scale(0.92); }
   .chart-tooltip { backdrop-filter: blur(8px); background: rgba(255,255,255,0.96) !important; border-radius: 8px !important; padding: 6px 10px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important; }
-  .chart-tooltip .tt-hdr { font-size: 10px; color: var(--text3); margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px solid #f0f0f0; font-variant-numeric: tabular-nums; }
+  .chart-tooltip .tt-hdr { font-size: 10px; color: var(--text3); margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
   .chart-tooltip .tt-series { display: flex; align-items: center; gap: 5px; padding: 1px 0; }
   .chart-tooltip .tt-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
   .chart-tooltip .tt-sname { color: var(--text3); font-size: 10px; min-width: 14px; }
@@ -151,23 +164,23 @@
   .settings-content { padding: 4px 16px 16px; }
   .settings-hint { font-size: 11px; color: var(--text3); margin-bottom: 10px; line-height: 1.5; }
   .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
-  .preset { padding: 6px; background: #f9fafb; border: 1.5px solid var(--border); border-radius: 8px; cursor: pointer; font-family: inherit; text-align: center; transition: all 0.15s; color: var(--text); }
+  .preset { padding: 6px; background: var(--input-bg); border: 1.5px solid var(--border); border-radius: 8px; cursor: pointer; font-family: inherit; text-align: center; transition: all 0.15s; color: var(--text); }
   .preset:hover { border-color: var(--blue); }
   .preset.active { border-color: var(--blue); background: var(--blue-bg); box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
   .preset .p-name { display: block; font-size: 12px; font-weight: 600; }
   .preset .p-desc { display: block; font-size: 9px; color: var(--text3); }
   .params { display: flex; flex-direction: column; gap: 10px; }
   .reset-btn { margin-top: 16px; background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 12.5px; font-weight: 600; padding: 8px 16px; border-radius: 999px; cursor: pointer; font-family: inherit; min-height: 34px; transition: background 0.15s; }
-  .reset-btn:hover { background: #f3f4f6; }
+  .reset-btn:hover { background: var(--input-bg); }
   .param-row { position: relative; }
   .param-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
   .param-name { font-size: 12px; color: var(--text2); cursor: pointer; }
   .param-name:hover { color: var(--blue); }
   .param-value { font-size: 13px; font-weight: 600; color: var(--blue); font-variant-numeric: tabular-nums; }
   input[type="range"] { width: 100%; -webkit-appearance: none; appearance: none; background: transparent; height: 24px; cursor: pointer; }
-  input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: #e5e7eb; border-radius: 2px; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: var(--chart-box); border-radius: 2px; }
   input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--blue); border-radius: 50%; margin-top: -6.5px; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-  input[type="range"]::-moz-range-track { height: 3px; background: #e5e7eb; border-radius: 2px; }
+  input[type="range"]::-moz-range-track { height: 3px; background: var(--chart-box); border-radius: 2px; }
   input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; background: var(--blue); border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
   .param-meta { display: flex; justify-content: space-between; font-size: 9px; color: var(--text3); margin-top: 1px; }
   .source-popup { display: none; position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-top: 3px; z-index: 20; box-shadow: var(--shadow-lg); }
@@ -176,7 +189,7 @@
   .source-popup .sp-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
   .source-popup .sp-row .sp-lbl { color: var(--text3); }
   .source-popup .sp-row .sp-val { color: var(--text); font-weight: 500; }
-  .source-popup .sp-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid #f3f4f6; }
+  .source-popup .sp-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
   .source-popup .sp-section-title { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
   .source-popup .sp-text { font-size: 11px; color: var(--text2); line-height: 1.4; }
   .source-popup .sp-close { position: absolute; top: 8px; right: 10px; color: var(--text3); cursor: pointer; font-size: 14px; }
@@ -194,7 +207,7 @@
   .modal-box .modal-sub { color: var(--text2); font-size: 12px; text-align: center; margin-bottom: 16px; line-height: 1.5; }
   .modal-box .field { margin-bottom: 12px; }
   .modal-box label { display: block; font-size: 11px; color: var(--text3); margin-bottom: 3px; font-weight: 500; }
-  .modal-box input, .modal-box select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; color: var(--text); background: #f9fafb; -webkit-appearance: none; }
+  .modal-box input, .modal-box select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; color: var(--text); background: var(--input-bg); -webkit-appearance: none; }
   .modal-box .date-group { width: 100%; }
   .modal-box .date-group input { flex: 1 1 0; width: auto; min-width: 0; }
   .modal-box .date-group .dg-year { flex: 1.4 1 0; }
@@ -228,6 +241,24 @@
     .touch-hint { display: block; }
   }
 </style>
+<script>
+(function(){
+  function compute(){
+    var sysDark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+    var h = new Date().getHours();
+    return (sysDark || h >= 19 || h < 7) ? 'dark' : 'light';
+  }
+  function apply(){
+    var t = compute();
+    document.documentElement.setAttribute('data-theme', t);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', t === 'dark' ? '#0e1512' : '#15734f');
+  }
+  apply();
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply); } catch(e){}
+  setInterval(apply, 1800000);
+})();
+</script>
 </head>
 <body>
 
@@ -1042,23 +1073,23 @@ function drawForecastChart(percentiles) {
     '<linearGradient id="band-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15734F" stop-opacity="0.10"/><stop offset="100%" stop-color="#15734F" stop-opacity="0.02"/></linearGradient>' +
     '<linearGradient id="band-inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15734F" stop-opacity="0.18"/><stop offset="100%" stop-color="#15734F" stop-opacity="0.05"/></linearGradient>' +
     '</defs>';
-  var bg = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>';
+  var bg = '<rect x="0" y="0" width="' + W + '" height="' + H + '" style="fill:var(--card)"/>';
 
   // Adaptive grid
   var grid = '';
   var xTicks = getDateTicks(xMin, xMax);
   for (var i = 0; i < xTicks.length; i++) {
     var px = sx(xTicks[i].ts);
-    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" stroke="#f0f0f0" stroke-width="1" stroke-dasharray="3 3"/>';
+    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" style="stroke:var(--chart-grid)" stroke-width="1" stroke-dasharray="3 3"/>';
     grid += '<text x="' + px + '" y="' + (PAD.top + PH + 16) + '" fill="#9ca3af" font-size="11" text-anchor="middle">' + xTicks[i].label + '</text>';
   }
   var yTicks = getDateTicks(yMin, yMax);
   for (var i = 0; i < yTicks.length; i++) {
     var py = sy(yTicks[i].ts);
-    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" stroke="#f0f0f0" stroke-width="1" stroke-dasharray="3 3"/>';
+    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" style="stroke:var(--chart-grid)" stroke-width="1" stroke-dasharray="3 3"/>';
     grid += '<text x="' + (PAD.left - 6) + '" y="' + (py + 4) + '" fill="#9ca3af" font-size="10" text-anchor="end">' + yTicks[i].label + '</text>';
   }
-  grid += '<rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '" fill="none" stroke="#e5e7eb" stroke-width="1"/>';
+  grid += '<rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '" fill="none" style="stroke:var(--chart-box)" stroke-width="1"/>';
 
   // Bands with gradient fills
   var band90 = '<path d="' + bandPath(percentiles.p10, percentiles.p90) + '" fill="url(#band-outer)"/>';
@@ -1179,25 +1210,25 @@ function drawWaitTimeChart(percentiles) {
     '<linearGradient id="band-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15734F" stop-opacity="0.10"/><stop offset="100%" stop-color="#15734F" stop-opacity="0.02"/></linearGradient>' +
     '<linearGradient id="band-inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#15734F" stop-opacity="0.18"/><stop offset="100%" stop-color="#15734F" stop-opacity="0.05"/></linearGradient>' +
     '</defs>';
-  var bg = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>';
+  var bg = '<rect x="0" y="0" width="' + W + '" height="' + H + '" style="fill:var(--card)"/>';
 
   // Adaptive grid
   var grid = '';
   var xTicks = getDateTicks(xMin, xMax);
   for (var i = 0; i < xTicks.length; i++) {
     var px = sx(xTicks[i].ts);
-    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" stroke="#f0f0f0" stroke-width="1" stroke-dasharray="3 3"/>';
+    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" style="stroke:var(--chart-grid)" stroke-width="1" stroke-dasharray="3 3"/>';
     grid += '<text x="' + px + '" y="' + (PAD.top + PH + 16) + '" fill="#9ca3af" font-size="11" text-anchor="middle">' + xTicks[i].label + '</text>';
   }
   var yNTicks = [];
   for (var yt = Math.ceil(yMin); yt <= yMax + 1e-9; yt += 1) yNTicks.push(yt); // 纵轴固定一年一格
   for (var i = 0; i < yNTicks.length; i++) {
     var py = sy(yNTicks[i]);
-    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" stroke="#f0f0f0" stroke-width="1" stroke-dasharray="3 3"/>';
+    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" style="stroke:var(--chart-grid)" stroke-width="1" stroke-dasharray="3 3"/>';
     var lbl = yNTicks[i] % 1 === 0 ? yNTicks[i].toFixed(0) : yNTicks[i].toFixed(1);
     grid += '<text x="' + (PAD.left - 6) + '" y="' + (py + 4) + '" fill="#9ca3af" font-size="10" text-anchor="end">' + lbl + '年</text>';
   }
-  grid += '<rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '" fill="none" stroke="#e5e7eb" stroke-width="1"/>';
+  grid += '<rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '" fill="none" style="stroke:var(--chart-box)" stroke-width="1"/>';
 
   // Bands with gradient
   var band90 = waitP10.length && waitP90.length ? '<path d="' + bandPath(waitP90, waitP10) + '" fill="url(#band-outer)"/>' : '';
