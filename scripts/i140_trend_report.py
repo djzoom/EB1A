@@ -44,8 +44,9 @@ def awaiting_stock():
 
 
 def receipts():
-    """China EB-1A / NIW I-140 收件(Rec-COB)。各文件为 FY-to-date，跨季会被修订。"""
-    out = []
+    """China EB-1A / NIW I-140 收件(Rec-COB)。各文件为单季值(同 FY 内递减即证)。
+    xlsx 未抓到的季度，用 data/i140_china_receipts_supplement.json 补充。"""
+    out, tags = [], set()
     for f in sorted(glob.glob(os.path.join(USCIS, "I140_FY*_Q*.xlsx"))):
         wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
         sn = 'Rec-COB' if 'Rec-COB' in wb.sheetnames else ('Rec_COB' if 'Rec_COB' in wb.sheetnames else None)
@@ -55,8 +56,16 @@ def receipts():
         for r in rows:
             if r and str(r[0]).strip().upper() == 'CHINA':
                 tag = re.search(r'I140_(FY\d+_Q\d+)', os.path.basename(f)).group(1)
-                out.append((tag, r[1], r[5]))  # EB-1A(Extraordinary), NIW
+                out.append((tag, r[1], r[5])); tags.add(tag)
                 break
+    sup = os.path.join(ROOT, "data", "i140_china_receipts_supplement.json")
+    if os.path.exists(sup):
+        import json
+        q = json.load(open(sup, encoding="utf-8")).get("quarters", {})
+        for tag, v in q.items():
+            if tag not in tags:
+                out.append((tag, v.get("eb1a"), v.get("niw")))
+    out.sort(key=lambda x: x[0])
     return out
 
 
