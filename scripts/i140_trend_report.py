@@ -77,10 +77,14 @@ def main():
         trend = "📈 仍在变厚" if recent > earlier else ("📉 增速放缓/退潮" if recent < earlier else "持平")
         p(f"  → 最近一期环比 {recent:+d} vs 上期 {earlier:+d}：{trend}")
 
-    p("\n## China I-140 收件(Rec-COB，FY-to-date；跨季有修订，仅看年度量级)")
-    for tag, eb1a, niw in receipts():
-        p(f"  {tag}: EB-1A(杰出能力) {eb1a}   NIW {niw}")
-    p("  注：USCIS 跨季会修订，季度差分不可靠；用年度量级判断申请潮强弱。")
+    p("\n## China I-140 收件(Rec-COB，单季值) —— EB-1A / NIW 申请潮")
+    rs = receipts()
+    for tag, eb1a, niw in rs:
+        p(f"  {tag}: EB-1A {eb1a}   NIW {niw}")
+    if len(rs) >= 2:
+        e0, e1, pk = rs[0][1], rs[-1][1], max(r[1] for r in rs)
+        p(f"  → EB-1A {e0}→{e1}（峰值 {pk}，{'退潮' if e1 < e0 else '升温'}）;"
+          " 每文件为单季值(同 FY 内递减即证)。流入缩 = 未来 PD 身后堆积变小。")
 
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
     if sp:
