@@ -91,9 +91,10 @@ def main():
     for tag, eb1a, niw in rs:
         p(f"  {tag}: EB-1A {eb1a}   NIW {niw}")
     if len(rs) >= 2:
-        e0, e1, pk = rs[0][1], rs[-1][1], max(r[1] for r in rs)
-        p(f"  → EB-1A {e0}→{e1}（峰值 {pk}，{'退潮' if e1 < e0 else '升温'}）;"
-          " 每文件为单季值(同 FY 内递减即证)。流入缩 = 未来 PD 身后堆积变小。")
+        e1, pk = rs[-1][1], max(r[1] for r in rs)
+        trend = '退潮' if e1 < pk * 0.95 else ('见顶' if e1 < pk else '升温中')
+        p(f"  → EB-1A 峰值 {pk} → 最新 {e1}（{trend}，较峰 {round((e1/pk-1)*100)}%）;"
+          " 每文件为单季值。流入缩 = 未来 PD 身后堆积变小。")
 
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
     if sp:
