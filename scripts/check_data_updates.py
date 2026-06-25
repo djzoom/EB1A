@@ -79,7 +79,8 @@ def _supplement_latest_quarter():
     if not p.exists():
         return None
     try:
-        quarters = json.load(open(p, encoding="utf-8")).get("quarters", {})
+        with open(p, encoding="utf-8") as fh:
+            quarters = json.load(fh).get("quarters", {})
     except (OSError, ValueError):
         return None
     qend = {1: (-1, 12), 2: (0, 3), 3: (0, 6), 4: (0, 9)}
@@ -239,7 +240,7 @@ def check_i140_quarterly(dry_run: bool) -> list[str]:
     首次抓到 CSV 时打印表头几行到日志，便于据真实格式补解析器(避免盲解析出错)。"""
     new_files = []
     now = datetime.now()
-    current_fy = now.year if now.month >= 10 else now.year
+    current_fy = now.year + 1 if now.month >= 10 else now.year
 
     for fy in range(2022, current_fy + 2):
         for q in range(1, 5):
@@ -299,7 +300,7 @@ def check_i140_approved(dry_run: bool) -> list[str]:
     """Check for new I-140/I-360/I-526 Approved Awaiting Visa reports."""
     new_files = []
     now = datetime.now()
-    current_fy = now.year if now.month >= 10 else now.year
+    current_fy = now.year + 1 if now.month >= 10 else now.year
 
     for fy in range(2024, current_fy + 2):
         for q in range(1, 5):
@@ -339,7 +340,7 @@ def check_dos_issuance(dry_run: bool) -> list[str]:
     """Check for new DOS Monthly IV Issuance files."""
     new_files = []
     now = datetime.now()
-    current_fy = now.year if now.month >= 10 else now.year + 1
+    current_fy = now.year + 1 if now.month >= 10 else now.year
 
     for fy in range(2024, current_fy + 1):
         for month_name, cal_year in fy_months(fy):
