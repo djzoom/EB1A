@@ -695,6 +695,11 @@ function formatDateFull(ts) {
   var d = new Date(ts);
   return d.getFullYear() + '年' + (d.getMonth() + 1) + '月';
 }
+function formatDateDay(ts) {   // 精确到日：用于"你的优先日"这类已知确切日期(非预测)
+  if (!ts || ts < 100000000) return '--';
+  var d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
 function formatWait(ts) {
   if (!ts) return '--';
   var diff = (ts - TODAY) / (MS_PER_DAY * 30.44);
@@ -1437,9 +1442,13 @@ function renderMonthlyTable(percentiles) {
 function renderProfileView() {
   var cutoff = getCurrentCutoff();
   var days = Math.round((profile.pd - cutoff) / MS_PER_DAY);
-  var distStr = days > 0 ? '+' + days + '天' : days < 0 ? '已排到' : '刚好排到';
-  document.getElementById('pv-pd').textContent = formatDate(profile.pd);
-  document.getElementById('pv-distance').textContent = distStr;
+  var distStr = days > 0 ? '距排期 +' + days + '天' : days < 0 ? '已排到' : '刚好排到';
+  document.getElementById('pv-pd').textContent = formatDateDay(profile.pd);
+  var distEl = document.getElementById('pv-distance');
+  distEl.textContent = distStr;
+  distEl.title = days > 0
+    ? '你的优先日比当前排期（表A ' + formatDateDay(cutoff) + '）靠后 ' + days + ' 天——前方还需把排期推进这么多天才轮到你'
+    : days < 0 ? '你的优先日已早于当前排期，理论上已可排到' : '你的优先日正好等于当前排期';
 }
 
 function renderExplanation() {
