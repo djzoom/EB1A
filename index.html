@@ -771,25 +771,15 @@ function reduceMotion() { try { return window.matchMedia && matchMedia('(prefers
 
 function animateChart() {
   if (!gsapReady() || reduceMotion()) return;
-  // 走势图:整个预测扇区(区间带+三线+交点)从"今天"向右"推演"生长
+  // 两图的预测扇区(区间带+轨迹云+三线)都从「已知边界」向右"推演"生长：
+  // 走势图边界=今天(时间轴)；等待图边界=当前排到的 PD(PD 轴)。
   var rect = document.getElementById('reveal-rect');
   if (rect) {
     var full = parseFloat(rect.getAttribute('width')) || 0;
     window.gsap.fromTo(rect, { attr: { width: 0 } }, { attr: { width: full }, duration: 1.2, ease: 'power2.out' });
-  } else {
-    // 等待时间图:沿用中位线描边生长
-    var line = document.getElementById('pred-line');
-    if (line && typeof line.getTotalLength === 'function') {
-      try {
-        var len = line.getTotalLength();
-        line.style.strokeDasharray = len;
-        window.gsap.fromTo(line, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.9, ease: 'power2.out',
-          onComplete: function () { line.style.strokeDasharray = ''; } });
-      } catch (e) {}
-    }
   }
   var marker = document.querySelector('#chart .cross-dot');
-  if (marker) window.gsap.from(marker, { scale: 0, transformOrigin: '50% 50%', duration: 0.4, delay: rect ? 1.0 : 0.6, ease: 'back.out(2)' });
+  if (marker) window.gsap.from(marker, { scale: 0, transformOrigin: '50% 50%', duration: 0.4, delay: 1.0, ease: 'back.out(2)' });
 }
 
 // 大日期随推演"滚动"到结果(从今天递增到命中日)
@@ -1327,8 +1317,35 @@ function drawWaitTimeChart(percentiles) {
   // Store snap data for tooltip
   lastSnapData = { mode: 'wait', p50: histWait.concat(waitP50), p10: waitP10, p90: waitP90, predStart: histWait.length };
 
-  document.getElementById('chart').innerHTML = defs + bg + grid +
-    '<g clip-path="url(#plot-clip)">' + band90 + band50 + hist + pdLine + lineP90 + lineP10 + lineP50 + crossMarker + pdLabel + '</g>';
+  // —— 不确定性-透明度 协调设计 ——
+  // 等待图的「已知/预测」边界在“当前排到的 PD”(非今天)：PD 小于它=已裁定(确定),大于它=预测。
+  // 故揭示与渐隐都从 sx(lastPD) 向右(PD 越大=越晚的申请人=预测越远+越深入需求墙)展开。
+  var lastPD = HISTORY[HISTORY.length - 1].y;
+  var revX = Math.max(PAD.left, Math.min(sx(lastPD), PAD.left + PW));
+  var fcRight = PAD.left + PW;
+  // 真实蒙卡路径 → 转入等待空间(同一批 paths,经 pathToWait),形成数据轨迹云;随 PD 渐透
+  var cloud = '';
+  if (lastCloudPaths && lastCloudPaths.length) {
+    for (var ci = 0; ci < lastCloudPaths.length; ci++) {
+      var cd = linePathD(pathToWait(lastCloudPaths[ci]), sx, sy);
+      if (cd) cloud += '<path d="' + cd + '" fill="none" stroke="#15734F" stroke-width="0.7" opacity="0.06" stroke-linejoin="round"/>';
+    }
+  }
+  var revDefs = '<clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '"/></clipPath>' +
+    '<linearGradient id="fade-grad" gradientUnits="userSpaceOnUse" x1="' + revX + '" y1="0" x2="' + fcRight + '" y2="0">' +
+      '<stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="0.4" stop-color="#fff" stop-opacity="0.82"/><stop offset="1" stop-color="#fff" stop-opacity="0.25"/></linearGradient>' +
+    '<mask id="future-fade" maskUnits="userSpaceOnUse"><rect x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '" fill="url(#fade-grad)"/></mask>';
+  // 边界参考线(对应走势图的“今天”线):标出当前排到哪,即渐隐/揭示的起点
+  var bX = sx(lastPD);
+  var boundaryLine = (bX > PAD.left + 1 && bX < fcRight) ?
+    '<line x1="' + bX + '" y1="' + PAD.top + '" x2="' + bX + '" y2="' + (PAD.top + PH) + '" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3 3"/>' +
+    '<text x="' + bX + '" y="' + (PAD.top - 5) + '" fill="#94A3B8" font-size="10" text-anchor="middle">现排到</text>' : '';
+
+  document.getElementById('chart').innerHTML = defs + revDefs + bg + grid +
+    '<g clip-path="url(#plot-clip)">' + hist + pdLine +
+      '<g clip-path="url(#reveal-clip)"><g mask="url(#future-fade)">' + band90 + band50 + cloud + lineP90 + lineP10 + lineP50 + '</g></g>' +
+      crossMarker + pdLabel + '</g>' +
+    boundaryLine;
   animateChart();
 }
 
