@@ -130,7 +130,6 @@
   .leg i { display: inline-block; width: 12px; height: 2px; border-radius: 1px; }
   .leg i.band { height: 6px; opacity: 0.5; }
   .leg i.dash { border-top: 1.5px dashed; height: 0; }
-  .leg i.dot { width: 6px; height: 6px; border-radius: 50%; opacity: 0.55; }
   .zoom-ctrls { display: flex; gap: 2px; }
   .zoom-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text2); font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: system-ui; line-height: 1; transition: all 0.12s; user-select: none; }
   .zoom-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
@@ -369,7 +368,7 @@
       <span class="leg"><i class="dash" style="border-color:#64748B"></i>表B递交</span>
       <span class="leg"><i style="background:#15734F"></i>预测</span>
       <span class="leg"><i class="band" style="background:#15734F"></i>范围</span>
-      <span class="leg"><i class="dot" style="background:#15734F"></i>每点=1次模拟</span>
+      <span class="leg"><i style="background:#15734F;opacity:.3"></i>模拟轨迹</span>
       <span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>
     </div>
     <div class="touch-hint">按住图表横向滑动，查看每个时间点的数值</div>
@@ -679,7 +678,6 @@ var selectedPercentile = 'p50';
 var crossingsByPct = null;
 var lastPercentiles = null;
 var lastCloudPaths = null;   // 抽样的真实蒙卡路径,用于"轨迹面条"可视化
-var lastCrossings = null;    // 每条模拟路径"排到你 PD"的那一天 → 结果分布点带
 function sampleCloud(paths, n) {
   if (!paths || !paths.length) return [];
   n = Math.min(n || 36, paths.length);
@@ -687,14 +685,6 @@ function sampleCloud(paths, n) {
   for (var i = 0; i < n; i++) out.push(paths[Math.floor(i * step)]);
   return out;
 }
-function sampleArr(a, n) {
-  if (!a || a.length <= n) return a || [];
-  var step = a.length / n, out = [];
-  for (var i = 0; i < n; i++) out.push(a[Math.floor(i * step)]);
-  return out;
-}
-// 确定性"抖动"(0..1):同一 PD 每次重绘点位一致,且不动用被禁的 Math.random
-function jitter01(i) { var x = Math.sin((i + 1) * 12.9898) * 43758.5453; return x - Math.floor(x); }
 var chartBounds = null;
 var openSourceParam = null;
 var chartMode = 'trend';
@@ -805,28 +795,20 @@ function animateHeroRoll() {
     onComplete: function () { hv.textContent = formatDate(target); } });
 }
 
-// "下雨"推演:把 500 次蒙特卡洛逐条"落"下来(面条线随机次序描出),再让结果点带逐个弹入,
-// 直观呈现"很多次随机模拟 → 收敛成区间/分布"的过程。
+// "下雨"推演:把蒙特卡洛轨迹逐条"落"下来(面条线随机次序描出),
+// 直观呈现"很多次随机模拟 → 收敛成区间"的过程。
 function animateRain() {
   if (!gsapReady() || reduceMotion()) return;
   var lines = document.querySelectorAll('#chart .mc-line');
-  if (lines.length) {
-    lines.forEach(function (ln) {
-      try { var L = ln.getTotalLength(); ln.style.strokeDasharray = L; ln.style.strokeDashoffset = L; } catch (e) {}
-    });
-    window.gsap.to('#chart .mc-line', {
-      strokeDashoffset: 0, duration: 0.6, ease: 'power1.out',
-      stagger: { each: 0.006, from: 'random' },
-      onComplete: function () { document.querySelectorAll('#chart .mc-line').forEach(function (ln) { ln.style.strokeDasharray = ''; }); }
-    });
-  }
-  var dots = document.querySelectorAll('#chart .mc-dot');
-  if (dots.length) {
-    window.gsap.from('#chart .mc-dot', {
-      scale: 0, opacity: 0, transformOrigin: '50% 50%',
-      duration: 0.3, ease: 'back.out(2)', stagger: { each: 0.003, from: 'random' }, delay: 0.35
-    });
-  }
+  if (!lines.length) return;
+  lines.forEach(function (ln) {
+    try { var L = ln.getTotalLength(); ln.style.strokeDasharray = L; ln.style.strokeDashoffset = L; } catch (e) {}
+  });
+  window.gsap.to('#chart .mc-line', {
+    strokeDashoffset: 0, duration: 0.6, ease: 'power1.out',
+    stagger: { each: 0.006, from: 'random' },
+    onComplete: function () { document.querySelectorAll('#chart .mc-line').forEach(function (ln) { ln.style.strokeDasharray = ''; }); }
+  });
 }
 
 // 手动重播"推演":下雨模拟 + 生长扇区 + 滚动日期
@@ -1214,17 +1196,6 @@ function drawForecastChart(percentiles) {
       if (cd) cloud += '<path class="mc-line" d="' + cd + '" fill="none" stroke="#15734F" stroke-width="0.6" opacity="0.13" stroke-linejoin="round"/>';
     }
   }
-  // 结果分布点带:每个点=一次模拟"排到你 PD"的那一天,沿你的号(横)线散布 → 一眼看出是 500 次抽样
-  var mcDots = '';
-  if (lastCrossings && lastCrossings.length) {
-    var ds = sampleArr(lastCrossings, 300);
-    for (var di = 0; di < ds.length; di++) {
-      var dxx = sx(ds[di]);
-      if (dxx < PAD.left || dxx > fcRight) continue;
-      var jy = (jitter01(di) - 0.5) * 26;     // ±13px 横向点带
-      mcDots += '<circle class="mc-dot" cx="' + dxx.toFixed(1) + '" cy="' + (pdY + jy).toFixed(1) + '" r="1.4" fill="#15734F" opacity="0.42"/>';
-    }
-  }
   var revDefs = '<clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '"/></clipPath>' +
     '<linearGradient id="fade-grad" gradientUnits="userSpaceOnUse" x1="' + revX + '" y1="0" x2="' + fcRight + '" y2="0">' +
       '<stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="0.4" stop-color="#fff" stop-opacity="0.82"/><stop offset="1" stop-color="#fff" stop-opacity="0.25"/></linearGradient>' +
@@ -1233,7 +1204,6 @@ function drawForecastChart(percentiles) {
     '<g clip-path="url(#plot-clip)">' + histB + hist + pdLine +
       '<g mask="url(#future-fade)">' + cloud + '</g>' +
       '<g clip-path="url(#reveal-clip)"><g mask="url(#future-fade)">' + band90 + band50 + lineP90 + lineP10 + lineP50 + '</g></g>' +
-      '<g mask="url(#future-fade)">' + mcDots + '</g>' +
       crossMarker + pdLabel + '</g>' +
     todayLine + todayLabel;
   animateChart();
@@ -1376,19 +1346,6 @@ function drawWaitTimeChart(percentiles) {
       if (cd) cloud += '<path class="mc-line" d="' + cd + '" fill="none" stroke="#15734F" stroke-width="0.6" opacity="0.13" stroke-linejoin="round"/>';
     }
   }
-  // 结果分布点带:每点=一次模拟的等待年数,在你的 PD(竖)线上纵向散布 → 一眼看出是多次抽样
-  var mcDots = '';
-  if (lastCrossings && lastCrossings.length) {
-    var wds = sampleArr(lastCrossings, 300);
-    for (var wi = 0; wi < wds.length; wi++) {
-      var ww = (wds[wi] - yourPD) / (365.25 * MS_PER_DAY);
-      if (ww < 0) continue;
-      var dyy = sy(ww);
-      if (dyy < PAD.top || dyy > PAD.top + PH) continue;
-      var jx = (jitter01(wi) - 0.5) * 26;     // ±13px 纵向点带
-      mcDots += '<circle class="mc-dot" cx="' + (pdX + jx).toFixed(1) + '" cy="' + dyy.toFixed(1) + '" r="1.4" fill="#15734F" opacity="0.42"/>';
-    }
-  }
   var revDefs = '<clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '"/></clipPath>' +
     '<linearGradient id="fade-grad" gradientUnits="userSpaceOnUse" x1="' + revX + '" y1="0" x2="' + fcRight + '" y2="0">' +
       '<stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="0.4" stop-color="#fff" stop-opacity="0.82"/><stop offset="1" stop-color="#fff" stop-opacity="0.25"/></linearGradient>' +
@@ -1403,7 +1360,6 @@ function drawWaitTimeChart(percentiles) {
     '<g clip-path="url(#plot-clip)">' + hist + pdLine +
       '<g mask="url(#future-fade)">' + cloud + '</g>' +
       '<g clip-path="url(#reveal-clip)"><g mask="url(#future-fade)">' + band90 + band50 + lineP90 + lineP10 + lineP50 + '</g></g>' +
-      mcDots +
       crossMarker + pdLabel + '</g>' +
     boundaryLine;
   animateChart();
@@ -1416,9 +1372,9 @@ window.setChartMode = function(mode) {
   document.getElementById('mode-wait').classList.toggle('active', mode === 'wait');
   var legend = document.getElementById('chart-legend');
   if (mode === 'wait') {
-    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>历史等待</span><span class="leg"><i style="background:#15734F"></i>预测等待</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i class="dot" style="background:#15734F"></i>每点=1次模拟</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的PD</span>';
+    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>历史等待</span><span class="leg"><i style="background:#15734F"></i>预测等待</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i style="background:#15734F;opacity:.3"></i>模拟轨迹</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的PD</span>';
   } else {
-    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>表A裁定</span><span class="leg"><i class="dash" style="border-color:#64748B"></i>表B递交</span><span class="leg"><i style="background:#15734F"></i>预测</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i class="dot" style="background:#15734F"></i>每点=1次模拟</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>';
+    legend.innerHTML = '<span class="leg"><i style="background:#F59E0B"></i>表A裁定</span><span class="leg"><i class="dash" style="border-color:#64748B"></i>表B递交</span><span class="leg"><i style="background:#15734F"></i>预测</span><span class="leg"><i class="band" style="background:#15734F"></i>范围</span><span class="leg"><i style="background:#15734F;opacity:.3"></i>模拟轨迹</span><span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>';
   }
   redrawChart();
 };
@@ -1613,7 +1569,6 @@ function render() {
   var percentiles = percentilePaths(paths);
   lastPercentiles = percentiles;
   lastCloudPaths = sampleCloud(paths, 60);                 // 面条线(轨迹)
-  lastCrossings = paths.map(findCrossingDate).filter(function (c) { return c != null; }); // 结果点带
   crossingsByPct = findCrossingsDistribution(paths);
 
   renderProfileView();
