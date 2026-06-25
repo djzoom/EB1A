@@ -113,9 +113,6 @@
   .replay-btn:active { transform: scale(0.96); }
   .mode-btn { padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: transparent; color: var(--text2); font-family: inherit; transition: background 0.15s, box-shadow 0.15s, color 0.15s; }
   .mode-btn.active { background: var(--card); color: var(--blue); box-shadow: var(--shadow); }
-  .chart-actions { display: flex; gap: 2px; }
-  .act-btn { padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--blue-bg); color: var(--blue); font-family: inherit; }
-  .act-btn:hover { background: var(--blue-light); }
   .chart-box { position: relative; }
   .chart-svg { display: block; width: 100%; height: auto; cursor: crosshair; }
   .zoom-hint { position: absolute; top: 4px; right: 6px; background: rgba(255,255,255,0.92); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-size: 10px; color: var(--blue); display: flex; align-items: center; gap: 4px; }
@@ -166,12 +163,6 @@
   .explain-content .explain-note { font-size: 11px; color: var(--text3); border-top: 1px solid var(--border); padding-top: 6px; margin-top: 2px; }
   .settings-content { padding: 4px 16px 16px; }
   .settings-hint { font-size: 11px; color: var(--text3); margin-bottom: 10px; line-height: 1.5; }
-  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
-  .preset { padding: 6px; background: var(--input-bg); border: 1.5px solid var(--border); border-radius: 8px; cursor: pointer; font-family: inherit; text-align: center; transition: all 0.15s; color: var(--text); }
-  .preset:hover { border-color: var(--blue); }
-  .preset.active { border-color: var(--blue); background: var(--blue-bg); box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
-  .preset .p-name { display: block; font-size: 12px; font-weight: 600; }
-  .preset .p-desc { display: block; font-size: 9px; color: var(--text3); }
   .params { display: flex; flex-direction: column; gap: 10px; }
   .reset-btn { margin-top: 16px; background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 12.5px; font-weight: 600; padding: 8px 16px; border-radius: 999px; cursor: pointer; font-family: inherit; min-height: 34px; transition: background 0.15s; }
   .reset-btn:hover { background: var(--input-bg); }
@@ -231,7 +222,7 @@
   @media (pointer: coarse) {
     html, body { font-size: 15px; }
     /* comfortable tap targets */
-    .mode-btn, .act-btn, .pe-btn, .text-btn {
+    .mode-btn, .pe-btn, .text-btn {
       min-height: 40px; display: inline-flex; align-items: center; justify-content: center;
     }
     .stat { min-height: 48px; padding: 8px 4px; }
@@ -901,26 +892,6 @@ function getDateTicks(minTs, maxTs) {
   return ticks;
 }
 
-function getNumberTicks(min, max, target) {
-  target = target || 6;
-  var range = max - min;
-  if (range <= 0) return [];
-  var rough = range / target;
-  var pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
-  var frac = rough / pow10;
-  var step;
-  if (frac <= 1.5) step = pow10;
-  else if (frac <= 3.5) step = 2 * pow10;
-  else if (frac <= 7.5) step = 5 * pow10;
-  else step = 10 * pow10;
-  var ticks = [];
-  var start = Math.ceil(min / step) * step;
-  for (var v = start; v <= max + step * 0.01; v += step) {
-    if (v >= min && v <= max) ticks.push(v);
-  }
-  return ticks;
-}
-
 function findNearestIdx(arr, targetX) {
   if (!arr || !arr.length) return -1;
   var best = 0, bestDist = Math.abs(arr[0].x - targetX);
@@ -1165,7 +1136,7 @@ function drawForecastChart(percentiles) {
   // Prediction lines (smooth)
   var lineP90 = '<path d="' + smoothPathD(percentiles.p90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>';
   var lineP10 = '<path d="' + smoothPathD(percentiles.p10, sx, sy) + '" fill="none" stroke="#10B981" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>';
-  var lineP50 = '<path id="pred-line" d="' + smoothPathD(percentiles.p50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  var lineP50 = '<path d="' + smoothPathD(percentiles.p50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
 
   // Cross marker with glow
   var crossMarker = '';
@@ -1311,7 +1282,7 @@ function drawWaitTimeChart(percentiles) {
   // Prediction (smooth)
   var lineP90 = waitP90.length ? '<path d="' + linePathD(waitP90, sx, sy) + '" fill="none" stroke="#EF4444" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
   var lineP10 = waitP10.length ? '<path d="' + linePathD(waitP10, sx, sy) + '" fill="none" stroke="#10B981" stroke-width="1" stroke-dasharray="4 3" opacity="0.5" stroke-linecap="round"/>' : '';
-  var lineP50 = waitP50.length ? '<path id="pred-line" d="' + linePathD(waitP50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' : '';
+  var lineP50 = waitP50.length ? '<path d="' + linePathD(waitP50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' : '';
 
   // Cross marker with glow
   var crossMarker = '';
