@@ -1172,10 +1172,17 @@ function drawForecastChart(percentiles) {
   lastSnapData = { mode: 'trend', p50: HISTORY.slice().concat(percentiles.p50), p10: percentiles.p10, p90: percentiles.p90, predStart: HISTORY.length };
 
   var revX = Math.max(PAD.left, sx(TODAY));
-  var revClip = '<clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (PAD.left + PW - revX) + '" height="' + PH + '"/></clipPath>';
-  document.getElementById('chart').innerHTML = defs + revClip + bg + grid +
+  var fcRight = PAD.left + PW;
+  var revDefs = '<clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '"/></clipPath>' +
+    '<linearGradient id="fade-grad" gradientUnits="userSpaceOnUse" x1="' + revX + '" y1="0" x2="' + fcRight + '" y2="0">' +
+      '<stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="0.4" stop-color="#fff" stop-opacity="0.82"/><stop offset="1" stop-color="#fff" stop-opacity="0.25"/></linearGradient>' +
+    '<mask id="future-fade" maskUnits="userSpaceOnUse"><rect x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '" fill="url(#fade-grad)"/></mask>';
+  document.getElementById('chart').innerHTML = defs + revDefs + bg + grid +
     '<g clip-path="url(#plot-clip)">' + histB + hist + pdLine +
-      '<g clip-path="url(#reveal-clip)">' + band90 + band50 + lineP90 + lineP10 + lineP50 + crossMarker + '</g>' +
+      '<g clip-path="url(#reveal-clip)">' +
+        '<g mask="url(#future-fade)">' + band90 + band50 + lineP90 + lineP10 + lineP50 + '</g>' +
+        crossMarker +
+      '</g>' +
       pdLabel + '</g>' +
     todayLine + todayLabel;
   animateChart();
