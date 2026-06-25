@@ -37,6 +37,71 @@ def emit_env(key: str, val: str):
         f.write(f"{key}<<__EOF__\n{val}\n__EOF__\n")
 
 
+def _get_text(url: str) -> str:
+    """GET 页面文本(失败返回空串)。仅 runner 能真正访问官网,容器/沙箱会被挡。"""
+    req = urllib.request.Request(url)
+    req.add_header("User-Agent", "Mozilla/5.0 EB1A-DataUpdater/1.0")
+    try:
+        resp = urllib.request.urlopen(req, timeout=30)
+        return resp.read().decode("utf-8", "ignore")
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
+        print(f"  无法获取页面 {url}: {e}")
+        return ""
+
+
+def diagnose(stale_names):
+    """逐"漏抓"源抓取官方列表页，正则提取相关文件链接并打印真实当前 URL/命名，
+    用于判断是『官方还没发』还是『改名/换路径』。仅在检测到漏抓时调用(随告警同跑)。"""
+    pages = {
+        "DOS 签发量(月)": (
+            "https://travel.state.gov",
+            "https://travel.state.gov/content/travel/en/legal/visa-law0/visa-statistics/"
+            "immigrant-visa-statistics/monthly-immigrant-visa-issuances.html",
+            r'href="([^"]*IV%20Issuances[^"]*|[^"]*IV Issuances[^"]*)"',
+        ),
+        "I-140 季度收件": (
+            "https://www.uscis.gov",
+            "https://www.uscis.gov/tools/reports-and-studies/immigration-and-citizenship-data",
+            r'href="([^"]*[iI]140[^"]*\.xlsx)"',
+        ),
+        "I-140 待签(季)": (
+            "https://www.uscis.gov",
+            "https://www.uscis.gov/tools/reports-and-studies/immigration-and-citizenship-data",
+            r'href="([^"]*i140_i360_i526[^"]*\.xlsx)"',
+        ),
+        "I-485 库存(月)": (
+            "https://www.uscis.gov",
+            "https://www.uscis.gov/tools/reports-and-studies/immigration-and-citizenship-data",
+            r'href="([^"]*eb_inventory[^"]*\.xlsx)"',
+        ),
+    }
+    out = ["", "## 漏抓源诊断（官网列表页真实链接）"]
+    for name in stale_names:
+        cfg = pages.get(name)
+        if not cfg:
+            continue
+        origin, page, pat = cfg
+        out.append(f"### {name} — 列表页 {page}")
+        html = _get_text(page)
+        if not html:
+            out.append("  ⚠️ 列表页拉取失败（容器内属正常；以 runner 日志为准）")
+            continue
+        seen, links = set(), []
+        for m in re.findall(pat, html):
+            u = m if m.startswith("http") else origin + m
+            if u not in seen:
+                seen.add(u); links.append(u)
+        if not links:
+            out.append("  未匹配到任何文件链接 → 可能页面结构/命名已变，或为 JS 动态渲染。")
+        else:
+            out.append(f"  匹配到 {len(links)} 个链接，最近若干：")
+            for u in links[-10:]:
+                out.append(f"    {u}")
+    for ln in out:
+        print(ln)
+    return out
+
+
 def _newest_month(directory, pattern, regex):
     """目录里匹配 regex(month_name, year) 的最新 (year, month)。"""
     latest = None
@@ -289,11 +354,18 @@ def main():
     print()
     for ln in report:
         print(ln)
+
+    # 有漏抓 → 抓官网列表页打印真实链接，判断改名 vs 未发布(随告警同跑)
+    diag = []
+    if stale:
+        stale_names = [s.split(" 仅到")[0].split(" 本地无")[0] for s in stale]
+        diag = diagnose(stale_names)
+
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
     if sp:
         try:
             with open(sp, "a", encoding="utf-8") as fh:
-                fh.write("\n".join(report) + "\n")
+                fh.write("\n".join(report + diag) + "\n")
         except OSError:
             pass
 
