@@ -231,32 +231,68 @@ def check_i485_inventory(dry_run: bool) -> list[str]:
 
 
 def check_i140_quarterly(dry_run: bool) -> list[str]:
-    """Check for new I-140 quarterly reports."""
+    """Check for new I-140 quarterly 收件(Rec-COB) reports.
+
+    USCIS 该系列近年命名多变：旧为多 sheet 的 i140_fyYYYY_qN.xlsx(含 Rec-COB 表)，
+    近期改为 CSV i140_fyYY_qN_rec_cob.csv。这里对每个缺失季度按候选清单探测，
+    命中即按原扩展名下载(xlsx→I140_FY..._Q..xlsx；csv→..._rec_cob.csv)。
+    首次抓到 CSV 时打印表头几行到日志，便于据真实格式补解析器(避免盲解析出错)。"""
     new_files = []
     now = datetime.now()
     current_fy = now.year if now.month >= 10 else now.year
-    # e.g. May 2026 -> FY2026, Nov 2026 -> FY2027
 
     for fy in range(2022, current_fy + 2):
         for q in range(1, 5):
-            local = USCIS_DIR / f"I140_FY{fy}_Q{q}.xlsx"
-            if local.exists():
+            local_xlsx = USCIS_DIR / f"I140_FY{fy}_Q{q}.xlsx"
+            local_csv = USCIS_DIR / f"I140_FY{fy}_Q{q}_rec_cob.csv"
+            if local_xlsx.exists() or local_csv.exists():
                 continue
 
-            for suffix in [f"i140_fy{fy}_q{q}.xlsx", f"i140_fy{fy}_q{q}_0.xlsx"]:
-                url = f"{USCIS_BASE}/{suffix}"
-                if probe_url(url):
-                    new_files.append(str(local.relative_to(REPO_ROOT)))
-                    if not dry_run:
-                        if download(url, local):
-                            print(f"  DOWNLOADED: {local.name}")
-                        else:
-                            new_files.pop()
+            yy = fy % 100
+            # (远端文件名, 本地落地名)；先 xlsx(各后缀)后 CSV(4位/2位 FY)
+            candidates = [
+                (f"i140_fy{fy}_q{q}.xlsx", local_xlsx),
+                (f"i140_fy{fy}_q{q}_0.xlsx", local_xlsx),
+                (f"i140_fy{fy}_q{q}_v1.xlsx", local_xlsx),
+                (f"i140_fy{fy}_q{q}_rec_cob.csv", local_csv),
+                (f"i140_fy{yy}_q{q}_rec_cob.csv", local_csv),
+            ]
+            for remote, local in candidates:
+                url = f"{USCIS_BASE}/{remote}"
+                if not probe_url(url):
+                    continue
+                new_files.append(str(local.relative_to(REPO_ROOT)))
+                if not dry_run:
+                    if download(url, local):
+                        print(f"  DOWNLOADED: {local.name}  <- {remote}")
+                        if local.suffix == ".csv":
+                            _dump_csv_head(local)   # 让 runner 日志暴露真实格式
                     else:
-                        print(f"  AVAILABLE: {local.name}")
-                    break
+                        new_files.pop()
+                else:
+                    print(f"  AVAILABLE: {local.name}  <- {remote}")
+                break
 
     return new_files
+
+
+def _dump_csv_head(path, n=6):
+    """打印 CSV 前 n 行到日志/运行摘要——用于据真实列结构补写解析器。"""
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            head = [next(fh).rstrip("\n") for _ in range(n)]
+    except (OSError, StopIteration) as e:
+        head = [f"(读取失败: {e})"]
+    msg = [f"## 新 CSV 格式预览: {path.name}"] + [f"  {ln}" for ln in head]
+    for ln in msg:
+        print(ln)
+    sp = os.environ.get("GITHUB_STEP_SUMMARY")
+    if sp:
+        try:
+            with open(sp, "a", encoding="utf-8") as fh:
+                fh.write("\n".join(msg) + "\n")
+        except OSError:
+            pass
 
 
 def check_i140_approved(dry_run: bool) -> list[str]:
