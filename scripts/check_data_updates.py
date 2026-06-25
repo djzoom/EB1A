@@ -8,6 +8,7 @@ Usage:
 """
 import argparse
 import os
+import re
 import sys
 import urllib.request
 import urllib.error
@@ -36,16 +37,67 @@ def emit_env(key: str, val: str):
         f.write(f"{key}<<__EOF__\n{val}\n__EOF__\n")
 
 
-def newest_inventory_month():
-    """本地已有的最新 I-485 Inventory 月份 (year, month)，用于逾期告警。"""
+def _newest_month(directory, pattern, regex):
+    """目录里匹配 regex(month_name, year) 的最新 (year, month)。"""
     latest = None
-    for f in USCIS_DIR.glob("I485_Pending_Inventory_*.xlsx"):
-        m = __import__("re").search(r"I485_Pending_Inventory_([a-z]+)_(\d{4})", f.name)
+    for f in directory.glob(pattern):
+        m = re.search(regex, f.name)
         if m and m.group(1) in MONTHS:
             d = (int(m.group(2)), MONTHS.index(m.group(1)) + 1)
             if latest is None or d > latest:
                 latest = d
     return latest
+
+
+def _newest_quarter(pattern, regex):
+    """USCIS 季度文件最新的"季度末" (year, month)。FY 季度→日历月：
+    Q1=上一日历年12月, Q2=3月, Q3=6月, Q4=9月。"""
+    qend = {1: (-1, 12), 2: (0, 3), 3: (0, 6), 4: (0, 9)}
+    latest = None
+    for f in USCIS_DIR.glob(pattern):
+        m = re.search(regex, f.name)
+        if m:
+            fy, q = int(m.group(1)), int(m.group(2))
+            dy, mo = qend[q]
+            ym = (fy + dy, mo)
+            if latest is None or ym > latest:
+                latest = ym
+    return latest
+
+
+def newest_inventory_month():
+    """本地已有的最新 I-485 Inventory 月份 (year, month)。"""
+    return _newest_month(USCIS_DIR, "I485_Pending_Inventory_*.xlsx",
+                         r"I485_Pending_Inventory_([a-z]+)_(\d{4})")
+
+
+def freshness_report():
+    """逐源新鲜度巡检。返回 (report_lines, stale_notes)。
+    report_lines 永远打印(被动存活证明,不推 Bark);stale_notes 非空才告警。
+    每源给一个"正常滞后预算"(月);超出=疑似漏抓/USCIS 改名,需人核查 URL。"""
+    now = datetime.now()
+    def behind(ym):
+        return (now.year - ym[0]) * 12 + (now.month - ym[1])
+    sources = [
+        ("I-485 库存(月)", newest_inventory_month(), 3),
+        ("DOS 签发量(月)", _newest_month(DOS_DIR, "iv_issuance_*.xlsx",
+                                       r"iv_issuance_([a-z]+)_(\d{4})"), 5),
+        ("I-140 季度收件", _newest_quarter("I140_FY*_Q*.xlsx", r"I140_FY(\d+)_Q(\d+)"), 9),
+        ("I-140 待签(季)", _newest_quarter("I140_I360_I526_Approved_FY*_Q*.xlsx",
+                                          r"Approved_FY(\d+)_Q(\d+)"), 9),
+    ]
+    lines, stale = ["## 数据源新鲜度巡检"], []
+    for name, ym, budget in sources:
+        if ym is None:
+            lines.append(f"  {name}: ❓ 本地无文件")
+            stale.append(f"{name} 本地无任何文件")
+            continue
+        b = behind(ym)
+        flag = "⚠️漏抓?" if b > budget else "✅"
+        lines.append(f"  {name}: 最新 {ym[0]}-{ym[1]:02d}（落后 {b} 月，预算 {budget}）{flag}")
+        if b > budget:
+            stale.append(f"{name} 仅到 {ym[0]}-{ym[1]:02d}（落后 {b} 月，疑似漏抓/改名，请核查 URL）")
+    return lines, stale
 
 
 def probe_url(url: str) -> bool:
@@ -231,20 +283,28 @@ def main():
     else:
         print("=== All data is up to date ===")
 
-    # 通知 + 逾期告警：写入 $GITHUB_ENV，供 workflow 用 Bark 推送
+    # 逐源新鲜度巡检：报表永远写运行摘要(被动存活证明，不推 Bark)；
+    # 只有"有问题"(漏抓/逾期)或"有新数据"才推 Bark —— 空跑一律静默。
+    report, stale = freshness_report()
+    print()
+    for ln in report:
+        print(ln)
+    sp = os.environ.get("GITHUB_STEP_SUMMARY")
+    if sp:
+        try:
+            with open(sp, "a", encoding="utf-8") as fh:
+                fh.write("\n".join(report) + "\n")
+        except OSError:
+            pass
+
     notes = []
     if all_new:
         names = "、".join(Path(f).name for f in all_new)
         notes.append(f"新增 {len(all_new)} 个数据文件：{names}")
-    inv = newest_inventory_month()
-    if inv:
-        now = datetime.now()
-        behind = (now.year - inv[0]) * 12 + (now.month - inv[1])
-        if behind >= 2:
-            notes.append(f"⚠️ I-485 Inventory 最新仅到 {inv[0]}-{inv[1]:02d}（落后 {behind} 个月）"
-                         "，可能 USCIS 改了命名或漏抓，请核查 check_data_updates.py 的 URL。")
+    if stale:
+        notes.append("⚠️ " + "；".join(stale))
     if notes:
-        emit_env("BARK_TITLE", "EB1A 数据更新" + ("（含告警⚠️）" if any("⚠️" in n for n in notes) else ""))
+        emit_env("BARK_TITLE", "EB1A 数据" + ("（漏抓告警⚠️）" if stale else "更新"))
         emit_env("BARK_BODY", "；".join(notes))
         emit_env("DATA_NOTIFY", "1")
 
