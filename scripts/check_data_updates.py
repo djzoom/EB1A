@@ -271,16 +271,20 @@ def check_i140_approved(dry_run: bool) -> list[str]:
             if local.exists():
                 continue
 
-            url = f"{USCIS_BASE}/eb_i140_i360_i526_performancedata_fy{fy}_q{q}.xlsx"
-            if probe_url(url):
-                new_files.append(str(local.relative_to(REPO_ROOT)))
-                if not dry_run:
-                    if download(url, local):
-                        print(f"  DOWNLOADED: {local.name}")
+            # USCIS 近期给文件名加了版本后缀(如 ..._q1_v1.xlsx);按 v2→v1→无后缀→_0 顺序探测
+            stem = f"eb_i140_i360_i526_performancedata_fy{fy}_q{q}"
+            for suffix in ("_v2", "_v1", "", "_0"):
+                url = f"{USCIS_BASE}/{stem}{suffix}.xlsx"
+                if probe_url(url):
+                    new_files.append(str(local.relative_to(REPO_ROOT)))
+                    if not dry_run:
+                        if download(url, local):
+                            print(f"  DOWNLOADED: {local.name}  <- {stem}{suffix}.xlsx")
+                        else:
+                            new_files.pop()
                     else:
-                        new_files.pop()
-                else:
-                    print(f"  AVAILABLE: {local.name}")
+                        print(f"  AVAILABLE: {local.name}  <- {stem}{suffix}.xlsx")
+                    break
 
     return new_files
 
