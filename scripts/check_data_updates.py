@@ -49,57 +49,50 @@ def _get_text(url: str) -> str:
         return ""
 
 
-def diagnose(stale_names):
-    """逐"漏抓"源抓取官方列表页，正则提取相关文件链接并打印真实当前 URL/命名，
-    用于判断是『官方还没发』还是『改名/换路径』。仅在检测到漏抓时调用(随告警同跑)。"""
-    pages = {
-        "DOS 签发量(月)": (
-            "https://travel.state.gov",
-            "https://travel.state.gov/content/travel/en/legal/visa-law0/visa-statistics/"
-            "immigrant-visa-statistics/monthly-immigrant-visa-issuances.html",
-            r'href="([^"]*IV%20Issuances[^"]*|[^"]*IV Issuances[^"]*)"',
-        ),
-        "I-140 季度收件": (
-            "https://www.uscis.gov",
-            "https://www.uscis.gov/tools/reports-and-studies/immigration-and-citizenship-data",
-            r'href="([^"]*[iI]140[^"]*\.xlsx)"',
-        ),
-        "I-140 待签(季)": (
-            "https://www.uscis.gov",
-            "https://www.uscis.gov/tools/reports-and-studies/immigration-and-citizenship-data",
-            r'href="([^"]*i140_i360_i526[^"]*\.xlsx)"',
-        ),
-        "I-485 库存(月)": (
-            "https://www.uscis.gov",
-            "https://www.uscis.gov/tools/reports-and-studies/immigration-and-citizenship-data",
-            r'href="([^"]*eb_inventory[^"]*\.xlsx)"',
-        ),
-    }
-    out = ["", "## 漏抓源诊断（官网列表页真实链接）"]
-    for name in stale_names:
-        cfg = pages.get(name)
-        if not cfg:
-            continue
-        origin, page, pat = cfg
-        out.append(f"### {name} — 列表页 {page}")
-        html = _get_text(page)
-        if not html:
-            out.append("  ⚠️ 列表页拉取失败（容器内属正常；以 runner 日志为准）")
-            continue
-        seen, links = set(), []
-        for m in re.findall(pat, html):
-            u = m if m.startswith("http") else origin + m
-            if u not in seen:
-                seen.add(u); links.append(u)
-        if not links:
-            out.append("  未匹配到任何文件链接 → 可能页面结构/命名已变，或为 JS 动态渲染。")
-        else:
-            out.append(f"  匹配到 {len(links)} 个链接，最近若干：")
-            for u in links[-10:]:
-                out.append(f"    {u}")
-    for ln in out:
-        print(ln)
-    return out
+DOS_LIST_PAGE = ("https://travel.state.gov/content/travel/en/legal/visa-law0/visa-statistics/"
+                 "immigrant-visa-statistics/monthly-immigrant-visa-issuances.html")
+
+
+def dos_official_latest():
+    """从 DOS 列表页解析"官方实际已发布"的最新 FSC/出生地 月度签发 (year, month)。
+    只有官方比本地新才算真漏抓——消除"按日历落后但官方根本没发"的误报。
+    仅 runner 能访问官网;容器/沙箱被挡时返回 None(调用方退回日历预算)。"""
+    html = _get_text(DOS_LIST_PAGE)
+    if not html:
+        return None
+    best = None
+    for mon, yr in re.findall(
+            r'Excel/FY\d+/([A-Za-z]+)%20(\d{4})%20-%20IV%20Issuances%20by%20FSC', html):
+        ml = mon.lower()
+        if ml in MONTHS:
+            ym = (int(yr), MONTHS.index(ml) + 1)
+            if best is None or ym > best:
+                best = ym
+    return best
+
+
+def _supplement_latest_quarter():
+    """data/i140_china_receipts_supplement.json 里最新季度的"季度末" (year, month)。
+    社区手工补充的收件数据已进模型,故新鲜度应把它算上(否则误报 xlsx 漏抓)。"""
+    import json
+    p = REPO_ROOT / "data" / "i140_china_receipts_supplement.json"
+    if not p.exists():
+        return None
+    try:
+        quarters = json.load(open(p, encoding="utf-8")).get("quarters", {})
+    except (OSError, ValueError):
+        return None
+    qend = {1: (-1, 12), 2: (0, 3), 3: (0, 6), 4: (0, 9)}
+    best = None
+    for tag in quarters:
+        m = re.match(r"FY(\d+)_Q(\d+)", tag)
+        if m:
+            fy, q = int(m.group(1)), int(m.group(2))
+            dy, mo = qend[q]
+            ym = (fy + dy, mo)
+            if best is None or ym > best:
+                best = ym
+    return best
 
 
 def _newest_month(directory, pattern, regex):
@@ -138,30 +131,50 @@ def newest_inventory_month():
 
 def freshness_report():
     """逐源新鲜度巡检。返回 (report_lines, stale_notes)。
-    report_lines 永远打印(被动存活证明,不推 Bark);stale_notes 非空才告警。
-    每源给一个"正常滞后预算"(月);超出=疑似漏抓/USCIS 改名,需人核查 URL。"""
+    核心原则：对照"实际可得/已在模型里的数据",而非死板的日历——
+    官方自己慢(还没发)不算漏抓,只有"官方已发/数据存在但我们没拿到"才告警。
+    report_lines 永远打印(被动存活证明,不推 Bark);stale_notes 非空才告警。"""
     now = datetime.now()
     def behind(ym):
         return (now.year - ym[0]) * 12 + (now.month - ym[1])
-    sources = [
-        ("I-485 库存(月)", newest_inventory_month(), 3),
-        ("DOS 签发量(月)", _newest_month(DOS_DIR, "iv_issuance_*.xlsx",
-                                       r"iv_issuance_([a-z]+)_(\d{4})"), 5),
-        ("I-140 季度收件", _newest_quarter("I140_FY*_Q*.xlsx", r"I140_FY(\d+)_Q(\d+)"), 9),
-        ("I-140 待签(季)", _newest_quarter("I140_I360_I526_Approved_FY*_Q*.xlsx",
-                                          r"Approved_FY(\d+)_Q(\d+)"), 9),
-    ]
     lines, stale = ["## 数据源新鲜度巡检"], []
-    for name, ym, budget in sources:
+
+    def calendar(name, ym, budget, extra=""):
+        """USCIS 列表页不可抓 → 退回日历预算判定。"""
         if ym is None:
-            lines.append(f"  {name}: ❓ 本地无文件")
-            stale.append(f"{name} 本地无任何文件")
-            continue
-        b = behind(ym)
-        flag = "⚠️漏抓?" if b > budget else "✅"
-        lines.append(f"  {name}: 最新 {ym[0]}-{ym[1]:02d}（落后 {b} 月，预算 {budget}）{flag}")
+            lines.append(f"  {name}: ❓ 本地无文件"); stale.append(f"{name} 本地无任何文件"); return
+        b = behind(ym); flag = "⚠️漏抓?" if b > budget else "✅"
+        lines.append(f"  {name}: 最新 {ym[0]}-{ym[1]:02d}（落后 {b} 月，预算 {budget}）{flag}{extra}")
         if b > budget:
             stale.append(f"{name} 仅到 {ym[0]}-{ym[1]:02d}（落后 {b} 月，疑似漏抓/改名，请核查 URL）")
+
+    # I-485 库存：USCIS 列表页不可抓 → 日历预算
+    calendar("I-485 库存(月)", newest_inventory_month(), 3)
+
+    # DOS：对照官网列表页"实际已发布最新"。官方比本地新才算真漏抓(消除日历误报)
+    dos_local = _newest_month(DOS_DIR, "iv_issuance_*.xlsx", r"iv_issuance_([a-z]+)_(\d{4})")
+    dos_official = dos_official_latest()
+    if dos_official is None:
+        calendar("DOS 签发量(月)", dos_local, 5, "（官网不可达，按日历预算）")
+    elif dos_local is None or dos_official > dos_local:
+        loc = f"{dos_local[0]}-{dos_local[1]:02d}" if dos_local else "无"
+        lines.append(f"  DOS 签发量(月): 官方已发 {dos_official[0]}-{dos_official[1]:02d}，本地 {loc} ⚠️真漏抓")
+        stale.append(f"DOS 官方已发布 {dos_official[0]}-{dos_official[1]:02d} 但本地缺，请修抓取/URL")
+    else:
+        lines.append(f"  DOS 签发量(月): 本地 {dos_local[0]}-{dos_local[1]:02d} = 官方最新 ✅（官方暂未发更新）")
+
+    # I-140 收件：本地 xlsx 与 supplement 取较新——衡量"数据是否已在模型里",而非是否抓到 xlsx
+    i140_xlsx = _newest_quarter("I140_FY*_Q*.xlsx", r"I140_FY(\d+)_Q(\d+)")
+    i140_sup = _supplement_latest_quarter()
+    i140_latest = max([x for x in (i140_xlsx, i140_sup) if x], default=None)
+    calendar("I-140 季度收件", i140_latest, 9)
+    if i140_xlsx and i140_sup and i140_sup > i140_xlsx:
+        lines.append(f"    (注:自动 xlsx 仅到 {i140_xlsx[0]}-{i140_xlsx[1]:02d}；较新季度由 supplement.json "
+                     "提供;USCIS 已把该系列改为 CSV 命名,自动抓取待修[非紧急,数据已在模型])")
+
+    # I-140 待签(季)：USCIS 列表页不可抓 → 日历预算(当前 ✅)
+    calendar("I-140 待签(季)", _newest_quarter("I140_I360_I526_Approved_FY*_Q*.xlsx",
+                                               r"Approved_FY(\d+)_Q(\d+)"), 9)
     return lines, stale
 
 
@@ -354,18 +367,11 @@ def main():
     print()
     for ln in report:
         print(ln)
-
-    # 有漏抓 → 抓官网列表页打印真实链接，判断改名 vs 未发布(随告警同跑)
-    diag = []
-    if stale:
-        stale_names = [s.split(" 仅到")[0].split(" 本地无")[0] for s in stale]
-        diag = diagnose(stale_names)
-
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
     if sp:
         try:
             with open(sp, "a", encoding="utf-8") as fh:
-                fh.write("\n".join(report + diag) + "\n")
+                fh.write("\n".join(report) + "\n")
         except OSError:
             pass
 
