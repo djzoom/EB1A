@@ -43,8 +43,8 @@
   .app { max-width: 600px; margin: 0 auto; }
 
   .topbar { display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 6px; margin-bottom: 8px; }
-  .topbar h1 { font-size: 18px; font-weight: 800; letter-spacing: -0.2px; color: var(--text); line-height: 1.25; }
-  .topbar-sub { font-size: 12px; color: var(--text3); margin-top: -3px; font-weight: 600; }
+  .topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; color: var(--text); line-height: 1.2; }
+  .topbar-sub { font-size: 12px; color: var(--text3); margin-top: -2px; font-weight: 600; letter-spacing: 0.2px; }
   .topbar-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
   .topbar-info { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topbar-info .dist { color: var(--orange); font-weight: 600; margin-left: 6px; font-size: 12px; }
@@ -74,7 +74,7 @@
   .pe-btn-secondary { background: var(--input-bg); color: var(--text2); border: 1px solid var(--border); }
   .hidden { display: none !important; }
 
-  .result { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 18px 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+  .result { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 20px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
   .congrats { display: flex; gap: 10px; align-items: center; background: linear-gradient(135deg, var(--green-light), var(--blue-bg)); border: 1px solid var(--blue-light); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
   .congrats[hidden] { display: none; }
   .congrats .confetti { font-size: 28px; line-height: 1; flex-shrink: 0; animation: congrats-pop 1.2s ease-in-out infinite; }
@@ -83,8 +83,8 @@
   .congrats-sub b { color: var(--text); }
   @keyframes congrats-pop { 0%,100% { transform: scale(1) rotate(-6deg); } 50% { transform: scale(1.18) rotate(8deg); } }
   .result-main { text-align: center; margin-bottom: 14px; }
-  .result-lead { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
-  .result-date { display: block; font-size: 34px; line-height: 1.1; font-weight: 800; color: var(--blue); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+  .result-lead { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 6px; letter-spacing: 0.2px; }
+  .result-date { display: block; font-size: 42px; line-height: 1.04; font-weight: 800; color: var(--blue); font-variant-numeric: tabular-nums; letter-spacing: -1.2px; }
   .result-sub { display: block; font-size: 13px; color: var(--text2); margin-top: 6px; }
   .result-note { display: block; font-size: 11px; color: var(--text3); margin-top: 8px; line-height: 1.4; }
   /* 快/中/慢 分段控件 */
@@ -259,7 +259,7 @@
 <!-- Welcome Modal -->
 <div class="modal-overlay" id="welcome-modal">
   <div class="modal-box">
-    <h2>EB 排期推演</h2>
+    <h2>EB-1A 排期推演</h2>
     <div class="modal-sub">EB-1A · 中国大陆排期预测。输入你的优先日，估算绿卡大约何时轮到你。</div>
     <div class="field">
       <label>Priority Date (优先日) *</label>
@@ -279,7 +279,7 @@
 <div class="app">
 
   <div class="topbar">
-    <h1>EB-1A 中国申请人排期推演</h1>
+    <h1>EB-1A 排期推演</h1>
     <div class="topbar-sub">基于蒙特卡洛模拟</div>
     <div class="topbar-row">
       <div class="topbar-info" id="profile-view">
@@ -768,10 +768,10 @@ function animateChart() {
   var rect = document.getElementById('reveal-rect');
   if (rect) {
     var full = parseFloat(rect.getAttribute('width')) || 0;
-    window.gsap.fromTo(rect, { attr: { width: 0 } }, { attr: { width: full }, duration: 1.2, ease: 'power2.out' });
+    window.gsap.fromTo(rect, { attr: { width: 0 } }, { attr: { width: full }, duration: 2.2, ease: 'power2.out' });
   }
   var marker = document.querySelector('#chart .cross-dot');
-  if (marker) window.gsap.from(marker, { scale: 0, transformOrigin: '50% 50%', duration: 0.4, delay: 1.0, ease: 'back.out(2)' });
+  if (marker) window.gsap.from(marker, { scale: 0, transformOrigin: '50% 50%', duration: 0.55, delay: 1.9, ease: 'back.out(2)' });
 }
 
 // 大日期随推演"滚动"到结果(从今天递增到命中日)
@@ -781,7 +781,7 @@ function animateHeroRoll() {
   var target = crossingsByPct && crossingsByPct[selectedPercentile];
   if (!hv || !target) return;
   var o = { t: TODAY };
-  window.gsap.to(o, { t: target, duration: 1.2, ease: 'power2.out',
+  window.gsap.to(o, { t: target, duration: 2.4, ease: 'power2.out',
     onUpdate: function () { hv.textContent = formatDate(o.t); },
     onComplete: function () { hv.textContent = formatDate(target); } });
 }
@@ -796,8 +796,8 @@ function animateRain() {
     try { var L = ln.getTotalLength(); ln.style.strokeDasharray = L; ln.style.strokeDashoffset = L; } catch (e) {}
   });
   window.gsap.to('#chart .mc-line', {
-    strokeDashoffset: 0, duration: 0.6, ease: 'power1.out',
-    stagger: { each: 0.006, from: 'random' },
+    strokeDashoffset: 0, duration: 1.1, ease: 'power1.out',
+    stagger: { each: 0.013, from: 'random' },
     onComplete: function () { document.querySelectorAll('#chart .mc-line').forEach(function (ln) { ln.style.strokeDasharray = ''; }); }
   });
 }
