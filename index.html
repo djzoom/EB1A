@@ -297,6 +297,7 @@
       </div>
       <button class="text-btn" id="share-btn">分享</button>
       <button class="text-btn" id="profile-toggle">编辑</button>
+      <button class="text-btn" id="refresh-btn" title="刷新到最新（拉取最新签证公告与设置）">刷新</button>
     </div>
   </div>
 
@@ -1689,6 +1690,17 @@ document.querySelectorAll('.stat').forEach(function(cell) {
 });
 
 document.getElementById('replay-btn').addEventListener('click', replayDeduction);
+document.getElementById('refresh-btn').addEventListener('click', function () {
+  var b = this; b.disabled = true; b.textContent = '刷新中…';
+  var reload = function () { location.reload(); };
+  try {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { try { r.update(); } catch (e) {} }); });
+    // 在线时清掉缓存以确保拉到最新签证公告/设置；离线则直接重载(由 SW 回退缓存)
+    if (navigator.onLine !== false && window.caches && caches.keys) {
+      caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }).then(reload).catch(reload);
+    } else { reload(); }
+  } catch (e) { reload(); }
+});
 document.getElementById('mode-trend').addEventListener('click', function() { setChartMode('trend'); });
 document.getElementById('mode-wait').addEventListener('click', function() { setChartMode('wait'); });
 
