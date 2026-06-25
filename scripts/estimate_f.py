@@ -51,10 +51,12 @@ def annual_receipts():
         wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
         sn = 'Rec-COB' if 'Rec-COB' in wb.sheetnames else ('Rec_COB' if 'Rec_COB' in wb.sheetnames else None)
         if not sn: continue
+        m = re.search(r'(FY\d+_Q\d+)', os.path.basename(f))
+        if not m:
+            continue
         for r in wb[sn].iter_rows(values_only=True):
             if r and str(r[0]).strip().upper() == 'CHINA':
-                tag = re.search(r'(FY\d+_Q\d+)', os.path.basename(f)).group(1)
-                out.append((tag, (r[1] or 0) + (r[2] or 0) + (r[3] or 0)))
+                out.append((m.group(1), (r[1] or 0) + (r[2] or 0) + (r[3] or 0)))
                 break
     return out
 
@@ -88,6 +90,9 @@ def main():
     def p(s=""): print(s); L.append(str(s))
 
     pool = latest_pool(); cutoff = cutoff_from_index(); rec = annual_receipts()
+    if pool is None:
+        p(f"## f 估计 (China EB-1, {today})：未找到 I-140 待签池(data/raw/uscis 缺 awaiting xlsx)，跳过。")
+        return
     p(f"## f 估计 (China EB-1, {today})")
     p(f"输入: 池(awaiting)={pool[1]:,} (as of {pool[0]});  cutoff={cutoff};  你的 PD={your_pd};  Supply={args.supply:.0f}/年;  家庭={args.family}")
     p("年收件(验证流入平稳): " + ", ".join(f"{t}:{v}" for t, v in rec))

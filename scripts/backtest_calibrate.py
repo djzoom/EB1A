@@ -67,7 +67,7 @@ def grid_asof(snaps, t, max_asof):
     pick = None
     for asof, g in snaps:
         if asof <= cap: pick = g
-    return pick or snaps[0][1]
+    return pick or (snaps[0][1] if snaps else {})
 
 
 def dpd(g, cut):
@@ -103,7 +103,10 @@ def fit(snaps, start, end, target, max_asof):
 
 
 def main():
-    hist = parse_history(); snaps = load_snapshots(); win = hist[-8:]
+    hist = parse_history(); snaps = load_snapshots()
+    if len(hist) < 8 or not snaps:
+        print(f"数据不足(history={len(hist)}, snapshots={len(snaps)})，无法回测校准。"); return
+    win = hist[-8:]
     print("快照 as-of:", ", ".join(str(a) for a, _ in snaps))
 
     print("\n" + "=" * 60 + "\nA. 时点匹配密度 → 拟合近窗口有效年供给\n" + "=" * 60)

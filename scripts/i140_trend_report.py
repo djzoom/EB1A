@@ -53,15 +53,18 @@ def receipts():
         if not sn:
             continue
         rows = list(wb[sn].iter_rows(values_only=True))
+        m = re.search(r'I140_(FY\d+_Q\d+)', os.path.basename(f))
+        if not m:
+            continue
         for r in rows:
-            if r and str(r[0]).strip().upper() == 'CHINA':
-                tag = re.search(r'I140_(FY\d+_Q\d+)', os.path.basename(f)).group(1)
-                out.append((tag, r[1], r[5])); tags.add(tag)
+            if r and str(r[0]).strip().upper() == 'CHINA' and len(r) > 5:
+                out.append((m.group(1), r[1], r[5])); tags.add(m.group(1))
                 break
     sup = os.path.join(ROOT, "data", "i140_china_receipts_supplement.json")
     if os.path.exists(sup):
         import json
-        q = json.load(open(sup, encoding="utf-8")).get("quarters", {})
+        with open(sup, encoding="utf-8") as fh:
+            q = json.load(fh).get("quarters", {})
         for tag, v in q.items():
             if tag not in tags:
                 out.append((tag, v.get("eb1a"), v.get("niw")))
