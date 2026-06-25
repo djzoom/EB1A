@@ -676,6 +676,14 @@ var currentParams = Object.assign({}, PRESETS.realistic);
 var selectedPercentile = 'p50';
 var crossingsByPct = null;
 var lastPercentiles = null;
+var lastCloudPaths = null;   // 抽样的真实蒙卡路径,用于"数据轨迹云"可视化
+function sampleCloud(paths, n) {
+  if (!paths || !paths.length) return [];
+  n = Math.min(n || 36, paths.length);
+  var step = paths.length / n, out = [];
+  for (var i = 0; i < n; i++) out.push(paths[Math.floor(i * step)]);
+  return out;
+}
 var chartBounds = null;
 var openSourceParam = null;
 var chartMode = 'trend';
@@ -1173,6 +1181,14 @@ function drawForecastChart(percentiles) {
 
   var revX = Math.max(PAD.left, sx(TODAY));
   var fcRight = PAD.left + PW;
+  // 真实蒙卡路径 → 数据轨迹云(密=高概率, 散=可能区间);随未来渐透
+  var cloud = '';
+  if (lastCloudPaths && lastCloudPaths.length) {
+    for (var ci = 0; ci < lastCloudPaths.length; ci++) {
+      var cd = linePathD(lastCloudPaths[ci], sx, sy);
+      if (cd) cloud += '<path d="' + cd + '" fill="none" stroke="#15734F" stroke-width="0.7" opacity="0.06" stroke-linejoin="round"/>';
+    }
+  }
   var revDefs = '<clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '"/></clipPath>' +
     '<linearGradient id="fade-grad" gradientUnits="userSpaceOnUse" x1="' + revX + '" y1="0" x2="' + fcRight + '" y2="0">' +
       '<stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="0.4" stop-color="#fff" stop-opacity="0.82"/><stop offset="1" stop-color="#fff" stop-opacity="0.25"/></linearGradient>' +
@@ -1180,7 +1196,7 @@ function drawForecastChart(percentiles) {
   document.getElementById('chart').innerHTML = defs + revDefs + bg + grid +
     '<g clip-path="url(#plot-clip)">' + histB + hist + pdLine +
       '<g clip-path="url(#reveal-clip)">' +
-        '<g mask="url(#future-fade)">' + band90 + band50 + lineP90 + lineP10 + lineP50 + '</g>' +
+        '<g mask="url(#future-fade)">' + band90 + band50 + cloud + lineP90 + lineP10 + lineP50 + '</g>' +
         crossMarker +
       '</g>' +
       pdLabel + '</g>' +
@@ -1519,6 +1535,7 @@ function render() {
   var paths = monteCarlo(currentParams, 500);
   var percentiles = percentilePaths(paths);
   lastPercentiles = percentiles;
+  lastCloudPaths = sampleCloud(paths, 36);
   crossingsByPct = findCrossingsDistribution(paths);
 
   renderProfileView();
