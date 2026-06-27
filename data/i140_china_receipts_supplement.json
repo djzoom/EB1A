@@ -2,7 +2,6 @@
   "_note": "China EB-1A / NIW 单季 I-140 收件补充值（截图/社区数据,USCIS 季度 xlsx 尚未自动抓取到时使用;data/raw/uscis/I140_FY*_Q* 到货后以 xlsx 为准）。",
   "_source": "USCIS 数据(社区整理, 2026-06)",
   "quarters": {
-    "FY2025_Q4": { "eb1a": 1840, "niw": 2330 },
     "FY2026_Q1": { "eb1a": 1746, "niw": 2421 }
   }
 }
