@@ -522,16 +522,16 @@ var PARAM_META = {
     source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: 'I-485 库存核心 PD 月', val: '~400–680/月' },{ lbl: '有效密度', val: '~9 人/天' }], methodology: '2023 PD 段有效排队约 9 人/天(回测已校准)；2024+ PD 的额外需求由下方"未来需求墙"承载', sources: ['USCIS I-485 Inventory'] }
   },
   demandWall: {
-    label: '未来需求墙 (I-140 池)', default: 1.8, min: 1.0, max: 2.5, step: 0.1,
+    label: '未来需求墙 (I-140 池)', default: 1.7, min: 1.0, max: 2.5, step: 0.1,
     unit: '×', format: function(v) { return v.toFixed(1); },
-    source: { title: '2024+ PD 的隐藏需求 (I-140 待签池)', rows: [{ lbl: 'I-140 待签 (China EB1)', val: '~13,600' },{ lbl: 'I-485 库存', val: '~5,550' },{ lbl: '原始比', val: '×2.45' },{ lbl: '阻尼后(默认)', val: '×1.8' }], methodology: '2024+ 的 PD 大多还在 I-140 待签池、尚未进 I-485；待 DFF 放开会涌入，使 cutoff 推进进入 2024 PD 后变慢。原始 待签/库存≈2.45，阻尼到 ~1.8 避免用上界过拟合(回测护栏)', sources: ['USCIS I-140 Awaiting Visa', 'USCIS I-485 Inventory'] }
+    source: { title: '2024+ PD 的隐藏需求 (I-140 待签池)', rows: [{ lbl: 'I-140 待签 (China EB1)', val: '~13,600' },{ lbl: '近半年增量', val: '+429（见顶退潮）' },{ lbl: '收件较峰', val: '−23%' },{ lbl: 'I-485 库存', val: '~5,650' },{ lbl: '原始比', val: '×2.45' },{ lbl: '阻尼后(默认)', val: '×1.7' }], methodology: '2024+ 的 PD 大多还在 I-140 待签池、尚未进 I-485；待 DFF 放开会涌入，使 cutoff 进入 2024 PD 后变慢。原始 待签/库存≈2.45；2026 数据显示待签池已见顶(近半年仅 +429)、收件较峰 −23%，据此由 1.8 下调到 ~1.7 并收窄悲观尾部(仍保留不确定区间,因 f 尚未被 2024 PD 库存钉死)', sources: ['USCIS I-140 Awaiting Visa', 'USCIS I-485 Inventory'] }
   }
 };
 
 var PRESETS = {
-  realistic: { chinaBaseQuota:2803, spilloverROW:650, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9, demandWall:1.8, demandWallSigma:0.5 },
+  realistic: { chinaBaseQuota:2803, spilloverROW:650, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9, demandWall:1.7, demandWallSigma:0.45 },
   optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12, demandWall:1.3, demandWallSigma:0.4 },
-  pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20, demandWall:2.45, demandWallSigma:0.6 }
+  pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20, demandWall:2.1, demandWallSigma:0.55 }
 };
 
 // Simulation Engine
@@ -560,8 +560,8 @@ function getPDDensity(pdDate, params, wall) {
   var d_low = 5, d_med = 10;
   var d_high = params.densityHigh || 12, d_peak = params.densityPeak || 15;
   // I-140 需求墙：2024+ 的 PD 大多还在 I-140 待签池(China EB1 ~13,600)、尚未进 I-485；待 DFF 放开会涌入。
-  // 原始 待签/库存 ≈ 2.45，阻尼到 demandWall(默认 1.8)避免用上界过拟合。cutoff 推进进入 2024 PD 后变慢。
-  var d_wall = d_peak * (wall || params.demandWall || 1.8);
+  // 原始 待签/库存 ≈ 2.45，阻尼到 demandWall(默认 1.7；2026 待签池见顶退潮后由 1.8 下调)。cutoff 进入 2024 PD 后变慢。
+  var d_wall = d_peak * (wall || params.demandWall || 1.7);
   if (pdDate < d_2021) return d_low;
   if (pdDate < d_2022_06) return d_low + (d_med - d_low) * (pdDate - d_2021) / (d_2022_06 - d_2021);
   if (pdDate < d_2023_01) return d_med;
@@ -584,7 +584,7 @@ function simulate(params) {
   var regimeDensity = Math.max(0.6, gaussian(1.0, 0.15));
   // 路径级抽一个 demandWall(≈抽一个 f)：把"待签池前方占比 f"的真实不确定注入快/慢区间。
   // 近 PD(走 2023 已验证密度区)几乎不受影响；深 PD(2024+)区间据此变宽，并随数据收窄。
-  var regimeWall = Math.max(1.0, gaussian(params.demandWall || 1.8, params.demandWallSigma || 0.5));
+  var regimeWall = Math.max(1.0, gaussian(params.demandWall || 1.7, params.demandWallSigma || 0.45));
 
   for (var i = 0; i < months; i++) {
     var monthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 15);
