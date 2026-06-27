@@ -164,14 +164,18 @@ def freshness_report():
     else:
         lines.append(f"  DOS 签发量(月): 本地 {dos_local[0]}-{dos_local[1]:02d} = 官方最新 ✅（官方暂未发更新）")
 
-    # I-140 收件：本地 xlsx 与 supplement 取较新——衡量"数据是否已在模型里",而非是否抓到 xlsx
-    i140_xlsx = _newest_quarter("I140_FY*_Q*.xlsx", r"I140_FY(\d+)_Q(\d+)")
+    # I-140 收件：自动抓取(xlsx 或 *_rec_cob.csv)与 supplement 取较新——衡量"数据是否已在模型里"
+    i140_auto = max([x for x in (
+        _newest_quarter("I140_FY*_Q*.xlsx", r"I140_FY(\d+)_Q(\d+)"),
+        _newest_quarter("I140_FY*_Q*_rec_cob.csv", r"I140_FY(\d+)_Q(\d+)"),
+    ) if x], default=None)
     i140_sup = _supplement_latest_quarter()
-    i140_latest = max([x for x in (i140_xlsx, i140_sup) if x], default=None)
+    i140_latest = max([x for x in (i140_auto, i140_sup) if x], default=None)
     calendar("I-140 季度收件", i140_latest, 9)
-    if i140_xlsx and i140_sup and i140_sup > i140_xlsx:
-        lines.append(f"    (注:自动 xlsx 仅到 {i140_xlsx[0]}-{i140_xlsx[1]:02d}；较新季度由 supplement.json "
-                     "提供;USCIS 已把该系列改为 CSV 命名,自动抓取待修[非紧急,数据已在模型])")
+    if i140_auto and i140_sup and i140_sup > i140_auto:
+        lines.append(f"    (注:已自动抓到 {i140_auto[0]}-{i140_auto[1]:02d}(xlsx/CSV 均支持)；"
+                     f"更新的 {i140_sup[0]}-{i140_sup[1]:02d} 暂由 supplement.json 提供，"
+                     "待 USCIS 发布该季文件后自动接替)")
 
     # I-140 待签(季)：USCIS 列表页不可抓 → 日历预算(当前 ✅)
     calendar("I-140 待签(季)", _newest_quarter("I140_I360_I526_Approved_FY*_Q*.xlsx",

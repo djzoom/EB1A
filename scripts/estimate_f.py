@@ -44,21 +44,41 @@ def latest_pool():
     return best
 
 
+def _csv_china_cols(path):
+    """读 *_rec_cob.csv 的 CHINA 行 → 各列数值(索引同 xlsx：[国家,E11,E12,E13,...])。"""
+    import csv
+    with open(path, newline='', encoding='utf-8-sig') as fh:
+        for row in csv.reader(fh):
+            if row and row[0].strip().upper() == 'CHINA':
+                def num(x):
+                    x = (x or '').replace(',', '').strip()
+                    return int(x) if x.lstrip('-').isdigit() else None
+                return [num(c) for c in row]
+    return None
+
+
 def annual_receipts():
-    """China EB-1(A+B+C)年收件，用最新的整年 Rec-COB。返回 (label, total)。"""
-    out = []
+    """China EB-1(A+B+C=E11+E12+E13)各季收件。xlsx 优先，CSV(*_rec_cob.csv)补缺。返回 (label, total)。"""
+    rec = {}
     for f in sorted(glob.glob(os.path.join(USCIS, "I140_FY*_Q*.xlsx"))):
-        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
-        sn = 'Rec-COB' if 'Rec-COB' in wb.sheetnames else ('Rec_COB' if 'Rec_COB' in wb.sheetnames else None)
-        if not sn: continue
         m = re.search(r'(FY\d+_Q\d+)', os.path.basename(f))
         if not m:
             continue
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        sn = 'Rec-COB' if 'Rec-COB' in wb.sheetnames else ('Rec_COB' if 'Rec_COB' in wb.sheetnames else None)
+        if not sn:
+            continue
         for r in wb[sn].iter_rows(values_only=True):
             if r and str(r[0]).strip().upper() == 'CHINA':
-                out.append((m.group(1), (r[1] or 0) + (r[2] or 0) + (r[3] or 0)))
-                break
-    return out
+                rec[m.group(1)] = (r[1] or 0) + (r[2] or 0) + (r[3] or 0); break
+    for f in sorted(glob.glob(os.path.join(USCIS, "I140_FY*_Q*_rec_cob.csv"))):
+        m = re.search(r'(FY\d+_Q\d+)', os.path.basename(f))
+        if not m or m.group(1) in rec:
+            continue
+        v = _csv_china_cols(f)
+        if v and len(v) > 3:
+            rec[m.group(1)] = (v[1] or 0) + (v[2] or 0) + (v[3] or 0)
+    return sorted(rec.items())
 
 
 def cutoff_from_index():
