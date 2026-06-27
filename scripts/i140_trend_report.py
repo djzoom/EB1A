@@ -43,33 +43,54 @@ def awaiting_stock():
     return out
 
 
+def _csv_china_cols(path):
+    """读 *_rec_cob.csv 的 CHINA 行，返回各列数值列表(索引同 xlsx：[國家,E11,E12,E13,E21,NIW,...])。
+    数字带千分逗号+引号，用 csv 模块解析；非数字(国家名)置 None。"""
+    import csv
+    with open(path, newline='', encoding='utf-8-sig') as fh:
+        for row in csv.reader(fh):
+            if row and row[0].strip().upper() == 'CHINA':
+                def num(x):
+                    x = (x or '').replace(',', '').strip()
+                    return int(x) if x.lstrip('-').isdigit() else None
+                return [num(c) for c in row]
+    return None
+
+
 def receipts():
     """China EB-1A / NIW I-140 收件(Rec-COB)。各文件为单季值(同 FY 内递减即证)。
-    xlsx 未抓到的季度，用 data/i140_china_receipts_supplement.json 补充。"""
-    out, tags = [], set()
+    数据源优先级：xlsx(Rec-COB) > CSV(*_rec_cob.csv) > supplement.json。E11=EB-1A, 第5列=NIW。"""
+    rec = {}  # tag -> (eb1a, niw)
+    # 1) xlsx（最权威，多 sheet）
     for f in sorted(glob.glob(os.path.join(USCIS, "I140_FY*_Q*.xlsx"))):
+        m = re.search(r'I140_(FY\d+_Q\d+)', os.path.basename(f))
+        if not m:
+            continue
         wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
         sn = 'Rec-COB' if 'Rec-COB' in wb.sheetnames else ('Rec_COB' if 'Rec_COB' in wb.sheetnames else None)
         if not sn:
             continue
-        rows = list(wb[sn].iter_rows(values_only=True))
-        m = re.search(r'I140_(FY\d+_Q\d+)', os.path.basename(f))
-        if not m:
-            continue
-        for r in rows:
+        for r in wb[sn].iter_rows(values_only=True):
             if r and str(r[0]).strip().upper() == 'CHINA' and len(r) > 5:
-                out.append((m.group(1), r[1], r[5])); tags.add(m.group(1))
-                break
+                rec[m.group(1)] = (r[1], r[5]); break
+    # 2) CSV（同结构，填 xlsx 没有的季度，如 USCIS 改 CSV 命名的那些）
+    for f in sorted(glob.glob(os.path.join(USCIS, "I140_FY*_Q*_rec_cob.csv"))):
+        m = re.search(r'I140_(FY\d+_Q\d+)', os.path.basename(f))
+        if not m or m.group(1) in rec:
+            continue
+        v = _csv_china_cols(f)
+        if v and len(v) > 5 and v[1] is not None:
+            rec[m.group(1)] = (v[1], v[5])
+    # 3) supplement.json（社区补充，填以上都没有的季度）
     sup = os.path.join(ROOT, "data", "i140_china_receipts_supplement.json")
     if os.path.exists(sup):
         import json
         with open(sup, encoding="utf-8") as fh:
             q = json.load(fh).get("quarters", {})
         for tag, v in q.items():
-            if tag not in tags:
-                out.append((tag, v.get("eb1a"), v.get("niw")))
-    out.sort(key=lambda x: x[0])
-    return out
+            if tag not in rec:
+                rec[tag] = (v.get("eb1a"), v.get("niw"))
+    return [(tag, e, n) for tag, (e, n) in sorted(rec.items())]
 
 
 def main():
