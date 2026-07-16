@@ -37,12 +37,28 @@ def emit_env(key: str, val: str):
         f.write(f"{key}<<__EOF__\n{val}\n__EOF__\n")
 
 
+# travel.state.gov(Akamai)对非浏览器 UA 返回 403(2026-07 起连 Actions runner 也被挡),
+# 用完整浏览器头提高通过率;仍被挡时靠锚点文件兜底(见 _dos_anchor)。
+BROWSER_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
+def _request(url: str, method: str = "GET") -> urllib.request.Request:
+    req = urllib.request.Request(url, method=method)
+    for k, v in BROWSER_HEADERS.items():
+        req.add_header(k, v)
+    return req
+
+
 def _get_text(url: str) -> str:
-    """GET 页面文本(失败返回空串)。仅 runner 能真正访问官网,容器/沙箱会被挡。"""
-    req = urllib.request.Request(url)
-    req.add_header("User-Agent", "Mozilla/5.0 EB1A-DataUpdater/1.0")
+    """GET 页面文本(失败返回空串并打印 HTTP 状态,便于区分 403被挡/404没发)。
+    仅 runner 能真正访问官网,容器/沙箱会被挡。"""
     try:
-        resp = urllib.request.urlopen(req, timeout=30)
+        resp = urllib.request.urlopen(_request(url), timeout=30)
         return resp.read().decode("utf-8", "ignore")
     except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
         print(f"  无法获取页面 {url}: {e}")
@@ -56,19 +72,43 @@ DOS_LIST_PAGE = ("https://travel.state.gov/content/travel/en/legal/visa-law0/vis
 def dos_official_latest():
     """从 DOS 列表页解析"官方实际已发布"的最新 FSC/出生地 月度签发 (year, month)。
     只有官方比本地新才算真漏抓——消除"按日历落后但官方根本没发"的误报。
-    仅 runner 能访问官网;容器/沙箱被挡时返回 None(调用方退回日历预算)。"""
+    正则不锚定 Excel/FY 路径:xlsx 和 PDF 链接都算"官方已发布",并兼容
+    NOVEMBER2021 这类无空格的历史命名变体。
+    仅 runner 能访问官网;被挡(403)/不可达时返回 None(调用方退回锚点/日历)。"""
     html = _get_text(DOS_LIST_PAGE)
     if not html:
         return None
     best = None
     for mon, yr in re.findall(
-            r'Excel/FY\d+/([A-Za-z]+)%20(\d{4})%20-%20IV%20Issuances%20by%20FSC', html):
+            r'([A-Za-z]+)(?:%20|\s)?(\d{4})%20-%20IV%20Issuances%20by%20FSC', html):
         ml = mon.lower()
         if ml in MONTHS:
             ym = (int(yr), MONTHS.index(ml) + 1)
             if best is None or ym > best:
                 best = ym
+    if best is None:
+        print("  DOS 列表页已取回但未解析到任何 FSC 月度链接——页面结构可能已改版,请人工核查")
     return best
+
+
+def _dos_anchor():
+    """读取 data/dos_publication_anchor.json —— 人工核实的"官方实际最新发布"锚点。
+    官网对 runner 不可达(403 反爬)时,以锚点代替官网核对:本地 ≥ 锚点即"官方停更,
+    非漏抓",不告警;锚点超过 valid_days 未复核则提醒人工确认(防止官方恢复发布后失聪)。
+    返回 ((year, month), verified_on: datetime, valid_days) 或 None。"""
+    import json
+    p = REPO_ROOT / "data" / "dos_publication_anchor.json"
+    if not p.exists():
+        return None
+    try:
+        with open(p, encoding="utf-8") as fh:
+            d = json.load(fh)
+        m = re.match(r"(\d{4})-(\d{2})$", d["latest"])
+        ver = datetime.strptime(d["verified_on"], "%Y-%m-%d")
+        return (int(m.group(1)), int(m.group(2))), ver, int(d.get("valid_days", 120))
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        print("  dos_publication_anchor.json 解析失败,忽略锚点")
+        return None
 
 
 def _supplement_latest_quarter():
@@ -152,10 +192,30 @@ def freshness_report():
     # I-485 库存：USCIS 列表页不可抓 → 日历预算
     calendar("I-485 库存(月)", newest_inventory_month(), 3)
 
-    # DOS：对照官网列表页"实际已发布最新"。官方比本地新才算真漏抓(消除日历误报)
+    # DOS：对照官网列表页"实际已发布最新"。官方比本地新才算真漏抓(消除日历误报)。
+    # 官网不可达(403 反爬)时退而对照人工锚点;两者都没有才落到日历预算。
+    def fmt(ym):
+        return f"{ym[0]}-{ym[1]:02d}"
     dos_local = _newest_month(DOS_DIR, "iv_issuance_*.xlsx", r"iv_issuance_([a-z]+)_(\d{4})")
     dos_official = dos_official_latest()
-    if dos_official is None:
+    anchor = _dos_anchor()
+    if dos_official is None and anchor:
+        aym, ver, valid = anchor
+        age = (now - ver).days
+        if dos_local and dos_local >= aym:
+            if age <= valid:
+                lines.append(f"  DOS 签发量(月): 本地 {fmt(dos_local)} = 锚点官方最新 {fmt(aym)} ✅"
+                             f"（官网不可达；{ver:%Y-%m-%d} 人工核实官方停更于 {fmt(aym)}，非漏抓）")
+            else:
+                lines.append(f"  DOS 签发量(月): 本地 {fmt(dos_local)}；锚点已 {age} 天未复核 ⚠️")
+                stale.append(f"DOS 官网持续不可达且锚点已 {age} 天(>{valid})未复核"
+                             f"（{ver:%Y-%m-%d} 核实官方仅发至 {fmt(aym)}）——"
+                             "请人工确认官方是否恢复发布并更新 data/dos_publication_anchor.json")
+        else:
+            loc = fmt(dos_local) if dos_local else "无"
+            lines.append(f"  DOS 签发量(月): 本地 {loc} < 锚点官方 {fmt(aym)} ⚠️真漏抓")
+            stale.append(f"DOS 官方(人工锚点)已发布 {fmt(aym)} 但本地仅 {loc}，请修抓取/URL")
+    elif dos_official is None:
         calendar("DOS 签发量(月)", dos_local, 5, "（官网不可达，按日历预算）")
     elif dos_local is None or dos_official > dos_local:
         loc = f"{dos_local[0]}-{dos_local[1]:02d}" if dos_local else "无"
@@ -183,21 +243,24 @@ def freshness_report():
     return lines, stale
 
 
-def probe_url(url: str) -> bool:
-    req = urllib.request.Request(url, method="HEAD")
-    req.add_header("User-Agent", "EB1A-DataUpdater/1.0")
+def probe_status(url: str):
+    """HEAD 探测,返回 HTTP 状态码(连接失败返回 None)。403=被反爬挡,404=文件不存在。"""
     try:
-        resp = urllib.request.urlopen(req, timeout=15)
-        return resp.status == 200
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError):
-        return False
+        resp = urllib.request.urlopen(_request(url, method="HEAD"), timeout=15)
+        return resp.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except (urllib.error.URLError, OSError):
+        return None
+
+
+def probe_url(url: str) -> bool:
+    return probe_status(url) == 200
 
 
 def download(url: str, dest: Path) -> bool:
-    req = urllib.request.Request(url)
-    req.add_header("User-Agent", "EB1A-DataUpdater/1.0")
     try:
-        resp = urllib.request.urlopen(req, timeout=30)
+        resp = urllib.request.urlopen(_request(url), timeout=30)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(resp.read())
         return True
@@ -341,10 +404,15 @@ def fy_months(fy: int) -> list[tuple[str, int]]:
 
 
 def check_dos_issuance(dry_run: bool) -> list[str]:
-    """Check for new DOS Monthly IV Issuance files."""
+    """Check for new DOS Monthly IV Issuance files.
+
+    每个缺失月按候选命名探测(标准"MONTH%20YYYY"+历史出现过的无空格"MONTHYYYY"变体)。
+    对第一个缺失月打印探测 HTTP 状态码:403=整站反爬挡了 runner(修 UA/等解封),
+    404=官方确实没发该月(配合锚点判定停更),二者含义完全不同。"""
     new_files = []
     now = datetime.now()
     current_fy = now.year + 1 if now.month >= 10 else now.year
+    diagnosed = False
 
     for fy in range(2024, current_fy + 1):
         for month_name, cal_year in fy_months(fy):
@@ -355,14 +423,21 @@ def check_dos_issuance(dry_run: bool) -> list[str]:
             if local.exists():
                 continue
 
-            encoded_month = month_name.upper() + f" {cal_year}"
-            encoded = encoded_month.replace(" ", "%20")
-            url = (
-                f"{DOS_BASE}/FY{fy}/"
-                f"{encoded}%20-%20IV%20Issuances%20by%20FSC%20or%20Place%20of%20Birth"
-                f"%20and%20Visa%20Class.xlsx"
-            )
-            if probe_url(url):
+            tail = ("%20-%20IV%20Issuances%20by%20FSC%20or%20Place%20of%20Birth"
+                    "%20and%20Visa%20Class.xlsx")
+            mon_up = month_name.upper()
+            candidates = [
+                f"{DOS_BASE}/FY{fy}/{mon_up}%20{cal_year}{tail}",
+                f"{DOS_BASE}/FY{fy}/{mon_up}{cal_year}{tail}",   # NOVEMBER2021 式无空格变体
+            ]
+            for url in candidates:
+                status = probe_status(url)
+                if not diagnosed:
+                    print(f"  [诊断] 探测 {mon_up} {cal_year} (FY{fy}) → HTTP {status}"
+                          "（403=被反爬挡，404=官方未发布）")
+                    diagnosed = True
+                if status != 200:
+                    continue
                 new_files.append(str(local.relative_to(REPO_ROOT)))
                 if not dry_run:
                     if download(url, local):
@@ -371,6 +446,7 @@ def check_dos_issuance(dry_run: bool) -> list[str]:
                         new_files.pop()
                 else:
                     print(f"  AVAILABLE: {local.name}")
+                break
 
     return new_files
 
