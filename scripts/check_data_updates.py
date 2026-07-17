@@ -7,9 +7,11 @@ Usage:
     python scripts/check_data_updates.py --dry-run    # check only, no download
 """
 import argparse
+import json
 import os
 import re
 import sys
+import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
@@ -69,13 +71,46 @@ DOS_LIST_PAGE = ("https://travel.state.gov/content/travel/en/legal/visa-law0/vis
                  "immigrant-visa-statistics/monthly-immigrant-visa-issuances.html")
 
 
+def _wayback_recent_text(url, max_age_days=35):
+    """官网屏蔽 runner 时的兜底：取该页 Wayback 新近(≤max_age_days 天)快照的文本。
+    过旧快照会低估『官方最新』造成假阴性（官方恢复发布却报"没发"），故宁可弃用，
+    并请求主动存档刷新（Save Page Now，匿名 GET 实测会真实触发抓取），下次巡检再读。"""
+    snap = None
+    try:
+        body = _get_text("https://archive.org/wayback/available?url="
+                         + urllib.parse.quote(url, safe=""))
+        if body:
+            snap = json.loads(body).get("archived_snapshots", {}).get("closest")
+    except ValueError:
+        snap = None
+    if snap and snap.get("available") and str(snap.get("status")) == "200":
+        try:
+            ts = datetime.strptime(snap["timestamp"], "%Y%m%d%H%M%S")
+        except (ValueError, KeyError):
+            ts = None
+        if ts and (datetime.utcnow() - ts).days <= max_age_days:
+            print(f"  [wayback] 官网不可达，改用 {ts:%Y-%m-%d} 的列表页快照核对官方最新")
+            return _get_text(snap["url"])
+        print("  [wayback] 列表页快照过旧，弃用并请求刷新存档（下次巡检读取）")
+    else:
+        print("  [wayback] 列表页暂无可用快照，请求主动存档（下次巡检读取）")
+    try:
+        urllib.request.urlopen(_request("https://web.archive.org/save/" + url), timeout=15)
+    except (urllib.error.URLError, OSError, TimeoutError):
+        pass
+    return ""
+
+
 def dos_official_latest():
     """从 DOS 列表页解析"官方实际已发布"的最新 FSC/出生地 月度签发 (year, month)。
     只有官方比本地新才算真漏抓——消除"按日历落后但官方根本没发"的误报。
     正则不锚定 Excel/FY 路径:xlsx 和 PDF 链接都算"官方已发布",并兼容
-    NOVEMBER2021 这类无空格的历史命名变体。
-    仅 runner 能访问官网;被挡(403)/不可达时返回 None(调用方退回锚点/日历)。"""
+    NOVEMBER2021 这类无空格的历史命名变体（Wayback 快照里的改写链接同样匹配）。
+    官网被挡(403)时退而读列表页的新近 Wayback 快照——官方恢复发布也能在
+    ≤35 天内被发现,不再依赖锚点 120 天过期提醒;两路都不可得才返回 None。"""
     html = _get_text(DOS_LIST_PAGE)
+    if not html:
+        html = _wayback_recent_text(DOS_LIST_PAGE)
     if not html:
         return None
     best = None
@@ -258,6 +293,22 @@ def probe_url(url: str) -> bool:
     return probe_status(url) == 200
 
 
+_probe_diag_done = set()
+
+
+def probe_diag(source: str, url: str):
+    """探测并在该数据源首次未命中时打印一行状态码诊断。
+    区分 403(被反爬挡)与 404(官方未发布/命名不符)正是 2026-07 DOS 误报的教训——
+    USCIS 各源若也被封锁,没有这行日志就会静默失败、几个月后才以误导文案告警。"""
+    st = probe_status(url)
+    if st != 200 and source not in _probe_diag_done:
+        _probe_diag_done.add(source)
+        name = url.rsplit("/", 1)[-1][:60]
+        print(f"  [诊断] {source} 首个缺失项探测 {name} → HTTP {st}"
+              "（403=被反爬挡，404=官方未发布/命名不符）")
+    return st
+
+
 def download(url: str, dest: Path) -> bool:
     try:
         resp = urllib.request.urlopen(_request(url), timeout=30)
@@ -285,7 +336,7 @@ def check_i485_inventory(dry_run: bool) -> list[str]:
                 continue
 
             url = f"{USCIS_BASE}/eb_inventory_{month_name}_{year}.xlsx"
-            if probe_url(url):
+            if probe_diag("I-485库存", url) == 200:
                 new_files.append(str(local.relative_to(REPO_ROOT)))
                 if not dry_run:
                     if download(url, local):
@@ -327,7 +378,7 @@ def check_i140_quarterly(dry_run: bool) -> list[str]:
             ]
             for remote, local in candidates:
                 url = f"{USCIS_BASE}/{remote}"
-                if not probe_url(url):
+                if probe_diag("I-140收件", url) != 200:
                     continue
                 new_files.append(str(local.relative_to(REPO_ROOT)))
                 if not dry_run:
@@ -379,7 +430,7 @@ def check_i140_approved(dry_run: bool) -> list[str]:
             stem = f"eb_i140_i360_i526_performancedata_fy{fy}_q{q}"
             for suffix in ("_v2", "_v1", "", "_0"):
                 url = f"{USCIS_BASE}/{stem}{suffix}.xlsx"
-                if probe_url(url):
+                if probe_diag("I-140待签", url) == 200:
                     new_files.append(str(local.relative_to(REPO_ROOT)))
                     if not dry_run:
                         if download(url, local):
@@ -412,7 +463,6 @@ def check_dos_issuance(dry_run: bool) -> list[str]:
     new_files = []
     now = datetime.now()
     current_fy = now.year + 1 if now.month >= 10 else now.year
-    diagnosed = False
 
     for fy in range(2024, current_fy + 1):
         for month_name, cal_year in fy_months(fy):
@@ -431,12 +481,7 @@ def check_dos_issuance(dry_run: bool) -> list[str]:
                 f"{DOS_BASE}/FY{fy}/{mon_up}{cal_year}{tail}",   # NOVEMBER2021 式无空格变体
             ]
             for url in candidates:
-                status = probe_status(url)
-                if not diagnosed:
-                    print(f"  [诊断] 探测 {mon_up} {cal_year} (FY{fy}) → HTTP {status}"
-                          "（403=被反爬挡，404=官方未发布）")
-                    diagnosed = True
-                if status != 200:
+                if probe_diag("DOS签发", url) != 200:
                     continue
                 new_files.append(str(local.relative_to(REPO_ROOT)))
                 if not dry_run:
