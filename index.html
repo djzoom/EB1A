@@ -1660,12 +1660,20 @@ function renderBulletinPanel() {
   var pr = predictNextRelease();
   function md(d) { return (d.getMonth() + 1) + '/' + d.getDate(); }
   function dOnly(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  // "今天"按美东算：发布窗口是 DOS 的时区；中国用户本地日期比美东早约半天，
+  // 用本地日期会让"随时可能发布/超窗"提前约 12 小时出现
+  function todayET() {
+    try {
+      var a = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York' }).format(new Date()).split('/');
+      return new Date(+a[2], +a[0] - 1, +a[1]);
+    } catch (e) { return dOnly(new Date()); }
+  }
   var relLine;
   if (!pr) {
     var fb = new Date(new Date(VB_RELEASED).getTime() + 31 * MS_PER_DAY);
     relLine = '预计发布：约 <b>' + ymd(fb.getTime()) + '</b>';
   } else {
-    var tn = dOnly(new Date());
+    var tn = todayET();
     var winTxt = '常见窗口 ' + md(pr.lo) + '–' + md(pr.hi) + '（近12期）';
     if (tn > dOnly(pr.hi)) {
       relLine = '预计发布：<b>常见窗口已过，尚未发布</b> — ' + winTxt +
