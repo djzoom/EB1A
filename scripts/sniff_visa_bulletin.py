@@ -143,17 +143,45 @@ def wayback_check(url):
 def wayback_save(url):
     """主动请求 Wayback 抓一次该 URL（Save Page Now）。archive.org 的爬虫不在
     travel.state.gov 封锁的机房 IP 段里 → 相当于借官方档案馆当合规取数通道。
-    捕获需 10–60s 异步完成，这里发出请求即返回（fire-and-forget），
-    由下一班探测(30 分钟后)经 wayback_check 读到新快照 → 发布到上线 ≤35 分钟。
-    目标未发布(404)时 Wayback 只会存 404 快照，wayback_check 按 status=200 过滤不受影响。"""
+    带 capture_all=on 让 404 等错误页也入档——这样"官方没发"也会留下带时间戳的
+    404 抓取记录，可被 wayback_last_capture 用作『实抓确认尚未发布』的强证据。
+    SPN 同步执行抓取、常超 20s：读超时≠失败，请求已受理、捕获在档案馆侧继续，
+    由下一班探测(30 分钟后)经 wayback_check 读取 → 发布到上线 ≤35 分钟。"""
+    def _submitted():
+        print("[wayback] 存档请求已提交（读结果超时属正常——捕获在档案馆侧继续）")
     try:
+        data = urllib.parse.urlencode({"url": url, "capture_all": "on"}).encode()
         req = urllib.request.Request("https://web.archive.org/save/" + url,
-                                     headers={"User-Agent": UA})
-        with urllib.request.urlopen(req, timeout=30) as r:
+                                     data=data, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=20) as r:
             print(f"[wayback] 已请求主动存档 (SPN HTTP {r.getcode()})，下一班读取快照")
+    except TimeoutError:
+        _submitted()
+    except urllib.error.URLError as e:
+        if isinstance(getattr(e, "reason", None), TimeoutError):
+            _submitted()
+        else:
+            # 匿名 SPN 有限流，失败无妨——被动等社区快照仍然兜底
+            print(f"[wayback] 主动存档请求未成功(不影响被动兜底): {type(e).__name__}: {str(e)[:100]}")
     except Exception as e:
-        # 匿名 SPN 有限流，失败无妨——被动等社区快照仍然兜底
         print(f"[wayback] 主动存档请求未成功(不影响被动兜底): {type(e).__name__}: {str(e)[:100]}")
+
+
+def wayback_last_capture(url):
+    """CDX 查该 URL 最近一次实抓的 (UTC 时刻, HTTP 状态码)。无任何抓取记录返回 None。
+    价值：即使没有 200 快照，一条新近的 404 抓取记录 = 档案馆替我们实地抓过、
+    官方那一刻确实还没发布——把「大概率没发」升级为「实抓确认没发」。"""
+    api = ("https://web.archive.org/cdx/search/cdx?url="
+           + urllib.parse.quote(url, safe="") + "&output=json&limit=-1")
+    try:
+        _, body = fetch(api)
+        rows = json.loads(body)
+        if len(rows) >= 2:
+            ts = datetime.strptime(rows[-1][1], "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+            return ts, rows[-1][4]
+    except Exception as e:
+        print(f"[wayback] CDX 查询失败: {type(e).__name__}: {str(e)[:100]}")
+    return None
 
 
 def _china_from_row(seg):
@@ -426,9 +454,21 @@ def run(args):
         print(f"[probe] HTTP {e.code}（官网屏蔽 runner），转 Wayback 兜底探测…")
         wb = wayback_check(url)
         if wb is None:
+            # 无 200 快照 ≠ 一定没发布——用两条独立证据把"大概率"升级为可证实判断：
+            # ① CDX 最近实抓记录：新近 404 = 档案馆实地抓过、当时确实没发（强证据）
+            # ② USCIS AOS 页(uscis.gov 不封 runner)出现该月 = 公告已发布（独立信号）
+            last = wayback_last_capture(url)
             wayback_save(url)   # 主动叫档案馆抓一次；下一班若已发布即可从快照命中
+            chart = fetch_filing_chart(ty, tm)
+            if chart:
+                return "pending", (f"{tag} USCIS AOS 页已出现该月(用表{chart}) → 公告已发布！"
+                                   "但官网屏蔽 runner 且 Wayback 尚无 200 快照；已请求主动存档，下一班取回")
+            if last:
+                lt = last[0].astimezone(ET) if ET else last[0]
+                return "404", (f"{tag} 官网屏蔽 runner(403)；Wayback 最近实抓 {lt:%m-%d %H:%M} ET "
+                               f"返回 HTTP {last[1]} → 实抓确认当时尚未发布（已再次请求主动存档）")
             return "error", (f"探测 {tag} 返回 HTTP {e.code}（官网屏蔽 runner）；"
-                             "Wayback 暂无快照 → 大概率官方尚未发布（已请求主动存档，下一班复查）")
+                             "Wayback 暂无任何抓取记录 → 无法确认，已请求主动存档，下一班复查")
         snap_url, snap_ts = wb
         print(f"[wayback] {tag} 官方已发布（快照 {snap_ts:%Y-%m-%d %H:%M} UTC），从快照解析")
         try:
