@@ -37,8 +37,9 @@ def awaiting_stock():
         for r in rows:
             if r and str(r[0]).strip() == 'China':
                 china = r[1]; break
-        if asof and isinstance(china, int):
-            out.append((asof, china))
+        # openpyxl 可能把整数读成 float——按数值接受，避免静默丢掉某期存量点
+        if asof and isinstance(china, (int, float)):
+            out.append((asof, int(china)))
     out.sort()
     return out
 
@@ -114,11 +115,15 @@ def main():
     rs = receipts()
     for tag, eb1a, niw in rs:
         p(f"  {tag}: EB-1A {eb1a}   NIW {niw}")
-    if len(rs) >= 2:
-        e1, pk = rs[-1][1], max(r[1] for r in rs)
-        trend = '退潮' if e1 < pk * 0.95 else ('见顶' if e1 < pk else '升温中')
-        p(f"  → EB-1A 峰值 {pk} → 最新 {e1}（{trend}，较峰 {round((e1/pk-1)*100)}%）;"
-          " 每文件为单季值。流入缩 = 未来 PD 身后堆积变小。")
+    # supplement 缺值时 eb1a 可能为 None——过滤后再算峰值/趋势，否则 max()/除法直接崩、
+    # 整段摘要因 workflow 的 `|| true` 静默消失
+    valid = [(tag, e) for tag, e, _ in rs if isinstance(e, (int, float))]
+    if len(valid) >= 2:
+        e1, pk = valid[-1][1], max(e for _, e in valid)
+        if pk > 0:
+            trend = '退潮' if e1 < pk * 0.95 else ('见顶' if e1 < pk else '升温中')
+            p(f"  → EB-1A 峰值 {pk} → 最新 {e1}（{trend}，较峰 {round((e1/pk-1)*100)}%）;"
+              " 每文件为单季值。流入缩 = 未来 PD 身后堆积变小。")
 
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
     if sp:

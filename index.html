@@ -547,7 +547,8 @@ function rng() {
 function seedFromPD() { return (Math.floor((getYourPD() || 1) / 86400000) >>> 0) || 1; }
 
 function gaussian(mu, sigma) {
-  var u1 = rng(), u2 = rng();
+  // 1-rng() ∈ (0,1]：避开 rng()==0 时 log(0)=-Infinity 把整条模拟路径污染成 NaN
+  var u1 = 1 - rng(), u2 = rng();
   return mu + Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * sigma;
 }
 
