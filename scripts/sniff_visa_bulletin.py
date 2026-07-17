@@ -141,18 +141,18 @@ def wayback_check(url):
 
 
 def wayback_save(url):
-    """主动请求 Wayback 抓一次该 URL（Save Page Now）。archive.org 的爬虫不在
-    travel.state.gov 封锁的机房 IP 段里 → 相当于借官方档案馆当合规取数通道。
-    带 capture_all=on 让 404 等错误页也入档——这样"官方没发"也会留下带时间戳的
-    404 抓取记录，可被 wayback_last_capture 用作『实抓确认尚未发布』的强证据。
+    """主动请求 Wayback 抓一次该 URL（Save Page Now，匿名 GET /save/<url>）。
+    archive.org 的爬虫不在 travel.state.gov 封锁的机房 IP 段里 → 借档案馆当合规取数通道。
+    实测(2026-07-17)：匿名 GET 会真实触发抓取，且错误页(403/404)也记入 CDX——正是
+    wayback_last_capture 需要的实抓证据；而 POST+capture_all 匿名下疑似只返回表单页
+    并不触发抓取（秒回 200、CDX 无新 capture），故必须用 GET。
     SPN 同步执行抓取、常超 20s：读超时≠失败，请求已受理、捕获在档案馆侧继续，
     由下一班探测(30 分钟后)经 wayback_check 读取 → 发布到上线 ≤35 分钟。"""
     def _submitted():
         print("[wayback] 存档请求已提交（读结果超时属正常——捕获在档案馆侧继续）")
     try:
-        data = urllib.parse.urlencode({"url": url, "capture_all": "on"}).encode()
         req = urllib.request.Request("https://web.archive.org/save/" + url,
-                                     data=data, headers={"User-Agent": UA})
+                                     headers={"User-Agent": UA})
         with urllib.request.urlopen(req, timeout=20) as r:
             print(f"[wayback] 已请求主动存档 (SPN HTTP {r.getcode()})，下一班读取快照")
     except TimeoutError:
@@ -375,12 +375,20 @@ def selftest():
         return "error", "selftest: 读不到 VB_YEAR/VB_MON"
     url = bulletin_url(vy, vm)
     print(f"[selftest] 抓取已发布的 {vy}-{vm:02d} 公告校验解析器：{url}")
+    html = None
     try:
         code, html = fetch(url)
-    except urllib.error.HTTPError as e:
-        return "error", f"selftest 抓取 {vy}-{vm:02d} 返回 HTTP {e.code}（{'runner 被拦' if e.code == 403 else '该期 URL 异常'}）"
     except Exception as e:
-        return "error", f"selftest 抓取失败：{type(e).__name__}: {str(e)[:120]}"
+        # 官网屏蔽 runner 时改用 Wayback 快照校验——否则解析器防线因 403 永远失效
+        note = f"HTTP {e.code}" if isinstance(e, urllib.error.HTTPError) else type(e).__name__
+        wb = wayback_check(url)
+        if not wb:
+            return "error", f"selftest 直连失败({note})且 Wayback 无该期快照——无法校验解析器"
+        try:
+            code, html = fetch(wb[0])
+            print(f"[selftest] 直连失败({note})，改用 Wayback 快照({wb[1]:%Y-%m-%d})校验")
+        except Exception as e2:
+            return "error", f"selftest Wayback 快照取回失败：{type(e2).__name__}: {str(e2)[:100]}"
     fad, dff = parse_eb1_china(html, debug=True)
     old_a, old_b = read_current_ab()
     ok = (fad == old_a and dff == old_b)
@@ -423,40 +431,38 @@ def write_run_summary(status, detail):
         print(f"[summary] 写入运行摘要失败: {type(e).__name__}: {e}")
 
 
-def run(args):
-    """执行一次探测，返回 (status, detail) 供运行摘要使用。"""
-    log = load_log()
-    t = now_et()
+def looks_like_bulletin(html, ty, tm):
+    """软404/拦截页防线：200 响应必须真的像『(ty,tm) 期签证公告』才算命中。
+    直连与 Wayback 快照都可能拿到 200 状态的『页面不存在/拦截』定制页——
+    那种页面不会包含 "Visa Bulletin for <Month> <Year>" 标题（Wayback 工具条
+    只含连字符 URL，不会误伤此判断）。"""
+    return re.search(r"visa\s+bulletin\s+for\s+" + MONTHS[tm - 1] + r"\s+" + str(ty),
+                     html, re.I) is not None
 
-    # 目标 = 下个日历月的 bulletin（通常在本月中旬发布）
-    ty, tm = next_month(t.year, t.month)
-    tag = f"{ty}-{tm:02d}"
 
-    if any(r.get("bulletin") == tag for r in log):
-        print(f"[skip] {tag} 已抓到，命中即停。")
-        return "skip", f"{tag} 已抓到，命中即停"
-
-    ok, reason = gate(log, force=args.force)
-    if not ok:
-        print(f"[gate] 跳过：{reason}（ET {t:%Y-%m-%d %H:%M}）")
-        return "skip", f"门控跳过：{reason}"
-    print(f"[gate] {reason} → 探测 {tag}")
-
+def probe_target(ty, tm, tag, log, args, t_now):
+    """探测并处理一期公告，返回 (status, detail)。
+    直连失败(403/连接重置/超时等，凡非 404)一律转 Wayback 兜底。"""
     url = bulletin_url(ty, tm)
-    est_time = False   # True=经 Wayback 兜底命中，发布时刻为快照时间(近似)
+    est_time, t, html, err = False, t_now, None, ""
     try:
-        code, html = fetch(url)
+        _, html = fetch(url)
     except urllib.error.HTTPError as e:
         if e.code == 404:
             print(f"[probe] {tag} 尚未发布 (404)")
             return "404", f"{tag} 尚未发布（404，URL 可达）"
-        # 403 等 = 官网屏蔽 runner（2026-07 起按 IP 封），改走 Wayback 兜底判定
-        print(f"[probe] HTTP {e.code}（官网屏蔽 runner），转 Wayback 兜底探测…")
+        err = f"HTTP {e.code}"
+    except Exception as e:
+        err = f"{type(e).__name__}: {str(e)[:80]}"
+
+    if html is None:
+        # 官网不可达（屏蔽 runner）→ 转 Wayback 兜底判定
+        print(f"[probe] {err}（官网不可达/屏蔽 runner），转 Wayback 兜底探测…")
         wb = wayback_check(url)
         if wb is None:
             # 无 200 快照 ≠ 一定没发布——用两条独立证据把"大概率"升级为可证实判断：
             # ① CDX 最近实抓记录：新近 404 = 档案馆实地抓过、当时确实没发（强证据）
-            # ② USCIS AOS 页(uscis.gov 不封 runner)出现该月 = 公告已发布（独立信号）
+            # ② USCIS AOS 页(另一域名)出现该月 = 公告已发布（独立信号）
             last = wayback_last_capture(url)
             wayback_save(url)   # 主动叫档案馆抓一次；下一班若已发布即可从快照命中
             chart = fetch_filing_chart(ty, tm)
@@ -467,7 +473,7 @@ def run(args):
                 lt = last[0].astimezone(ET) if ET else last[0]
                 code2 = str(last[1])
                 if code2 == "404":
-                    return "404", (f"{tag} 官网屏蔽 runner(403)；Wayback 最近实抓 {lt:%m-%d %H:%M} ET "
+                    return "404", (f"{tag} 官网屏蔽 runner({err})；Wayback 最近实抓 {lt:%m-%d %H:%M} ET "
                                    "返回 404 → 实抓确认当时尚未发布（已再次请求主动存档）")
                 # 403/5xx：可能是①Akamai 对爬虫"以 403 代 404"(页面尚不存在，等效未发布)，
                 # 也可能是②档案馆爬虫被整体屏蔽(通道失效)。单凭本条无法区分 →
@@ -487,19 +493,20 @@ def run(args):
                     hint = "已请求存档当期公告页作参照，下一班自诊断爬虫是否被挡"
                 return "error", (f"{tag} 官网屏蔽 runner；Wayback 最近实抓 {lt:%m-%d %H:%M} ET "
                                  f"返回 HTTP {code2}，无法据此确认是否发布（{hint}；已再次请求主动存档）")
-            return "error", (f"探测 {tag} 返回 HTTP {e.code}（官网屏蔽 runner）；"
+            return "error", (f"探测 {tag} 失败（{err}，官网屏蔽 runner）；"
                              "Wayback 暂无任何抓取记录 → 无法确认，已请求主动存档，下一班复查")
         snap_url, snap_ts = wb
         print(f"[wayback] {tag} 官方已发布（快照 {snap_ts:%Y-%m-%d %H:%M} UTC），从快照解析")
         try:
-            code, html = fetch(snap_url)
+            _, html = fetch(snap_url)
         except Exception as e2:
             return "error", f"{tag} Wayback 有快照但取回失败：{type(e2).__name__}: {str(e2)[:120]}"
         est_time = True
         t = snap_ts.astimezone(ET) if ET else snap_ts   # 发布时刻近似=首个快照时间
-    except Exception as e:
-        print(f"[probe] 失败 {type(e).__name__}: {str(e)[:160]}")
-        return "error", f"探测 {tag} 失败：{type(e).__name__}: {str(e)[:120]}"
+
+    if not looks_like_bulletin(html, ty, tm):
+        return "error", (f"{tag} 取回 200 但内容不含『Visa Bulletin for {MONTHS[tm-1].capitalize()} {ty}』"
+                         "标题（软404/拦截页?）——不记录，下一班重试")
 
     print(f"[hit] {tag} 已发布！{url}" + ("（经 Wayback 兜底）" if est_time else ""))
     fad, dff = parse_eb1_china(html)
@@ -516,26 +523,35 @@ def run(args):
         print("[dry-run] 不写文件。记录将是:", json.dumps(rec, ensure_ascii=False))
         return "hit", f"{tag} 命中（dry-run，未写文件）表A={fad} 表B={dff}"
 
-    log.append(rec)
-    save_log(log)
-    print(f"[log] 已记录到 {LOG}")
-
-    if fad and dff and fad != "current":
-        # A1 理智门禁：解析出的新值必须通过合理性校验，否则只记录命中、不写文件
+    # 『完整解析 + 理智门禁』都过才定案入档；否则记 partial：一次性通知，
+    # 之后每班静默重试直到转正——修掉旧版『一旦入 log 该期永不重试』的锁死。
+    complete = bool(fad and dff and fad != "current" and dff != "current")
+    old_a = old_b = None
+    why = ""
+    if complete:
         old_a, old_b = read_current_ab()
         ok_a, why_a = plausible_cutoff(fad, old_a)
         ok_b, why_b = plausible_cutoff(dff, old_b)
         if not (ok_a and ok_b):
-            print(f"[guard] 解析结果未通过理智门禁，放弃写入（疑似解析错误）。表A: {why_a}；表B: {why_b}")
-            print("        已记录命中时间，请人工核对 parse_eb1_china 与官方公告后再更新。")
-            _emit_env("BARK_TITLE", f"EB1A · {ty}年{tm}月公告待核对")
-            _emit_env("BARK_BODY", f"探测到新公告但数据解析存疑（表A:{why_a}；表B:{why_b}），已开 PR 仅记录命中，请人工核对。")
-            return "hit", f"{tag} 命中但未过理智门禁，仅记录命中。表A: {why_a}；表B: {why_b}"
+            complete, why = False, f"理智门禁未过——表A:{why_a}；表B:{why_b}"
+    elif fad == "current" or dff == "current":
+        why = f"表A={fad} 表B={dff} 含 Current，需人工确认展示方式"
+    else:
+        why = f"解析不完整（表A={fad} 表B={dff}）"
+
+    existing = next((r for r in log if r.get("bulletin") == tag), None)
+    if complete:
+        if existing:                      # partial 转正
+            existing.pop("partial", None)
+            existing.update(rec)
+        else:
+            log.append(rec)
+        save_log(log)
+        print(f"[log] 已记录到 {LOG}")
         try:
             update_index(ty, tm, fad, dff, t, est=est_time)
             print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 已自动判定(A/B 或待确认)")
-            # 把标题+正文写进 GITHUB_ENV；由 workflow 在"确实新建了复核 PR"时才推送一次，
-            # 避免合并前每次探测重复命中导致 Bark 刷屏。标题带月份，锁屏一眼看清是哪期。
+            # 标题+正文写进 GITHUB_ENV；由 workflow 在"确实新建了复核 PR"时才推送一次，防刷屏。
             _emit_env("BARK_TITLE", f"EB1A · {ty}年{tm}月排期已更新")
             _emit_env("BARK_BODY",
                       f"表A(裁定) {fad}（{_movement(old_a, fad)}） ／ 表B(递交) {dff}（{_movement(old_b, dff)}）。"
@@ -545,11 +561,52 @@ def run(args):
         except Exception as e:
             print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
             return "hit", f"{tag} 命中但写回失败：{type(e).__name__}: {e}"
-    else:
-        print("[index] 解析不完整，仅记录命中时间；请检查 parse_eb1_china 是否需按真实 HTML 调整。")
+
+    # 未定案 → partial
+    if existing is None:
+        rec["partial"] = True
+        log.append(rec)
+        save_log(log)
+        print(f"[guard] 命中但未定案：{why}；已记 partial（一次性通知，后续每班静默重试）")
         _emit_env("BARK_TITLE", f"EB1A · {ty}年{tm}月公告待核对")
-        _emit_env("BARK_BODY", f"探测到新公告但解析不完整（表A={fad} 表B={dff}），已开 PR 仅记录命中，请人工核对。")
-        return "hit", f"{tag} 命中但解析不完整（表A={fad} 表B={dff}），仅记录命中，请核对 parse_eb1_china"
+        _emit_env("BARK_BODY", f"探测到新公告但未定案（{why}）。探测器将持续自动重试，也请人工核对官方公告。")
+        return "hit", f"{tag} 命中但未定案（{why}），已记 partial 待重试/人工核对"
+    print(f"[guard] {tag} 重试仍未定案：{why}（partial 静默重试中）")
+    return "error", f"{tag} 重试仍未定案（{why}），继续每班静默重试"
+
+
+def run(args):
+    """执行一次探测，返回 (status, detail) 供运行摘要使用。
+    目标 = 本月 + 下月中所有『尚未定案』的期：下月是常规新期（走发布窗门控）；
+    本月若缺失/仅 partial，说明错过了上一轮发布或解析未转正，绕过门控直接补探——
+    修掉『月份翻转后错过的期永远不再探测』的丢期洞。"""
+    log = load_log()
+    t = now_et()
+    cur = (t.year, t.month)
+    results = []
+    for ty, tm in (cur, next_month(*cur)):
+        tag = f"{ty}-{tm:02d}"
+        existing = next((r for r in log if r.get("bulletin") == tag), None)
+        if existing and not existing.get("partial"):
+            if (ty, tm) != cur:
+                print(f"[skip] {tag} 已抓到，命中即停。")
+                results.append(("skip", f"{tag} 已抓到，命中即停"))
+            continue
+        if (ty, tm) == cur:
+            print(f"[backfill] 当月期 {tag} 缺失/未定案——绕过发布窗门控补探")
+        else:
+            ok, reason = gate(log, force=args.force)
+            if not ok:
+                print(f"[gate] 跳过：{reason}（ET {t:%Y-%m-%d %H:%M}）")
+                results.append(("skip", f"门控跳过：{reason}"))
+                continue
+            print(f"[gate] {reason} → 探测 {tag}")
+        results.append(probe_target(ty, tm, tag, log, args, t))
+    if not results:
+        return "skip", "本月与下月公告均已定案，命中即停"
+    order = {"hit": 0, "pending": 1, "404": 2, "error": 3, "skip": 4}
+    results.sort(key=lambda r: order.get(r[0], 9))
+    return results[0][0], "；".join(d for _, d in results)
 
 
 def main():
