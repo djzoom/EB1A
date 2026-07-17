@@ -1609,21 +1609,29 @@ function relReleaseText() {
   if (h < 72) return Math.floor(h) + ' 小时（' + d.toFixed(1) + ' 天）前发布';
   return Math.floor(d) + ' 天前发布';
 }
-// 下月发布预测：取近 3 次实际发布日的"日"均值，落到对应月份，遇周末顺延到工作日
+// 下月发布预测：官方从不预告发布日，历史散布在 8–20 号，单点预测必然"常常不准"。
+// 故：中枢用近 6 期发布"日"的中位数(抗 2/20、12/17 这类离群)，同时给出近 12 期的常见窗口；
+// 渲染时按"今天"动态降级：过了中位数 → 显示"随时可能发布"；过了窗口 → 明示"超窗未发布"，
+// 绝不把已过去的日期继续挂成"预计发布"。
 var WD = ['日', '一', '二', '三', '四', '五', '六'];
 function pLocal(s) { var a = s.split('-'); return new Date(+a[0], +a[1] - 1, +a[2]); }
 function sortedReleases() { return RELEASE_HISTORY.slice().sort(function(a, b) { return pLocal(a[1]) - pLocal(b[1]); }); }
 function predictNextRelease() {
   var ds = sortedReleases().map(function(p) { return pLocal(p[1]); });
   if (!ds.length) return null;
-  var last3 = ds.slice(-3);
-  var avgDay = Math.round(last3.reduce(function(s, d) { return s + d.getDate(); }, 0) / last3.length);
   var latest = ds[ds.length - 1];
-  var cand = new Date(latest.getFullYear(), latest.getMonth() + 1, Math.min(avgDay, 28));
-  var wd = cand.getDay();
-  if (wd === 6) cand.setDate(cand.getDate() - 1);        // 周六 → 周五
-  else if (wd === 0) cand.setDate(cand.getDate() + 1);   // 周日 → 周一
-  return cand;
+  function dayOf(d) { return d.getDate(); }
+  var med6 = ds.slice(-6).map(dayOf).sort(function(a, b) { return a - b; });
+  var med = med6[Math.floor((med6.length - 1) / 2)];
+  var win = ds.slice(-12).map(dayOf);
+  var lo = Math.min.apply(null, win), hi = Math.max.apply(null, win);
+  // 目标月 = 最近一期发布日的下一个月
+  var y = latest.getFullYear(), m = latest.getMonth() + 1;
+  var est = new Date(y, m, Math.min(med, 28));
+  var wd = est.getDay();
+  if (wd === 6) est.setDate(est.getDate() - 1);        // 周六 → 周五
+  else if (wd === 0) est.setDate(est.getDate() + 1);   // 周日 → 周一
+  return { est: est, lo: new Date(y, m, Math.min(lo, 28)), hi: new Date(y, m, Math.min(hi, 28)) };
 }
 function recentReleasesText(n) {
   return sortedReleases().slice(-n).reverse().map(function(p) {
@@ -1644,10 +1652,32 @@ function renderBulletinPanel() {
   }
   var advA = monthlyAdv(HISTORY), advB = monthlyAdv(HISTORY_B);
   var nm = VB_MON + 1, ny = VB_YEAR; if (nm > 12) { nm = 1; ny += 1; }
-  var nextRel = predictNextRelease() || new Date(new Date(VB_RELEASED).getTime() + 31 * MS_PER_DAY);
   function ymd(ts) { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   // 区间：低端=可能停滞(不前进)，高端=按 2 倍近期月推进的较快情形
   function range(now, adv) { return ymd(now) + ' ~ ' + ymd(now + adv * 2); }
+
+  // 发布日预测行：按"今天"所处位置动态措辞，过期日期绝不继续挂着
+  var pr = predictNextRelease();
+  function md(d) { return (d.getMonth() + 1) + '/' + d.getDate(); }
+  function dOnly(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  var relLine;
+  if (!pr) {
+    var fb = new Date(new Date(VB_RELEASED).getTime() + 31 * MS_PER_DAY);
+    relLine = '预计发布：约 <b>' + ymd(fb.getTime()) + '</b>';
+  } else {
+    var tn = dOnly(new Date());
+    var winTxt = '常见窗口 ' + md(pr.lo) + '–' + md(pr.hi) + '（近12期）';
+    if (tn > dOnly(pr.hi)) {
+      relLine = '预计发布：<b>常见窗口已过，尚未发布</b> — ' + winTxt +
+                '，历史偶至月底；官方不预告发布日，以官方为准';
+    } else if (tn >= dOnly(pr.est)) {
+      relLine = '预计发布：<b>随时可能（今起～' + md(pr.hi) + '）</b> — 中位日 ' + md(pr.est) +
+                ' 已到，' + winTxt;
+    } else {
+      relLine = '预计发布：约 <b>' + ymd(pr.est.getTime()) + '（周' + WD[pr.est.getDay()] + '）</b>' +
+                '（近6期中位，' + winTxt + '）';
+    }
+  }
 
   var isNew = isNewBulletin();
   el.innerHTML =
@@ -1658,7 +1688,7 @@ function renderBulletinPanel() {
       '表A 最终裁定：<b>' + ymd(aNow) + '</b>　·　表B 递交：<b>' + ymd(bNow) + '</b><br>' +
       '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p></div>' +
     '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
-      '预计发布：约 <b>' + ymd(nextRel.getTime()) + '（周' + WD[nextRel.getDay()] + '）</b>（近3次发布日均值，落到工作日）<br>' +
+      relLine + '<br>' +
       '近期发布：<span style="color:var(--text3)">' + recentReleasesText(4) + '</span><br>' +
       '预测表A：<b>' + range(aNow, advA) + '</b><br>预测表B：<b>' + range(bNow, advB) + '</b></p>' +
     '<p class="explain-note">下月数值为按近期推进速度的估算，月度移动有较大不确定性（常见停滞或跳进），一切以官方公告为准。</p>';
