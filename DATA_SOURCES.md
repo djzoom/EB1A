@@ -37,6 +37,10 @@ e.g. EB-1, China, 2024, June → 320
 - 入口: https://travel.state.gov/content/travel/en/legal/visa-law0/visa-statistics/immigrant-visa-statistics/monthly-immigrant-visa-issuances.html
 - 月度: 每个 FY 一个 PDF/XLSX
 - 类型: 按"国家 × visa category"
+- ⚠️ 现状(2026-07 核实): 官方发布停滞于 **2025-09**(FY2025 收官月),FY2026 各月从未发布
+  (Niskanen 截至 2026-06-30 的追踪同样止于 2025-09;背景为 2026 年初 39 国限签/75 国停签)。
+  另外 travel.state.gov 对 GitHub Actions runner 返回 403(反爬)。二者的判定与告警抑制
+  由 `data/dos_publication_anchor.json`(人工锚点,120 天复核一次)+ `scripts/check_data_updates.py` 处理。
 
 ### 4. DOS Annual Report of the Visa Office
 

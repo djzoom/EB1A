@@ -1,0 +1,11 @@
+{
+  "_comment": "DOS 月度 IV 签发数据「官方实际最新发布」的人工锚点。travel.state.gov 对 GitHub Actions runner 返回 403(反爬)时,巡检无法在线核对官方列表页,改以本锚点判定:本地 >= latest 即『官方停更,非漏抓』,不告警。锚点超过 valid_days 天未复核且官网仍不可达时,巡检会提醒人工确认官方是否恢复发布——届时请重新核实并更新 latest/verified_on;若官网恢复可达,本文件自动失去作用(在线核对优先)。",
+  "latest": "2025-09",
+  "verified_on": "2026-07-16",
+  "valid_days": 120,
+  "evidence": [
+    "Niskanen Center《Legal Immigration in Numbers》June 2026 Status Update(截至 2026-06-30)明确其收录的 DOS 月度 IV/NIV 签发数据仅到 2025 年 9 月",
+    "FY2026 各月(2025-10 起)的 FSC 月度文件从未出现在官网列表页或搜索索引中;2025-09 为 FY2025 收官月",
+    "背景:2026-01-01 起 PP 10998 对 39 国限签、2026-01-21 起 DOS 无限期暂停 75 国移民签证签发,月度统计发布同步停滞"
+  ]
+}
