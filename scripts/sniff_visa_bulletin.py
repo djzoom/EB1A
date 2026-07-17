@@ -140,6 +140,22 @@ def wayback_check(url):
     return None
 
 
+def wayback_save(url):
+    """主动请求 Wayback 抓一次该 URL（Save Page Now）。archive.org 的爬虫不在
+    travel.state.gov 封锁的机房 IP 段里 → 相当于借官方档案馆当合规取数通道。
+    捕获需 10–60s 异步完成，这里发出请求即返回（fire-and-forget），
+    由下一班探测(30 分钟后)经 wayback_check 读到新快照 → 发布到上线 ≤35 分钟。
+    目标未发布(404)时 Wayback 只会存 404 快照，wayback_check 按 status=200 过滤不受影响。"""
+    try:
+        req = urllib.request.Request("https://web.archive.org/save/" + url,
+                                     headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            print(f"[wayback] 已请求主动存档 (SPN HTTP {r.getcode()})，下一班读取快照")
+    except Exception as e:
+        # 匿名 SPN 有限流，失败无妨——被动等社区快照仍然兜底
+        print(f"[wayback] 主动存档请求未成功(不影响被动兜底): {type(e).__name__}: {str(e)[:100]}")
+
+
 def _china_from_row(seg):
     """从某 preference 行文本里取第 2 列(中国)的日期。列顺序 All/CHINA/India/Mexico/Philippines。
     返回 'YYYY-MM-DD' / 'current' / None。日期格式如 01APR23 / 01 APR 23 / C。"""
@@ -410,8 +426,9 @@ def run(args):
         print(f"[probe] HTTP {e.code}（官网屏蔽 runner），转 Wayback 兜底探测…")
         wb = wayback_check(url)
         if wb is None:
+            wayback_save(url)   # 主动叫档案馆抓一次；下一班若已发布即可从快照命中
             return "error", (f"探测 {tag} 返回 HTTP {e.code}（官网屏蔽 runner）；"
-                             "Wayback 暂无快照 → 大概率官方尚未发布")
+                             "Wayback 暂无快照 → 大概率官方尚未发布（已请求主动存档，下一班复查）")
         snap_url, snap_ts = wb
         print(f"[wayback] {tag} 官方已发布（快照 {snap_ts:%Y-%m-%d %H:%M} UTC），从快照解析")
         try:
