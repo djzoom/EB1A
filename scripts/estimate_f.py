@@ -36,11 +36,13 @@ def latest_pool():
         asof = None
         for r in rows[:5]:
             if r and r[0] and 'As of' in str(r[0]):
-                m = re.search(r'As of (\w+)\s+(\d{4})', str(r[0]))
+                # 兼容 'As of December 2025' 与 'As of December 1, 2025' 两种写法
+                m = re.search(r'As of (\w+)\s+(?:\d+,?\s*)?(\d{4})', str(r[0]))
                 if m: asof = date(int(m.group(2)), MO[m.group(1)], 1)
         china = next((r[1] for r in rows if r and str(r[0]).strip() == 'China'), None)
-        if asof and isinstance(china, int) and (best is None or asof > best[0]):
-            best = (asof, china)
+        # openpyxl 可能把整数读成 float——按数值接受，避免静默丢掉最新文件用旧存量
+        if asof and isinstance(china, (int, float)) and (best is None or asof > best[0]):
+            best = (asof, int(china))
     return best
 
 
@@ -88,9 +90,12 @@ def cutoff_from_index():
 
 
 def read_live_wall():
-    """读线上 PRESETS.realistic 的 demandWall / demandWallSigma。"""
+    """读线上 PRESETS.realistic 的 demandWall / demandWallSigma。
+    正则失败时打印警告再用默认值——静默回退会让"线上现行"一栏与真值脱节而无人察觉。"""
     s = open(INDEX, encoding="utf-8").read()
     m = re.search(r"realistic:\s*\{[^}]*?demandWall:\s*([\d.]+),\s*demandWallSigma:\s*([\d.]+)", s)
+    if not m:
+        print("[warn] 未能从 index.html 读到 demandWall/σ，下面\"线上现行\"用默认值 1.8/0.5(可能失真)")
     return (float(m.group(1)), float(m.group(2))) if m else (1.8, 0.5)
 
 

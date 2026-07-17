@@ -83,14 +83,20 @@ def eb1_china_by_pd_year(path):
 
 
 def model_near_density():
-    """从 index.html PRESETS.realistic 取近端密度 densityHigh(=PD≈2023 的 主申/PD-日)与 family。"""
+    """从 index.html PRESETS.realistic 取近端密度 densityHigh(=PD≈2023 的 主申/PD-日)、family，
+    及当前 表A cutoff / 表B DFF。正则失败时打印警告再用默认值——静默回退曾导致与线上真值脱节。"""
     s = open(INDEX, encoding="utf-8").read()
     m = re.search(r"realistic:\s*\{[^}]*?familyMultiplier:([\d.]+)[^}]*?densityHigh:([\d.]+)", s)
+    if not m:
+        print("[warn] 未能从 index.html 读到 familyMultiplier/densityHigh，使用默认 1.9/8.0")
     fam = float(m.group(1)) if m else 1.9
     dh = float(m.group(2)) if m else 8.0
-    cm = re.search(r"'EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*'([0-9-]+)'", s)
+    cm = re.search(r"'EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*'([0-9-]+)',\s*B:\s*'([0-9-]+)'", s)
+    if not cm:
+        print("[warn] 未能从 index.html 读到 表A/表B cutoff，使用默认 2023-06-01/2023-12-01")
     cutoff = date.fromisoformat(cm.group(1)) if cm else date(2023, 6, 1)
-    return fam, dh, cutoff
+    dff = date.fromisoformat(cm.group(2)) if cm else date(2023, 12, 1)
+    return fam, dh, cutoff, dff
 
 
 def main():
@@ -104,7 +110,7 @@ def main():
         return
     (iy, im), path = inv
     dist, asof = eb1_china_by_pd_year(path)
-    fam, dens_model, cutoff = model_near_density()
+    fam, dens_model, cutoff, dff = model_near_density()
 
     p(f"## I-485 库存近端校准 (EB-1 中国, 库存 {iy}-{im:02d}, as of {asof or '?'})")
     p("PD年 | I-485在案(含派生) | 被抑制格 | ≈主申(÷family) ")
@@ -120,11 +126,18 @@ def main():
     if near in dist and dist[near][0] > 0:
         cnt = dist[near][0]
         prin = cnt / fam
-        dens_inv = prin / 365.0     # 主申/PD-日(下界:仅已递件、且为剩余快照)
+        # 分母 = 该桶实际可递件的 PD 跨度，而非全年 365 天：
+        # 只有 PD ≤ 表A cutoff(或表B窗口开放期 ≤ DFF)的人才能递 I-485，
+        # 故 PD-{near} 桶里的库存集中在 [年初, max(表A,表B)] 区间。
+        # 误用 365 会按 ~1.1–2.4× 稀释实测密度，把下界报松、掩盖模型偏乐观。
+        year_start = date(cutoff.year, 1, 1)
+        span_end = min(max(cutoff, dff), date(cutoff.year, 12, 31))
+        span_days = max(1, (span_end - year_start).days)
+        dens_inv = prin / span_days     # 主申/PD-日(下界:仅已递件、且为剩余快照)
         p("")
         p(f"### 近端密度校准（cutoff={cutoff}，对照 PD-{near} 桶）")
-        p(f"- 库存实测(下界)：PD-{near} 在案 {cnt:,} 件 → ≈{prin:,.0f} 主申 → "
-          f"**{dens_inv:.1f} 主申/PD-日**")
+        p(f"- 库存实测(下界)：PD-{near} 在案 {cnt:,} 件 → ≈{prin:,.0f} 主申 ÷ 可递件跨度 "
+          f"{span_days} 天（年初→max(表A {cutoff}, 表B {dff})）→ **{dens_inv:.1f} 主申/PD-日**")
         p(f"- 模型现行(densityHigh)：**{dens_model:.1f} 主申/PD-日**")
         ratio = dens_model / dens_inv if dens_inv else 0
         if dens_model >= dens_inv:

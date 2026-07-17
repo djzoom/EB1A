@@ -48,18 +48,30 @@ def load_snapshots():
                 if mm: asof = date(int(mm.group(3)), MI[mm.group(1)], int(mm.group(2)))
         if not asof:
             continue
-        hdr = rows[3]; yc = {h.split('- ')[-1]: j for j, h in enumerate(hdr) if isinstance(h, str) and 'Priority Date Year - 2' in h}
+        # 表头行动态定位(取 'Priority Date Year' 列最多的一行)，格式漂移时不再默默解析成空网格
+        def n_year_cells(r):
+            return sum(1 for c in (r or []) if isinstance(c, str) and 'Priority Date Year - 2' in c)
+        hi = max(range(min(8, len(rows))), key=lambda i: n_year_cells(rows[i]), default=3)
+        hdr = rows[hi]
+        yc = {h.split('- ')[-1]: j for j, h in enumerate(hdr) if isinstance(h, str) and 'Priority Date Year - 2' in h}
         g = defaultdict(int)
-        for r in rows[4:]:
+        for r in rows[hi + 1:]:
             pref, st, mon = r[1], r[2], r[3]
-            if not pref or 'EB1' not in str(pref) or mon not in MI:
+            # 行标兼容 'EB1' 与 'Employment-Based 1st' 两种历史写法
+            if not pref or ('EB1' not in str(pref) and 'Employment-Based 1' not in str(pref)) or mon not in MI:
                 continue
             for y, j in yc.items():
                 v = r[j]
                 if isinstance(v, (int, float)): g[(int(y), MI[mon])] += v
+        if not g:
+            print(f"[warn] 快照 {asof} 解析为空网格(表头/行标格式可能已变)，跳过该快照")
+            continue
         snaps.append((asof, dict(g)))
     snaps.sort(key=lambda x: x[0])
     return snaps
+
+
+_leak_warned = False
 
 
 def grid_asof(snaps, t, max_asof):
@@ -67,7 +79,14 @@ def grid_asof(snaps, t, max_asof):
     pick = None
     for asof, g in snaps:
         if asof <= cap: pick = g
-    return pick or (snaps[0][1] if snaps else {})
+    if pick is None and snaps:
+        # cap 之前没有任何快照 → 只能用最早一份(其 as-of 晚于 t，属已知的轻微"未来泄露")
+        global _leak_warned
+        if not _leak_warned:
+            _leak_warned = True
+            print(f"[warn] {cap} 之前无库存快照，回退用最早快照 {snaps[0][0]}（as-of 晚于该时点，存在轻微未来泄露）")
+        return snaps[0][1]
+    return pick or {}
 
 
 def dpd(g, cut):
