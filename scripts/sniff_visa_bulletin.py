@@ -465,8 +465,28 @@ def run(args):
                                    "但官网屏蔽 runner 且 Wayback 尚无 200 快照；已请求主动存档，下一班取回")
             if last:
                 lt = last[0].astimezone(ET) if ET else last[0]
-                return "404", (f"{tag} 官网屏蔽 runner(403)；Wayback 最近实抓 {lt:%m-%d %H:%M} ET "
-                               f"返回 HTTP {last[1]} → 实抓确认当时尚未发布（已再次请求主动存档）")
+                code2 = str(last[1])
+                if code2 == "404":
+                    return "404", (f"{tag} 官网屏蔽 runner(403)；Wayback 最近实抓 {lt:%m-%d %H:%M} ET "
+                                   "返回 404 → 实抓确认当时尚未发布（已再次请求主动存档）")
+                # 403/5xx：可能是①Akamai 对爬虫"以 403 代 404"(页面尚不存在，等效未发布)，
+                # 也可能是②档案馆爬虫被整体屏蔽(通道失效)。单凭本条无法区分 →
+                # 拿"当期已发布公告页"的新近实抓做参照自诊断：参照 200=①，参照也非 200=②。
+                vy, vm, _ = read_vb_state()
+                cur_url = bulletin_url(vy, vm) if vy else None
+                ref = wayback_last_capture(cur_url) if cur_url else None
+                if ref and (datetime.now(timezone.utc) - ref[0]).days < 2:
+                    if str(ref[1]) == "200":
+                        hint = "参照:当期公告页新近实抓 200 → 爬虫未被挡，本 403 系页面尚不存在(以403代404)，等效未发布"
+                    else:
+                        hint = (f"参照:当期公告页新近实抓也为 HTTP {ref[1]} → 档案馆通道整体受阻⚠️，"
+                                "Wayback 兜底可能失效，需考虑 self-hosted runner 等替代通道")
+                else:
+                    if cur_url:
+                        wayback_save(cur_url)
+                    hint = "已请求存档当期公告页作参照，下一班自诊断爬虫是否被挡"
+                return "error", (f"{tag} 官网屏蔽 runner；Wayback 最近实抓 {lt:%m-%d %H:%M} ET "
+                                 f"返回 HTTP {code2}，无法据此确认是否发布（{hint}；已再次请求主动存档）")
             return "error", (f"探测 {tag} 返回 HTTP {e.code}（官网屏蔽 runner）；"
                              "Wayback 暂无任何抓取记录 → 无法确认，已请求主动存档，下一班复查")
         snap_url, snap_ts = wb
