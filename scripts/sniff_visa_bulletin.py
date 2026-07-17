@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import date, datetime, timedelta, timezone
@@ -120,6 +121,23 @@ def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=25) as r:
         return r.getcode(), r.read().decode("utf-8", "ignore")
+
+
+def wayback_check(url):
+    """travel.state.gov 对 runner 按 IP 返 403（2026-07 起）时的兜底：
+    查 Wayback Machine 是否已有该公告 URL 的 200 快照。公告 URL 每期唯一，
+    且社区通常发布当天就存档 → 有快照即视为官方已发布。
+    返回 (snapshot_url, timestamp_utc: datetime) 或 None。"""
+    api = "https://archive.org/wayback/available?url=" + urllib.parse.quote(url, safe="")
+    try:
+        _, body = fetch(api)
+        snap = json.loads(body).get("archived_snapshots", {}).get("closest")
+        if snap and snap.get("available") and str(snap.get("status")) == "200":
+            ts = datetime.strptime(snap["timestamp"], "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+            return snap["url"], ts
+    except Exception as e:
+        print(f"[wayback] 查询失败: {type(e).__name__}: {str(e)[:120]}")
+    return None
 
 
 def _china_from_row(seg):
@@ -381,25 +399,41 @@ def run(args):
     print(f"[gate] {reason} → 探测 {tag}")
 
     url = bulletin_url(ty, tm)
+    est_time = False   # True=经 Wayback 兜底命中，发布时刻为快照时间(近似)
     try:
         code, html = fetch(url)
     except urllib.error.HTTPError as e:
         if e.code == 404:
             print(f"[probe] {tag} 尚未发布 (404)")
             return "404", f"{tag} 尚未发布（404，URL 可达）"
-        print(f"[probe] HTTP {e.code}（gov 可能屏蔽本环境；Actions runner 通常可访问）")
-        return "error", f"探测 {tag} 返回 HTTP {e.code}"
+        # 403 等 = 官网屏蔽 runner（2026-07 起按 IP 封），改走 Wayback 兜底判定
+        print(f"[probe] HTTP {e.code}（官网屏蔽 runner），转 Wayback 兜底探测…")
+        wb = wayback_check(url)
+        if wb is None:
+            return "error", (f"探测 {tag} 返回 HTTP {e.code}（官网屏蔽 runner）；"
+                             "Wayback 暂无快照 → 大概率官方尚未发布")
+        snap_url, snap_ts = wb
+        print(f"[wayback] {tag} 官方已发布（快照 {snap_ts:%Y-%m-%d %H:%M} UTC），从快照解析")
+        try:
+            code, html = fetch(snap_url)
+        except Exception as e2:
+            return "error", f"{tag} Wayback 有快照但取回失败：{type(e2).__name__}: {str(e2)[:120]}"
+        est_time = True
+        t = snap_ts.astimezone(ET) if ET else snap_ts   # 发布时刻近似=首个快照时间
     except Exception as e:
         print(f"[probe] 失败 {type(e).__name__}: {str(e)[:160]}")
         return "error", f"探测 {tag} 失败：{type(e).__name__}: {str(e)[:120]}"
 
-    print(f"[hit] {tag} 已发布！{url}")
+    print(f"[hit] {tag} 已发布！{url}" + ("（经 Wayback 兜底）" if est_time else ""))
     fad, dff = parse_eb1_china(html)
     print(f"[parse] EB-1 中国 表A(裁定)={fad}  表B(递交)={dff}")
 
+    # 经 Wayback 命中的 hour 不进自学习窗口（快照时间是抓取时刻，非官方释出时刻）
     rec = {"bulletin": tag, "detected_et": t.strftime("%Y-%m-%d %H:%M"),
-           "day": t.day, "hour": t.hour, "weekday": t.weekday(),
+           "day": t.day, "hour": (None if est_time else t.hour), "weekday": t.weekday(),
            "fad": fad, "dff": dff}
+    if est_time:
+        rec["via"] = "wayback"
 
     if args.dry_run:
         print("[dry-run] 不写文件。记录将是:", json.dumps(rec, ensure_ascii=False))
@@ -421,14 +455,15 @@ def run(args):
             _emit_env("BARK_BODY", f"探测到新公告但数据解析存疑（表A:{why_a}；表B:{why_b}），已开 PR 仅记录命中，请人工核对。")
             return "hit", f"{tag} 命中但未过理智门禁，仅记录命中。表A: {why_a}；表B: {why_b}"
         try:
-            update_index(ty, tm, fad, dff, t)
+            update_index(ty, tm, fad, dff, t, est=est_time)
             print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 已自动判定(A/B 或待确认)")
             # 把标题+正文写进 GITHUB_ENV；由 workflow 在"确实新建了复核 PR"时才推送一次，
             # 避免合并前每次探测重复命中导致 Bark 刷屏。标题带月份，锁屏一眼看清是哪期。
             _emit_env("BARK_TITLE", f"EB1A · {ty}年{tm}月排期已更新")
             _emit_env("BARK_BODY",
                       f"表A(裁定) {fad}（{_movement(old_a, fad)}） ／ 表B(递交) {dff}（{_movement(old_b, dff)}）。"
-                      f"\n本月递交用表：待 USCIS 确认。已自动更新上线（如有误可回滚）。")
+                      f"\n本月递交用表：待 USCIS 确认。已自动更新上线（如有误可回滚）。"
+                      + ("\n注：官网屏蔽探测器，本期经 Wayback 快照兜底命中，发布时刻为约值。" if est_time else ""))
             return "hit", f"{tag} 命中并已写回 index.html：表A={fad} 表B={dff}（待 PR 复核）"
         except Exception as e:
             print(f"[index] 更新失败（请按真实 HTML 校准 parse/update）: {type(e).__name__}: {e}")
@@ -472,9 +507,10 @@ def main():
     write_run_summary(status, detail)
 
 
-def update_index(ty, tm, fad, dff, detected):
+def update_index(ty, tm, fad, dff, detected, est=False):
     """把新一期表A/表B 写回 index.html：更新 CUTOFF_DATA、VB_* 公告元信息，并追加 HISTORY/HISTORY_B。
-    detected: 本期探测到的时刻(aware datetime, ET)；既写显示用日期 VB_RELEASED，也写精确时刻 VB_RELEASED_TS。"""
+    detected: 本期探测到的时刻(aware datetime, ET)；既写显示用日期 VB_RELEASED，也写精确时刻 VB_RELEASED_TS。
+    est=True(经 Wayback 兜底)时 VB_RELEASED_EST 置 true → 前端显示加「约」。"""
     with open(INDEX, encoding="utf-8") as f:
         s = f.read()
     bull = f"{ty}-{tm:02d}-15"  # 该期对应的 bulletin 月（用 15 号作 x）
@@ -494,8 +530,9 @@ def update_index(ty, tm, fad, dff, detected):
                lambda m: m.group(1) + str(ty) + m.group(2) + str(tm) + m.group(3), s, count=1)
     s = re.sub(r"(var VB_RELEASED = ')[^']*(')", lambda m: m.group(1) + released + m.group(2), s, count=1)
     s = re.sub(r"(var VB_RELEASED_TS = )\d+", lambda m: m.group(1) + str(released_ms), s, count=1)
-    # 真实探测到的时刻是精确的 → 去掉「约」
-    s = re.sub(r"(var VB_RELEASED_EST = )(?:true|false)", lambda m: m.group(1) + "false", s, count=1)
+    # 在线真实命中=精确时刻(去「约」)；Wayback 兜底命中=快照近似时刻(加「约」)
+    s = re.sub(r"(var VB_RELEASED_EST = )(?:true|false)",
+               lambda m: m.group(1) + ("true" if est else "false"), s, count=1)
     # A2) 本月递交用哪张表是 USCIS 另发的决定：尝试从 USCIS AOS 页自动判定；判不准则 '?' 待确认
     chart = fetch_filing_chart(ty, tm) or "?"
     s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
