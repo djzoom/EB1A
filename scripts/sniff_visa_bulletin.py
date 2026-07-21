@@ -398,6 +398,26 @@ def selftest():
     return ("hit" if ok else "error"), detail
 
 
+def announce():
+    """推送一条『正式』排期更新通知(读 index.html 当前快照)。
+    自动链路命中时由 workflow 在建 PR 后推 Bark;人工录入+合并不会经过那条路 →
+    本模式补这个缺口:人工上线新一期后手动触发一次,措辞与正式通知一致(非演习)。"""
+    a, b = read_current_ab()
+    try:
+        s = open(INDEX, encoding="utf-8").read()
+        vbm = (re.search(r"var VB_MONTH = '([^']*)'", s) or [None, "?"])[1]
+        chart = (re.search(r"var FILING_CHART = '([^']*)'", s) or [None, "?"])[1]
+    except Exception:
+        vbm, chart = "?", "?"
+    label = {'A': '表A(Final Action)', 'B': '表B(Dates for Filing)'}.get(chart, '待 USCIS 确认')
+    title = f"EB1A · {vbm}排期已更新"
+    body = (f"表A(裁定) {a} ／ 表B(递交) {b}。\n本月递交用表：{label}。"
+            "已上线；页面若显示旧数据请下拉刷新/强制刷新一次。")
+    if notify_bark(title, body, url="https://djzoom.github.io/EB1A/"):
+        return "hit", f"排期通知已推送：{vbm} 表A={a} 表B={b}"
+    return "error", "排期通知未发送(未配置 BARK_KEY 或推送失败)"
+
+
 def drill():
     """演习：用当前排期快照发一条测试 Bark 推送，验证 BARK_KEY secret + 推送链路 + 手机接收。
     需 runner 环境变量 BARK_KEY。返回 (status, detail)。"""
@@ -617,6 +637,8 @@ def main():
                     help="抓取已发布的当前那期，验证 parse_eb1_china 对真实 HTML 是否正确；不写文件")
     ap.add_argument("--drill", action="store_true",
                     help="演习：发一条测试 Bark 推送(用当前排期快照)验证推送链路；需环境变量 BARK_KEY")
+    ap.add_argument("--announce", action="store_true",
+                    help="人工录入新一期后，推送一条正式排期更新通知(读当前快照)；需 BARK_KEY")
     ap.add_argument("--send-bark", action="store_true",
                     help="读取环境变量 BARK_BODY 发一条命中通知(由 workflow 在新建复核 PR 后调用)")
     ap.add_argument("--filing-chart", action="store_true",
@@ -632,6 +654,8 @@ def main():
         body = os.environ.get("BARK_BODY") or "探测到新签证公告，已开复核 PR，请核对后合并。"
         ok = notify_bark(title, body)
         status, detail = ("hit" if ok else "error"), ("Bark 已发送" if ok else "Bark 未发送(未配置/失败)")
+    elif args.announce:
+        status, detail = announce()
     elif args.drill:
         status, detail = drill()
     elif args.selftest:
