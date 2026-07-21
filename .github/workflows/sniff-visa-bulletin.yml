@@ -19,6 +19,10 @@ on:
         description: '演习：发一条测试 Bark 推送验证手机能收到（需先配 BARK_KEY）'
         type: boolean
         default: false
+      announce:
+        description: '人工录入新一期后，推送一条正式排期更新通知（读当前快照；需 BARK_KEY）'
+        type: boolean
+        default: false
   schedule:
     # 覆盖美东 ~09:00–21:00（含上午盲区；含夏/冬令时）。脚本再按美东时间精确门控。
     # 注意：GitHub 定时任务不保证准点、高负载会延迟/丢弃，故时段放宽 + 多槽位以降低漏抓概率。
@@ -56,6 +60,8 @@ jobs:
         run: |
           if [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
             python scripts/sniff_visa_bulletin.py --drill
+          elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.announce }}" = "true" ]; then
+            python scripts/sniff_visa_bulletin.py --announce
           elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.backfill }}" = "true" ]; then
             python scripts/backfill_release_dates.py
           else
@@ -65,7 +71,7 @@ jobs:
       # 补判本月递交用表：FILING_CHART 仍为 '?' 时从 USCIS AOS 页确认(USCIS 常滞后公告 1-2 天)。
       # 仅 '?' 时才抓 USCIS；判定到则改 index.html → 下面的 create-PR 自动收口、自动合并上线。
       - name: Resolve filing chart if pending
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.drill && !inputs.backfill && !inputs.selftest) }}
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.drill && !inputs.backfill && !inputs.selftest && !inputs.announce) }}
         run: python scripts/sniff_visa_bulletin.py --filing-chart
 
       # 数据若改动则开 PR；无改动时静默跳过（不建 PR）。
