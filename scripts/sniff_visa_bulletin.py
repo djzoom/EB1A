@@ -398,6 +398,65 @@ def selftest():
     return ("hit" if ok else "error"), detail
 
 
+def manual(args):
+    """一键人工录入一期公告(官网+档案馆全堵、只能从第三方获知数据时)。
+    走探测器同款 update_index 流程,与自动更新格式完全一致,并过理智门禁防手滑输错。
+    改动 index.html + release_log 后,由 workflow 的 create-PR/auto-merge/Bark 步骤自动收口。
+    参数: --bulletin YYYY-MM --fad 表A --dff 表B [--released YYYY-MM-DD] [--chart A|B|?] [--exact]"""
+    mm = re.match(r"(\d{4})-(\d{1,2})$", (args.bulletin or "").strip())
+    if not mm:
+        return "error", f"缺少或非法 --bulletin(应形如 2026-09)：{args.bulletin!r}"
+    ty, tm = int(mm.group(1)), int(mm.group(2))
+    fad, dff = (args.fad or "").strip(), (args.dff or "").strip()
+    if not fad or not dff:
+        return "error", "必须提供 --fad 与 --dff(表A/表B cutoff，或 current)"
+
+    # 理智门禁:防手滑把日期输错/输反(current 直通)
+    old_a, old_b = read_current_ab()
+    for lbl, new, old in (("表A", fad, old_a), ("表B", dff, old_b)):
+        if new.lower() == "current":
+            continue
+        ok, why = plausible_cutoff(new, old)
+        if not ok:
+            return "error", (f"{lbl} 值 {new} 未过理智门禁：{why}。"
+                             "若确认官方就是此值(如政策性巨变)，请手动改 index.html。")
+
+    rel = (args.released or "").strip() or now_et().strftime("%Y-%m-%d")
+    try:
+        rd = datetime.strptime(rel, "%Y-%m-%d")
+    except ValueError:
+        return "error", f"--released 非法日期(应形如 2026-07-20)：{rel!r}"
+    # 发布"日"确定、"时刻"未知 → 取 12:00 ET，默认 est=True(前端加「约」)；--exact 表精确
+    detected = (datetime(rd.year, rd.month, rd.day, 12, 0, tzinfo=ET) if ET
+                else datetime(rd.year, rd.month, rd.day, 12, 0))
+    chart = args.chart if args.chart in ('A', 'B', '?') else '?'
+
+    tag = f"{ty}-{tm:02d}"
+    print(f"[manual] 录入 {tag}：表A={fad} 表B={dff} 发布={rel} 用表={chart} exact={args.exact}")
+    if args.dry_run:
+        return "hit", f"{tag} 人工录入(dry-run，未写文件)：表A={fad} 表B={dff}"
+
+    try:
+        update_index(ty, tm, fad, dff, detected, est=not args.exact, chart_override=chart)
+    except Exception as e:
+        return "error", f"{tag} update_index 写入失败：{type(e).__name__}: {e}"
+
+    # release_log 追加(via=manual,hour=None 不进自学习窗口)；已存在则不重复
+    log = load_log()
+    if not any(r.get("bulletin") == tag for r in log):
+        log.append({"bulletin": tag, "detected_et": detected.strftime("%Y-%m-%d %H:%M"),
+                    "day": rd.day, "hour": None, "weekday": rd.weekday(),
+                    "fad": fad, "dff": dff, "via": "manual"})
+        save_log(log)
+
+    label = {'A': '表A(Final Action)', 'B': '表B(Dates for Filing)'}.get(chart, '待 USCIS 确认')
+    _emit_env("BARK_TITLE", f"EB1A · {ty}年{tm}月排期已更新")
+    _emit_env("BARK_BODY",
+              f"表A(裁定) {fad}（{_movement(old_a, fad)}） ／ 表B(递交) {dff}（{_movement(old_b, dff)}）。"
+              f"\n本月递交用表：{label}。已上线（人工录入）。")
+    return "hit", f"{tag} 人工录入并写回：表A={fad} 表B={dff} 用表={chart}（待 PR 自动合并）"
+
+
 def announce():
     """推送一条『正式』排期更新通知(读 index.html 当前快照)。
     自动链路命中时由 workflow 在建 PR 后推 Bark;人工录入+合并不会经过那条路 →
@@ -643,10 +702,24 @@ def main():
                     help="读取环境变量 BARK_BODY 发一条命中通知(由 workflow 在新建复核 PR 后调用)")
     ap.add_argument("--filing-chart", action="store_true",
                     help="若当前 FILING_CHART 为 '?'，尝试从 USCIS 补判本月职业类用表(滞后场景每日补判)")
+    ap.add_argument("--manual", action="store_true",
+                    help="一键人工录入一期公告(官网+档案馆全堵时)；配合 --bulletin/--fad/--dff 等")
+    ap.add_argument("--bulletin", help="人工录入：公告对应月份，形如 2026-09")
+    ap.add_argument("--fad", help="人工录入：表A(Final Action) EB-1 中国 cutoff，形如 2023-07-01 或 current")
+    ap.add_argument("--dff", help="人工录入：表B(Dates for Filing) cutoff，形如 2023-12-01 或 current")
+    ap.add_argument("--released", default="", help="人工录入：官方发布日 YYYY-MM-DD(默认今天)")
+    ap.add_argument("--chart", default="?", choices=["A", "B", "?"],
+                    help="人工录入：本月职业类递交用表(默认 ? 待 USCIS 确认)")
+    ap.add_argument("--exact", action="store_true",
+                    help="人工录入：发布时刻精确(不加「约」)；默认按估计时刻显示「约」")
     args = ap.parse_args()
 
     if args.filing_chart:
         status, detail = resolve_filing_chart()
+        write_run_summary(status, detail)
+        return
+    if args.manual:
+        status, detail = manual(args)
         write_run_summary(status, detail)
         return
     if args.send_bark:
@@ -665,10 +738,11 @@ def main():
     write_run_summary(status, detail)
 
 
-def update_index(ty, tm, fad, dff, detected, est=False):
+def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None):
     """把新一期表A/表B 写回 index.html：更新 CUTOFF_DATA、VB_* 公告元信息，并追加 HISTORY/HISTORY_B。
     detected: 本期探测到的时刻(aware datetime, ET)；既写显示用日期 VB_RELEASED，也写精确时刻 VB_RELEASED_TS。
-    est=True(经 Wayback 兜底)时 VB_RELEASED_EST 置 true → 前端显示加「约」。"""
+    est=True(经 Wayback 兜底)时 VB_RELEASED_EST 置 true → 前端显示加「约」。
+    chart_override in ('A','B','?')：手动录入且已知用表时传入，跳过必然 403 的 USCIS 抓取。"""
     with open(INDEX, encoding="utf-8") as f:
         s = f.read()
     bull = f"{ty}-{tm:02d}-15"  # 该期对应的 bulletin 月（用 15 号作 x）
@@ -691,8 +765,8 @@ def update_index(ty, tm, fad, dff, detected, est=False):
     # 在线真实命中=精确时刻(去「约」)；Wayback 兜底命中=快照近似时刻(加「约」)
     s = re.sub(r"(var VB_RELEASED_EST = )(?:true|false)",
                lambda m: m.group(1) + ("true" if est else "false"), s, count=1)
-    # A2) 本月递交用哪张表是 USCIS 另发的决定：尝试从 USCIS AOS 页自动判定；判不准则 '?' 待确认
-    chart = fetch_filing_chart(ty, tm) or "?"
+    # A2) 本月递交用哪张表是 USCIS 另发的决定：手动传入则直接用；否则从 USCIS AOS 页自动判定；判不准则 '?' 待确认
+    chart = chart_override if chart_override in ('A', 'B', '?') else (fetch_filing_chart(ty, tm) or "?")
     s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
 
     # 2) 追加 HISTORY（表A）与 HISTORY_B（表B）最新点（若该 bulletin 月尚未存在）
