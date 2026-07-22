@@ -23,6 +23,25 @@ on:
         description: '人工录入新一期后，推送一条正式排期更新通知（读当前快照；需 BARK_KEY）'
         type: boolean
         default: false
+      # ↓ 一键人工录入：官网+档案馆全堵、只能从第三方(律所/论坛)获知数据时。
+      #   只需填 bulletin+fad+dff 三个框即可触发；自动写回+开PR自动合并+部署+Bark。
+      manual_bulletin:
+        description: '人工录入·公告月份（形如 2026-09；填了本框即走人工录入）'
+        default: ''
+      manual_fad:
+        description: '人工录入·表A Final Action（EB-1 中国，形如 2023-07-01 或 current）'
+        default: ''
+      manual_dff:
+        description: '人工录入·表B Dates for Filing（形如 2023-12-01 或 current）'
+        default: ''
+      manual_released:
+        description: '人工录入·官方发布日 YYYY-MM-DD（留空=今天）'
+        default: ''
+      manual_chart:
+        description: '人工录入·本月职业类递交用表'
+        type: choice
+        options: ['?', 'A', 'B']
+        default: '?'
   schedule:
     # 覆盖美东 ~09:00–21:00（含上午盲区；含夏/冬令时）。脚本再按美东时间精确门控。
     # 注意：GitHub 定时任务不保证准点、高负载会延迟/丢弃，故时段放宽 + 多槽位以降低漏抓概率。
@@ -58,7 +77,14 @@ jobs:
         env:
           BARK_KEY: ${{ secrets.BARK_KEY }}
         run: |
-          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
+          if [ -n "${{ github.event_name == 'workflow_dispatch' && inputs.manual_fad || '' }}" ]; then
+            python scripts/sniff_visa_bulletin.py --manual \
+              --bulletin "${{ inputs.manual_bulletin }}" \
+              --fad "${{ inputs.manual_fad }}" \
+              --dff "${{ inputs.manual_dff }}" \
+              --released "${{ inputs.manual_released }}" \
+              --chart "${{ inputs.manual_chart }}"
+          elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
             python scripts/sniff_visa_bulletin.py --drill
           elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.announce }}" = "true" ]; then
             python scripts/sniff_visa_bulletin.py --announce
