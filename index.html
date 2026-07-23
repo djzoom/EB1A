@@ -111,6 +111,16 @@
   .ab-tab.open { color: var(--blue); }
   .ab-hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
   .ab-hint .ab-warn { color: #b45309; }
+  .supply-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; background: var(--bg2, rgba(0,0,0,.02)); }
+  .supply-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .supply-title { font-size: 13px; font-weight: 700; color: var(--text); }
+  .supply-total { font-size: 15px; font-weight: 700; color: #15734F; font-variant-numeric: tabular-nums; }
+  .supply-scenarios { display: flex; gap: 6px; }
+  .sc-btn { flex: 1; padding: 8px 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg, #fff); color: var(--text2); font-size: 13px; cursor: pointer; transition: all .15s; -webkit-tap-highlight-color: transparent; }
+  .sc-btn:hover { border-color: #15734F; }
+  .sc-btn.active { background: #15734F; color: #fff; border-color: #15734F; font-weight: 700; }
+  .supply-breakdown { font-size: 11.5px; color: var(--text3); margin-top: 8px; line-height: 1.6; }
+  .supply-breakdown b { color: var(--text2); font-variant-numeric: tabular-nums; }
 
   .chart-panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
   .chart-head { display: flex; align-items: center; padding: 14px 14px 0; gap: 4px; }
@@ -404,6 +414,15 @@
     <div class="tab-panel" id="tab-settings" role="tabpanel">
       <div class="settings-content">
         <div class="settings-hint">默认参数基于公开数据估算，可手动微调以查看不同假设下的结果。</div>
+        <div class="supply-panel">
+          <div class="supply-head"><span class="supply-title">年度总供给情景</span><span class="supply-total" id="supply-total"></span></div>
+          <div class="supply-scenarios">
+            <button class="sc-btn" data-sc="tight">收紧</button>
+            <button class="sc-btn active" data-sc="normal">常态</button>
+            <button class="sc-btn" data-sc="surge">FB大转移</button>
+          </div>
+          <div class="supply-breakdown" id="supply-breakdown"></div>
+        </div>
         <div class="params" id="params-container"></div>
         <button class="reset-btn" id="param-reset">↺ 重置为默认</button>
       </div>
@@ -513,9 +532,9 @@ var PARAM_META = {
     source: { title: '世界其他国家未用完的配额', rows: [{ lbl: '其他国家仅用 ~12% 配额', val: '大量余量' },{ lbl: 'FY24 中国实际', val: '~4,900' },{ lbl: 'FY26 中国实际', val: '~2,600' }], methodology: '其他国家用不完的名额会分给中国和印度，金额每年波动很大', sources: ['DOS IV Issuance'] }
   },
   spilloverIndia: {
-    label: '印度影响', default: 0, min: -2000, max: 2000, step: 100,
+    label: '印度耦合', default: 0, min: -2000, max: 2000, step: 100,
     unit: '签证/年', format: function(v) { return v; },
-    source: { title: '印度与中国在溢出配额中的竞争', rows: [{ lbl: '印度 EB-1 CP', val: '~250 张/年' },{ lbl: '印度 AOS 波动', val: '3,000-8,000 张' }], methodology: '好年份印度多拿 (中国少分)，差年份反过来，长期接近零', sources: ['DOS IV Issuance'] }
+    source: { title: '印度 EB-1 与中国在 overflow 中的竞争（按 PD 全球排队分配）', rows: [{ lbl: '正值', val: '印度追上中国→让出 overflow→中国多分' },{ lbl: '负值', val: '印度恶化抢占更多→中国少分' },{ lbl: '当前印度 EB-1', val: '持续 retrogression、比中国靠后' }], methodology: 'EB-1 未用完的 overflow 按 PD 全球排队发：印度若追上中国(不再有更早 PD 积压抢占)则中国多分(正值)；印度恶化抢占更多则中国少分(负值)。当前印度 EB-1 一路退坡、比中国靠后，故偏抢占方向；长期均值接近零', sources: ['DOS IV Issuance', 'Visa Bulletin'] }
   },
   eb4eb5Spillover: {
     label: 'EB-4/5 跨类溢出', default: 200, min: 0, max: 800, step: 50,
@@ -549,6 +568,15 @@ var PRESETS = {
   optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12, demandWall:1.3, demandWallSigma:0.4 },
   pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20, demandWall:2.1, demandWallSigma:0.55 }
 };
+
+// 供给情景：只切"浮动溢出"(spilloverROW/印度耦合)+FY27右尾，不动需求侧参数(密度/需求墙仍可独立调)。
+// 对应"固定基底 2,803 小、大头是浮动溢出"的现实结构；surge=停签→FB 大转移，含小概率大扩容右尾。
+var SUPPLY_SCENARIOS = {
+  tight:  { spilloverROW: 100,  spilloverIndia: -800, supplyTailProb: 0,    supplyTailMag: 1 },
+  normal: { spilloverROW: 650,  spilloverIndia: 0,    supplyTailProb: 0,    supplyTailMag: 1 },
+  surge:  { spilloverROW: 3500, spilloverIndia: -500, supplyTailProb: 0.18, supplyTailMag: 2.0 }
+};
+var supplyScenario = 'normal';
 
 // Simulation Engine
 // 可种子化随机源 (mulberry32)：用优先日做种子，使同一输入每次刷新结果一致、不再抖动。
@@ -615,6 +643,11 @@ function simulate(params) {
       var indiaSpill = gaussian(params.spilloverIndia, Math.max(100, Math.abs(params.spilloverIndia) * 0.6));
       var eb45Spill = gaussian(params.eb4eb5Spillover, Math.max(30, params.eb4eb5Spillover * 0.4));
       var totalVisas = Math.max(500, (params.chinaBaseQuota + rowSpill + indiaSpill + eb45Spill) * regimeSupply);
+      // "FB 大转移"情景的右偏尾部：FY27 起小概率大扩容(停签→FB 转移+印度追上→中国可能 current)。
+      // 只在该情景启用(supplyTailProb>0)，且锁在 FY27+；默认情景 tailProb=0，不影响准头。
+      if (fyYear >= 2027 && (params.supplyTailProb || 0) > 0 && rng() < params.supplyTailProb) {
+        totalVisas *= (params.supplyTailMag || 1);
+      }
       mainPerFY = totalVisas / familyMultiplier;
     }
 
@@ -1468,6 +1501,36 @@ function setTrendLegend() {
     '<span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>';
 }
 
+// 年度总供给聚合显示：把"固定基底 2,803 小、大头是浮动溢出"这个现实结构显性化
+function updateSupplyDisplay() {
+  var base = currentParams.chinaBaseQuota;
+  var flt = currentParams.spilloverROW + currentParams.spilloverIndia + currentParams.eb4eb5Spillover;
+  var total = base + flt;
+  var pct = total > 0 ? Math.round(Math.abs(flt) / total * 100) : 0;
+  var te = document.getElementById('supply-total');
+  if (te) te.textContent = '≈ ' + total.toLocaleString() + ' 签证/年';
+  var be = document.getElementById('supply-breakdown');
+  if (be) be.innerHTML = '固定基底 <b>' + base.toLocaleString() + '</b> ' + (flt >= 0 ? '+' : '−') +
+    ' 浮动溢出 <b>' + Math.abs(flt).toLocaleString() + '</b>（浮动约占 <b>' + pct +
+    '%</b>，随 ROW 用剩量 / 印度耦合 / FB 转移逐年大幅波动）' +
+    (supplyScenario === 'surge' ? '<br><span style="color:#b45309">FB 大转移：另含 FY27 起小概率大扩容右尾（停签→FB 转移+印度追上→中国可能 current）</span>' : '');
+}
+
+// 切换供给情景：只改浮动溢出 + FY27 右尾，重跑模型
+window.applySupplyScenario = function(sc) {
+  var s = SUPPLY_SCENARIOS[sc]; if (!s) return;
+  supplyScenario = sc;
+  currentParams.spilloverROW = s.spilloverROW;
+  currentParams.spilloverIndia = s.spilloverIndia;
+  currentParams.supplyTailProb = s.supplyTailProb;
+  currentParams.supplyTailMag = s.supplyTailMag;
+  var btns = document.querySelectorAll('.sc-btn');
+  for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', btns[i].dataset.sc === sc);
+  renderParams();
+  updateSupplyDisplay();
+  render();
+};
+
 function renderStats() {
   if (!crossingsByPct) return;
   document.getElementById('stat-p10').textContent = formatDate(crossingsByPct.p10);
@@ -1575,6 +1638,11 @@ function renderParams() {
     if (PARAM_META[key].fixed) return;
     document.getElementById(key).addEventListener('input', function(e) {
       currentParams[key] = +e.target.value;
+      // 手动改供给分项 → 脱离预设情景，取消情景高亮(变为自定义)
+      if (key === 'spilloverROW' || key === 'spilloverIndia' || key === 'eb4eb5Spillover') {
+        supplyScenario = null;
+        document.querySelectorAll('.sc-btn').forEach(function(b) { b.classList.remove('active'); });
+      }
       document.getElementById('v-' + key).textContent = PARAM_META[key].format(currentParams[key]);
       // 合并连续拖动为每帧一次重算，避免 500 次蒙特卡洛在每个 input 事件都跑一遍卡顿
       if (window._renderRAF) cancelAnimationFrame(window._renderRAF);
@@ -1615,6 +1683,7 @@ function render() {
   renderHero();
   renderStats();
   renderMonthlyTable(percentiles);
+  updateSupplyDisplay();                                   // 年度总供给聚合(随情景/滑杆更新)
   if (!window._dedDone) { window._dedDone = true; animateRain(); animateHeroRoll(); }  // 首屏推演:下雨 + 大日期滚动
 }
 
@@ -1821,6 +1890,10 @@ document.querySelectorAll('.stat').forEach(function(cell) {
   });
 });
 
+document.querySelectorAll('.sc-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() { applySupplyScenario(btn.dataset.sc); });
+});
+
 document.getElementById('replay-btn').addEventListener('click', replayDeduction);
 document.getElementById('refresh-btn').addEventListener('click', function () {
   var b = this; b.disabled = true; b.textContent = '刷新中…';
@@ -1886,6 +1959,8 @@ renderParams();
   if (!resetBtn) return;
   resetBtn.addEventListener('click', function () {
     currentParams = Object.assign({}, PRESETS.realistic);
+    supplyScenario = 'normal';                              // 重置也回到"常态"情景并高亮
+    document.querySelectorAll('.sc-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.sc === 'normal'); });
     renderParams();
     if (profile.pd) render();
   });
