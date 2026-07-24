@@ -104,16 +104,18 @@
   .bar-track { flex: 1; height: 6px; background: var(--blue-bg); border-radius: 999px; overflow: hidden; }
   .bar-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--blue)); border-radius: 999px; transition: width 0.6s; }
   .bar-note { font-size: 11px; color: var(--text3); text-align: center; margin-top: 4px; }
-  .ab-status { font-size: 12px; color: var(--text2); margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); text-align: center; line-height: 1.7; }
-  .ab-status b { color: var(--text); font-variant-numeric: tabular-nums; }
-  .ab-status .open { color: var(--blue); font-weight: 700; }
-  .ab-status .ab-sep { color: var(--text3); margin: 0 6px; }
-  .ab-tab { cursor: pointer; padding: 3px 10px; border-radius: 999px; transition: background .15s, color .15s; -webkit-tap-highlight-color: transparent; }
-  .ab-tab:hover { background: var(--blue-bg); }
-  .ab-tab.ab-on { background: var(--blue); color: #fff; font-weight: 700; }
-  .ab-tab.ab-on b { color: #fff; }
-  .ab-tab.open b { text-decoration: underline; text-decoration-color: var(--blue-light); text-underline-offset: 2px; }
-  .ab-hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  /* 表A/表B 视图切换：与"快中慢"同款分段控件，单独成行、突出可点选 */
+  .ab-status { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .ab-chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; background: var(--blue-bg); padding: 4px; border-radius: 12px; }
+  .ab-chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 9px; cursor: pointer; border: none; background: transparent; transition: background 0.15s, box-shadow 0.15s; -webkit-tap-highlight-color: transparent; }
+  .ab-chip small { color: var(--text3); font-size: 11px; }
+  .ab-chip b { font-weight: 700; font-size: 15px; color: var(--text2); font-variant-numeric: tabular-nums; }
+  .ab-chip.selected { background: var(--card); box-shadow: var(--shadow); }
+  .ab-chip.selected small { color: var(--blue); }
+  .ab-chip.selected b { color: var(--blue); }
+  .ab-chip.open b { text-decoration: underline; text-decoration-color: var(--blue-light); text-underline-offset: 2px; }
+  .ab-hint { font-size: 11px; color: var(--text3); margin-top: 8px; text-align: center; line-height: 1.5; }
+  .ab-hint .open { color: var(--blue); font-weight: 700; }
   .ab-hint .ab-warn { color: #b45309; }
   .supply-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; background: var(--bg2, rgba(0,0,0,.02)); }
   .supply-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
@@ -250,10 +252,9 @@
     .modal-box .start-btn { padding: 14px; }
     /* declutter chart toolbar: presets (聚焦/全图) replace manual zoom buttons */
     .zoom-ctrls { display: none; }
-    /* 移动端紧凑：AB 切换页签更易点、间距压紧、图例缩小 */
-    .ab-status { font-size: 12px; line-height: 1.95; }
-    .ab-tab { padding: 4px 8px; }
-    .ab-status .ab-sep { margin: 0 3px; }
+    /* 移动端紧凑：AB 分段控件保持大点击区、提示文字缩小 */
+    .ab-chip { padding: 7px 4px; }
+    .ab-chip b { font-size: 14px; }
     .ab-hint { font-size: 10.5px; }
     .chart-legend .leg { font-size: 10px; }
     /* single-finger scrubbing reads values; disable native pan/zoom on the chart */
@@ -743,7 +744,10 @@ function sampleCloud(paths, n) {
 var chartBounds = null;
 var openSourceParam = null;
 var chartMode = 'trend';
-var abView = 'A';   // 走势图当前主视图：'A'=表A裁定(默认) / 'B'=表B递交推演
+// 走势图当前主视图：'A'=表A裁定(默认) / 'B'=表B递交推演。像 PD 一样记忆到 localStorage。
+var AB_KEY = 'eb1a_ab_view';
+var abView = 'A';
+try { var _sv = localStorage.getItem(AB_KEY); if (_sv === 'A' || _sv === 'B') abView = _sv; } catch (e) {}
 var lastSnapData = null;
 
 // Helpers
@@ -1492,13 +1496,14 @@ function renderHero() {
   var aOpen = FILING_CHART === 'A' ? ' open' : '';
   var bOpen = FILING_CHART === 'B' ? ' open' : '';
   document.getElementById('ab-status').innerHTML =
-    '<span class="ab-tab' + (abView === 'A' ? ' ab-on' : '') + aOpen + '" onclick="setAbView(\'A\')">表A裁定 <b>' + formatDate(dateA) + '</b></span>' +
-    '<span class="ab-sep">·</span>' +
-    '<span class="ab-tab' + (abView === 'B' ? ' ab-on' : '') + bOpen + '" onclick="setAbView(\'B\')">表B递交 <b>' + formatDate(dateB) + '</b></span>' +
-    '<span class="ab-sep">|</span>' +
-    VB_MONTH + ' 递交用 <span class="open">' + chartLabel() + '</span>' +
-    '<div class="ab-hint">点表A/表B切换图中推演' +
-      (abView === 'B' ? ' · <span class="ab-warn">表B为 DOS 预筛日期，推演不确定性高于表A</span>' : '') + '</div>';
+    '<div class="ab-chips" role="tablist">' +
+      '<button class="ab-chip' + (abView === 'A' ? ' selected' : '') + aOpen + '" role="tab" aria-selected="' + (abView === 'A') + '" onclick="setAbView(\'A\')">' +
+        '<small>表A · 裁定</small><b>' + formatDate(dateA) + '</b></button>' +
+      '<button class="ab-chip' + (abView === 'B' ? ' selected' : '') + bOpen + '" role="tab" aria-selected="' + (abView === 'B') + '" onclick="setAbView(\'B\')">' +
+        '<small>表B · 递交</small><b>' + formatDate(dateB) + '</b></button>' +
+    '</div>' +
+    '<div class="ab-hint">点上方切换图中推演 · ' + VB_MONTH + ' 官方递交用 <span class="open">' + chartLabel() + '</span>' +
+      (abView === 'B' ? '<br><span class="ab-warn">表B为 DOS 预筛日期，推演不确定性高于表A</span>' : '') + '</div>';
 
   animateHero();
 }
@@ -1507,6 +1512,7 @@ function renderHero() {
 window.setAbView = function(v) {
   if (abView === v || (v !== 'A' && v !== 'B')) return;
   abView = v;
+  try { localStorage.setItem(AB_KEY, v); } catch (e) {}   // 记住选择，下次访问沿用
   renderHero();                               // 大数字/快中慢/标签切表A裁定↔表B递交
   renderStats();
   renderMonthlyTable(lastPercentiles);
