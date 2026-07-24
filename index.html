@@ -347,7 +347,7 @@
       </div>
     </div>
     <div class="result-main">
-      <div class="result-lead">预计排到</div>
+      <div class="result-lead" id="result-lead">预计排到</div>
       <span class="result-date" id="hero-value">--</span>
       <span class="result-sub" id="hero-sub">距今约 --</span>
       <span class="result-note">仅供参考的统计估算 · 非官方、非法律建议 · 以官方公告为准</span>
@@ -675,10 +675,17 @@ function simulate(params) {
   return path;
 }
 
-function findCrossingDate(path) {
-  var yourPD = getYourPD();
-  for (var i = 0; i < path.length; i++) { if (path[i].y >= yourPD) return path[i].x; }
+function findCrossingDate(path, targetPD) {
+  if (targetPD == null) targetPD = getYourPD();
+  for (var i = 0; i < path.length; i++) { if (path[i].y >= targetPD) return path[i].x; }
   return null;
+}
+
+// 表B 领先表A 的 PD 距离(当前表B − 当前表A)；表B 穿越你 PD ⟺ 表A 穿越(你PD − lead)
+function currentLead() {
+  var a = HISTORY.length ? HISTORY[HISTORY.length - 1].y : 0;
+  var b = HISTORY_B.length ? HISTORY_B[HISTORY_B.length - 1].y : a;
+  return b - a;
 }
 
 function monteCarlo(params, n) {
@@ -708,9 +715,9 @@ function percentilePaths(allPaths) {
   return result;
 }
 
-function findCrossingsDistribution(allPaths) {
+function findCrossingsDistribution(allPaths, targetPD) {
   var crossings = [], totalPaths = allPaths.length;
-  for (var i = 0; i < totalPaths; i++) { var c = findCrossingDate(allPaths[i]); if (c) crossings.push(c); }
+  for (var i = 0; i < totalPaths; i++) { var c = findCrossingDate(allPaths[i], targetPD); if (c) crossings.push(c); }
   crossings.sort(function(a, b) { return a - b; });
   var n = crossings.length;
   function pctValue(p) { var idx = Math.floor(p * totalPaths); return idx >= n ? null : crossings[idx]; }
@@ -720,7 +727,10 @@ function findCrossingsDistribution(allPaths) {
 // State
 var currentParams = Object.assign({}, PRESETS.realistic);
 var selectedPercentile = 'p50';
-var crossingsByPct = null;
+var crossingsByPct = null;      // 表A(裁定/批准)穿越分布
+var crossingsByPctB = null;     // 表B(递交)穿越分布
+var heroRollTween = null;       // 首屏大日期"滚动"补间；切表A/B或重渲染时须先杀，避免旧目标覆盖新值
+function activeCrossings() { return abView === 'B' ? crossingsByPctB : crossingsByPct; }
 var lastPercentiles = null;
 var lastCloudPaths = null;   // 抽样的真实蒙卡路径,用于"轨迹面条"可视化
 function sampleCloud(paths, n) {
@@ -838,12 +848,14 @@ function animateChart() {
 function animateHeroRoll() {
   if (!gsapReady() || reduceMotion()) return;
   var hv = document.getElementById('hero-value');
-  var target = crossingsByPct && crossingsByPct[selectedPercentile];
+  var _acT = activeCrossings(); var target = _acT && _acT[selectedPercentile];
   if (!hv || !target) return;
+  if (heroRollTween) { heroRollTween.kill(); }
   var o = { t: TODAY };
-  window.gsap.to(o, { t: target, duration: 2.4, ease: 'power2.out',
+  // 滚动结束落定用 formatDateFull(与 renderHero 同格式"2026年12月")，避免定格成短格式"2026-12"
+  heroRollTween = window.gsap.to(o, { t: target, duration: 2.4, ease: 'power2.out',
     onUpdate: function () { hv.textContent = formatDate(o.t); },
-    onComplete: function () { hv.textContent = formatDate(target); } });
+    onComplete: function () { hv.textContent = formatDateFull(target); heroRollTween = null; } });
 }
 
 // "下雨"推演:把蒙特卡洛轨迹逐条"落"下来(面条线随机次序描出),
@@ -1137,8 +1149,9 @@ function drawForecastChart(percentiles) {
   var yMin = Math.min.apply(null, allY);
   var yMax = Math.max.apply(null, allY);
   // 收紧显示范围：横轴到"最慢穿越你 PD"再留点缓冲（不拖到 12 年后）；纵轴到你的 PD 稍上方
-  var capX = (crossingsByPct && crossingsByPct.p90) ? crossingsByPct.p90 + 1.2 * 365 * MS_PER_DAY
-            : (crossingsByPct && crossingsByPct.p50) ? crossingsByPct.p50 + 3 * 365 * MS_PER_DAY
+  var _acC = activeCrossings();
+  var capX = (_acC && _acC.p90) ? _acC.p90 + 1.2 * 365 * MS_PER_DAY
+            : (_acC && _acC.p50) ? _acC.p50 + 3 * 365 * MS_PER_DAY
             : TODAY + 7 * 365 * MS_PER_DAY;
   xMax = Math.min(xMax, capX);
   // 纵轴上限取"你的 PD"与"当前 cutoff"的较大者 + 缓冲，避免 PD 已 current 时把整条预测线裁掉
@@ -1215,18 +1228,17 @@ function drawForecastChart(percentiles) {
   var lineP50 = '<path d="' + smoothPathD(percentiles.p50, sx, sy) + '" fill="none" stroke="#15734F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
 
   // Cross marker with glow
+  // 穿越标记：与 hero/快中慢/等待图统一用 activeCrossings(穿越时间分布)，避免大数字与图上绿点口径不一致
   var crossMarker = '';
   var selColors = { p10: '#10B981', p25: '#5cbf99', p50: '#15734F', p75: '#F59E0B', p90: '#EF4444' };
-  var selPath = percentiles[selectedPercentile];
-  if (selPath && selPath.length) {
-    for (var c = 0; c < selPath.length; c++) {
-      if (selPath[c].y >= yourPD) {
-        var cx = sx(selPath[c].x), color = selColors[selectedPercentile];
-        crossMarker += '<circle cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="10" fill="' + color + '" opacity="0.12"/>';
-        crossMarker += '<circle class="cross-dot" cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
-        crossMarker += '<text x="' + cx + '" y="' + (pdY - 14) + '" fill="' + color + '" font-size="12" text-anchor="middle" font-weight="700">' + formatDate(selPath[c].x) + '</text>';
-        break;
-      }
+  var _acX = activeCrossings();
+  var crossX = _acX ? _acX[selectedPercentile] : null;
+  if (crossX) {
+    var cx = sx(crossX), color = selColors[selectedPercentile];
+    if (cx >= PAD.left && cx <= PAD.left + PW) {
+      crossMarker += '<circle cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="10" fill="' + color + '" opacity="0.12"/>';
+      crossMarker += '<circle class="cross-dot" cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
+      crossMarker += '<text x="' + cx + '" y="' + (pdY - 14) + '" fill="' + color + '" font-size="12" text-anchor="middle" font-weight="700">' + formatDate(crossX) + '</text>';
     }
   }
 
@@ -1362,8 +1374,9 @@ function drawWaitTimeChart(percentiles) {
 
   // Cross marker with glow
   var crossMarker = '';
-  if (crossingsByPct && yourPD) {
-    var selCross = crossingsByPct[selectedPercentile];
+  var _acW = activeCrossings();
+  if (_acW && yourPD) {
+    var selCross = _acW[selectedPercentile];
     if (selCross) {
       var selWait = (selCross - yourPD) / (365.25 * MS_PER_DAY);
       if (selWait >= 0 && selWait < 20) {
@@ -1428,12 +1441,18 @@ window.setChartMode = function(mode) {
 
 // UI Rendering
 function renderHero() {
-  if (!crossingsByPct) return;
-  var p50 = crossingsByPct[selectedPercentile];
+  var cx = activeCrossings();
+  if (!cx) return;
+  // 表B 视图：大数字/快中慢/进度切成"预计可递交"(表B 穿越)；表A 视图为"预计排到"(批准)
+  var leadEl = document.getElementById('result-lead');
+  if (leadEl) leadEl.textContent = abView === 'B' ? '预计可递交' : '预计排到';
+  var p50 = cx[selectedPercentile];
+  // 先杀掉可能仍在进行的首屏"滚动"补间：否则它会用旧视图(表A)的目标覆盖刚设好的表B大数字
+  if (heroRollTween) { heroRollTween.kill(); heroRollTween = null; }
   document.getElementById('hero-value').textContent = formatDateFull(p50);
   document.getElementById('hero-sub').textContent = '距今' + formatWait(p50);
-  document.getElementById('hero-fast').textContent = formatDate(crossingsByPct.p10);
-  document.getElementById('hero-slow').textContent = formatDate(crossingsByPct.p90);
+  document.getElementById('hero-fast').textContent = formatDate(cx.p10);
+  document.getElementById('hero-slow').textContent = formatDate(cx.p90);
 
   var cutoff = getCurrentCutoff(), pd = getYourPD();
   document.getElementById('progress-left').textContent = '叫号 ' + formatDate(cutoff);
@@ -1488,8 +1507,10 @@ function renderHero() {
 window.setAbView = function(v) {
   if (abView === v || (v !== 'A' && v !== 'B')) return;
   abView = v;
-  renderHero();                               // 刷新 ab-status 高亮/提示
-  if (chartMode === 'trend') { setTrendLegend(); redrawChart(); }
+  renderHero();                               // 大数字/快中慢/标签切表A裁定↔表B递交
+  renderStats();
+  renderMonthlyTable(lastPercentiles);
+  setTrendLegend(); redrawChart();            // 图表(含等待图)随视图重画
 };
 
 function setTrendLegend() {
@@ -1535,10 +1556,11 @@ window.applySupplyScenario = function(sc) {
 };
 
 function renderStats() {
-  if (!crossingsByPct) return;
-  document.getElementById('stat-p10').textContent = formatDate(crossingsByPct.p10);
-  document.getElementById('stat-p50').textContent = formatDate(crossingsByPct.p50);
-  document.getElementById('stat-p90').textContent = formatDate(crossingsByPct.p90);
+  var cx = activeCrossings();
+  if (!cx) return;
+  document.getElementById('stat-p10').textContent = formatDate(cx.p10);
+  document.getElementById('stat-p50').textContent = formatDate(cx.p50);
+  document.getElementById('stat-p90').textContent = formatDate(cx.p90);
   document.querySelectorAll('.stat').forEach(function(el) {
     el.classList.toggle('selected', el.dataset.pct === selectedPercentile);
   });
@@ -1549,14 +1571,17 @@ function renderMonthlyTable(percentiles) {
   if (!tbody || !percentiles.p50 || !percentiles.p50.length) return;
   var months = Math.min(8, percentiles.p50.length);
   var yourPD = getYourPD();
+  var lead = abView === 'B' ? currentLead() : 0;   // 表B 视图：各点前移领先量，命中=可递交
+  var hitWord = abView === 'B' ? '可递交' : '排到';
   var html = '', found = false;
   for (var i = 0; i < months; i++) {
     var pt = percentiles.p50[i];
     var d = new Date(pt.x);
     var label = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0');
-    var isHit = !found && pt.y >= yourPD;
+    var y = pt.y + lead;
+    var isHit = !found && y >= yourPD;
     if (isHit) found = true;
-    html += '<tr' + (isHit ? ' class="highlight"' : '') + '><td>' + label + '</td><td>' + formatDate(pt.y) + '</td><td>' + (isHit ? '排到' : '') + '</td></tr>';
+    html += '<tr' + (isHit ? ' class="highlight"' : '') + '><td>' + label + '</td><td>' + formatDate(y) + '</td><td>' + (isHit ? hitWord : '') + '</td></tr>';
   }
   tbody.innerHTML = html;
 }
@@ -1678,6 +1703,7 @@ function render() {
   lastPercentiles = percentiles;
   lastCloudPaths = sampleCloud(paths, 60);                 // 面条线(轨迹)
   crossingsByPct = findCrossingsDistribution(paths);
+  crossingsByPctB = findCrossingsDistribution(paths, getYourPD() - currentLead());  // 表B=表A+lead 穿越你PD
 
   renderProfileView();
   renderExplanation();
