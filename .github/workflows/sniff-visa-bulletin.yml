@@ -64,7 +64,12 @@ env:
 
 jobs:
   sniff:
-    runs-on: ubuntu-latest
+    # 抓取需绕开 DOS 对 Azure 机房 IP 的 403 封锁 → 可切到住宅 IP 的自建 runner。
+    # 设仓库变量 RUNNER_LABEL=eb1a-fetch 即切换；删掉变量立刻回退托管 runner(逃生口)。
+    # 注意:本工作流在发布窗内每 10 分钟一次,自建 runner 若长期离线会堆积排队任务
+    # ——出门/关机前务必删掉该变量。配置见 docs/self-hosted-runner.md。
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
