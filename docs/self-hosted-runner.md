@@ -28,7 +28,12 @@ USCIS 与 DOS 的 Akamai 把 GitHub 托管 runner 的出口 IP（Azure 机房段
 | fork 的 PR 在你机器上跑任意代码 | ✅ 当前无 workflow 用 `pull_request` 触发 | **永远不要**给走自建 runner 的 workflow 加 `pull_request` / `pull_request_target` 触发 |
 | 第三方 PR 自动执行 | 需手动确认 | Settings → Actions → General → Fork pull request workflows 设为 **Require approval for all external contributors** |
 | runner 可访问家庭内网 | 取决于部署方式 | 优先跑在容器 / 虚拟机里，别直接裸跑在主力机上 |
-| 任务间状态残留 | 默认持久 | 用 `--ephemeral` 注册，每个 job 用完即弃 |
+| 任务间状态残留 | 默认持久 | 本仓库无 fork 代码执行风险，用常驻 runner 即可（见下方说明） |
+
+> **关于 `--ephemeral`**：GitHub 推荐公开仓库用一次性 runner。但本项目的
+> `sniff-visa-bulletin` 在发布窗内每 10 分钟触发一次，ephemeral 模式下每个任务
+> 都要注销重连，一天数十次，反而增加失败面。鉴于本仓库无 `pull_request` 触发、
+> 不存在第三方代码执行风险，**建议用常驻 runner**（不加 `--ephemeral`）。
 
 ---
 
@@ -39,7 +44,10 @@ USCIS 与 DOS 的 Akamai 把 GitHub 托管 runner 的出口 IP（Azure 机房段
 GitHub 网页：`Settings → Actions → Runners → New self-hosted runner`
 选好操作系统后，页面会给出带令牌的命令（令牌约 1 小时过期）。
 
-### 2. 安装（macOS，Apple Silicon）
+### 2. 安装（macOS）
+
+Apple Silicon 用 `osx-arm64`，Intel Mac 用 `osx-x64`。
+GitHub 网页会给出当前最新版本号的下载命令，照抄即可；关键是**下一步的配置参数**。
 
 ```bash
 mkdir -p ~/actions-runner && cd ~/actions-runner
@@ -47,11 +55,11 @@ curl -o actions-runner.tar.gz -L \
   https://github.com/actions/runner/releases/latest/download/actions-runner-osx-arm64.tar.gz
 tar xzf actions-runner.tar.gz
 
-# --ephemeral：每跑完一个 job 就注销重连，避免状态残留
+# ⚠️ 必须带 --labels eb1a-fetch：工作流的 runs-on 认这个标签，
+#    网页默认给的命令不含它，装完会接不上活。
 ./config.sh --url https://github.com/djzoom/EB1A \
             --token <粘贴网页给的令牌> \
-            --labels self-hosted,eb1a-fetch \
-            --ephemeral
+            --labels self-hosted,eb1a-fetch
 ```
 
 ### 2'. 安装（Linux x64 / NAS / 树莓派）
@@ -63,7 +71,7 @@ curl -o actions-runner.tar.gz -L \
   https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64.tar.gz
 tar xzf actions-runner.tar.gz
 ./config.sh --url https://github.com/djzoom/EB1A \
-            --token <令牌> --labels self-hosted,eb1a-fetch --ephemeral
+            --token <令牌> --labels self-hosted,eb1a-fetch
 ```
 
 ### 3. 装成开机自启服务
@@ -76,7 +84,14 @@ tar xzf actions-runner.tar.gz
 sudo ./svc.sh install $(whoami) && sudo ./svc.sh start && sudo ./svc.sh status
 ```
 
-> `--ephemeral` 的 runner 跑完一个 job 会自行退出；配合 `svc.sh` 装的服务会自动重启并重新注册。
+> **别用 `./run.sh`**：那是前台运行，终端一关 runner 就停。必须走 `svc.sh` 装成
+> 开机自启服务，机器重启后才会自动接管。
+
+顺手关掉休眠，否则机器睡着时任务会一直排队：
+
+```bash
+sudo pmset -a sleep 0 disablesleep 1     # macOS
+```
 
 ### 4. 依赖
 
