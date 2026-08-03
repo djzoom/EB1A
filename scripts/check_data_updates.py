@@ -215,17 +215,32 @@ def freshness_report():
         return (now.year - ym[0]) * 12 + (now.month - ym[1])
     lines, stale = ["## 数据源新鲜度巡检"], []
 
-    def calendar(name, ym, budget, extra=""):
-        """USCIS 列表页不可抓 → 退回日历预算判定。"""
+    def calendar(name, ym, budget, extra="", src=None):
+        """USCIS 列表页不可抓 → 退回日历预算判定。
+
+        关键:日历超预算 ≠ 漏抓。若本轮该源的探测是 403(被反爬挡),我们根本看不到官方
+        发没发,此时喊"疑似漏抓/改名,请核查 URL"是误导——URL 多半没问题,是通道被封。
+        故 403 时只做被动记录、不进 stale(不推 Bark),避免重演 DOS 那轮天天误报。"""
         if ym is None:
             lines.append(f"  {name}: ❓ 本地无文件"); stale.append(f"{name} 本地无任何文件"); return
-        b = behind(ym); flag = "⚠️漏抓?" if b > budget else "✅"
-        lines.append(f"  {name}: 最新 {ym[0]}-{ym[1]:02d}（落后 {b} 月，预算 {budget}）{flag}{extra}")
-        if b > budget:
+        b = behind(ym)
+        # 403=被反爬挡；None=连不上。两者都意味着"我们是瞎的",不能据此断言漏抓。
+        st = _probe_state.get(src) if src is not None else 200
+        blind = src is not None and src in _probe_state and st != 404
+        if b <= budget:
+            lines.append(f"  {name}: 最新 {ym[0]}-{ym[1]:02d}（落后 {b} 月，预算 {budget}）✅{extra}")
+        elif blind:
+            why = "被反爬挡(403)" if st == 403 else f"探测失败(HTTP {st})"
+            lines.append(f"  {name}: 最新 {ym[0]}-{ym[1]:02d}（落后 {b} 月）🔒 {why}"
+                         "——无法判定官方是否已发，不计漏抓" + extra)
+        else:
+            lines.append(f"  {name}: 最新 {ym[0]}-{ym[1]:02d}（落后 {b} 月，预算 {budget}）⚠️漏抓?{extra}")
             stale.append(f"{name} 仅到 {ym[0]}-{ym[1]:02d}（落后 {b} 月，疑似漏抓/改名，请核查 URL）")
 
-    # I-485 库存：USCIS 列表页不可抓 → 日历预算
-    calendar("I-485 库存(月)", newest_inventory_month(), 3)
+    # I-485 库存：USCIS 列表页不可抓 → 日历预算。
+    # 预算 3→5：官方自身有过 2025-06~09 连续 4 个月未发(回填逐月扫过、均未命中),
+    # 且快照"as of 月初"到实际可下载约滞后 2 个月余，3 个月预算必然周期性误报。
+    calendar("I-485 库存(月)", newest_inventory_month(), 5, src="I-485库存")
 
     # DOS：对照官网列表页"实际已发布最新"。官方比本地新才算真漏抓(消除日历误报)。
     # 官网不可达(403 反爬)时退而对照人工锚点;两者都没有才落到日历预算。
@@ -266,7 +281,7 @@ def freshness_report():
     ) if x], default=None)
     i140_sup = _supplement_latest_quarter()
     i140_latest = max([x for x in (i140_auto, i140_sup) if x], default=None)
-    calendar("I-140 季度收件", i140_latest, 9)
+    calendar("I-140 季度收件", i140_latest, 9, src="I-140收件")
     if i140_auto and i140_sup and i140_sup > i140_auto:
         lines.append(f"    (注:已自动抓到 {i140_auto[0]}-{i140_auto[1]:02d}(xlsx/CSV 均支持)；"
                      f"更新的 {i140_sup[0]}-{i140_sup[1]:02d} 暂由 supplement.json 提供，"
@@ -274,7 +289,14 @@ def freshness_report():
 
     # I-140 待签(季)：USCIS 列表页不可抓 → 日历预算(当前 ✅)
     calendar("I-140 待签(季)", _newest_quarter("I140_I360_I526_Approved_FY*_Q*.xlsx",
-                                               r"Approved_FY(\d+)_Q(\d+)"), 9)
+                                               r"Approved_FY(\d+)_Q(\d+)"), 9, src="I-140待签")
+
+    # 通道健康度：被封锁不该静默。这里只写进报告(每轮打印,不推 Bark)——
+    # 免得像 DOS 那轮天天误报，但也不至于几个月后才发现自己早就瞎了。
+    blocked = sorted(s for s, st in _probe_state.items() if st == 403)
+    if blocked:
+        lines.append(f"  🔒 通道状态：{len(blocked)} 个源探测返回 403(被反爬挡)——"
+                     f"{'、'.join(blocked)}；抓取已失效，新数据需人工补录或换出口 IP")
     return lines, stale
 
 
@@ -294,6 +316,9 @@ def probe_url(url: str) -> bool:
 
 
 _probe_diag_done = set()
+# 各数据源"首个缺失项"的探测状态码,供 freshness_report 判别"被封锁"还是"真漏抓"。
+# 403 = 通道被反爬挡(我们是瞎的,无从判断官方发没发) → 不能喊"漏抓/改名,请核查 URL"。
+_probe_state: dict[str, int | None] = {}
 
 
 def probe_diag(source: str, url: str):
@@ -302,6 +327,7 @@ def probe_diag(source: str, url: str):
     USCIS 各源若也被封锁,没有这行日志就会静默失败、几个月后才以误导文案告警。"""
     st = probe_status(url)
     if st != 200 and source not in _probe_diag_done:
+        _probe_state.setdefault(source, st)
         _probe_diag_done.add(source)
         name = url.rsplit("/", 1)[-1][:60]
         print(f"  [诊断] {source} 首个缺失项探测 {name} → HTTP {st}"
