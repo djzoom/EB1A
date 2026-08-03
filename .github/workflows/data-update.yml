@@ -10,7 +10,12 @@ permissions:
 
 jobs:
   check-and-download:
-    runs-on: ubuntu-latest
+    # 抓取需绕开 USCIS/DOS 对 Azure 机房 IP 的 403 封锁 → 可切到住宅 IP 的自建 runner。
+    # 设仓库变量 RUNNER_LABEL=eb1a-fetch 即切换；删掉变量立刻回退托管 runner(逃生口)。
+    # 配置见 docs/self-hosted-runner.md。
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    # 自建 runner 离线时 job 会排队(GitHub 最多等 24h),加超时避免长期挂死。
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
