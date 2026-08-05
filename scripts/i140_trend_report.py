@@ -94,6 +94,19 @@ def receipts():
     return [(tag, e, n) for tag, (e, n) in sorted(rec.items())]
 
 
+def adjudication_rates():
+    """EB-1A 逐季获批率(全球口径,人工补录)。返回 {tag: approved_pct}。"""
+    path = os.path.join(ROOT, "data", "i140_case_status_supplement.json")
+    if not os.path.exists(path):
+        return {}, {}
+    import json
+    with open(path, encoding="utf-8") as fh:
+        d = json.load(fh)
+    rates = {k: v["approved_pct"] for k, v in d.get("eb1a_adjudication_rate", {}).items()
+             if not k.startswith("_")}
+    return rates, d.get("quarters", {})
+
+
 def main():
     lines = []
     def p(s): print(s); lines.append(s)
@@ -124,6 +137,43 @@ def main():
             trend = '退潮' if e1 < pk * 0.95 else ('见顶' if e1 < pk else '升温中')
             p(f"  → EB-1A 峰值 {pk} → 最新 {e1}（{trend}，较峰 {round((e1/pk-1)*100)}%）;"
               " 每文件为单季值。流入缩 = 未来 PD 身后堆积变小。")
+
+    # 有效流入 = 收件 × 获批率。只看收件会严重低估退潮幅度——EB-1A 获批率已从
+    # FY2025Q1 的 74.8% 一路跌到 FY2026Q2 的 41.7%,同一批收件真正能进排队的人腰斩。
+    rates, quarters = adjudication_rates()
+    if rates and valid:
+        p("\n## EB-1A 有效流入(= 中国收件 × 获批率) —— 真实进入排队的人")
+        p("  注:获批率为【全球】口径(USCIS 季报),中国审查更严、实际可能更低,故本栏属上界。")
+        eff = []
+        for tag, e in valid:
+            r = rates.get(tag)
+            if r is None:
+                continue
+            eff.append((tag, e * r / 100))
+            p(f"  {tag}: 收件 {e} × 获批率 {r}% → 有效流入 ≈ {round(e * r / 100)}")
+        if len(eff) >= 2:
+            pk_e = max(v for _, v in eff)
+            last_e = eff[-1][1]
+            drop_recv = round((valid[-1][1] / max(x for _, x in valid) - 1) * 100)
+            drop_eff = round((last_e / pk_e - 1) * 100)
+            p(f"  → 有效流入 峰值 {round(pk_e)} → 最新 {round(last_e)}（较峰 {drop_eff}%）；"
+              f"仅看收件为 {drop_recv}%——获批率下滑使真实退潮幅度约为收件口径的 "
+              f"{abs(drop_eff)/max(abs(drop_recv),1):.1f} 倍。")
+
+    # 待审积压:2024+ PD「需求墙」目前唯一的实测参照(I-485 库存该段仍全为 0)
+    q_latest = max(quarters) if quarters else None
+    if q_latest:
+        e11 = quarters[q_latest].get("E11_EB1A", {})
+        pend, recv_w = e11.get("pending"), e11.get("received")
+        if pend and recv_w and valid:
+            share = valid[-1][1] / recv_w          # 中国收件 ÷ 全球收件
+            r_last = rates.get(max(rates)) if rates else None
+            p(f"\n## EB-1A 待审积压({q_latest}，全球 {pend:,} 件) —— 需求墙的实测参照")
+            p(f"  中国收件占全球 ≈ {share*100:.0f}% → 中国待审积压 ≈ {round(pend*share):,} 件")
+            if r_last:
+                p(f"  按最新获批率 {r_last}% → 未来将进入排队 ≈ {round(pend*share*r_last/100):,} 人(主申)")
+            p("  注:份额按单季收件比估算,季度错位+占比波动大,仅供量级参考;"
+              "这批 PD 多在 2024+,主要影响 cutoff 进入 2024 之后的推进速度。")
 
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
     if sp:

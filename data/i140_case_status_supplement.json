@@ -1,0 +1,51 @@
+{
+  "_readme": [
+    "I-140 按财年/季度/案件状态(Received/Approved/Denied/Pending)的社区补充数据。",
+    "来源:USCIS《Form I-140 By Fiscal Year, Quarter, and Case Status》季报。",
+    "为何人工补录:USCIS 已对 GitHub Actions 出口 IP 全面 403(见 docs/self-hosted-runner.md),",
+    "抓取通道失效;且该报表与现有两个数据集(Rec-COB 收件、Approved 待签存量)均不同,",
+    "此前从未纳入。补录方式同 i140_china_receipts_supplement.json。",
+    "",
+    "⚠️ 口径要点:",
+    "  1) 本表为【全球】口径,非中国。中国的 EB-1A 获批率可能低于全球均值(审查更严),",
+    "     故据此推算中国数据时属于【上界】,不可当作中国实测值。",
+    "  2) 获批率定义 = Approved / (Approved + Denied),不含 Pending。",
+    "  3) 某些类别 Approved > Received 属正常(在消化历史积压)。"
+  ],
+
+  "eb1a_adjudication_rate": {
+    "_note": "EB-1A(E11) 逐季获批率。denied_pct 取自官方图表标注,approved_pct = 100 - denied_pct。",
+    "_source": "USCIS EB-1A Adjudications Over Time(FY2025 Q1 – FY2026 Q2)",
+    "FY2025_Q1": { "approved_pct": 74.80, "denied_pct": 25.20 },
+    "FY2025_Q2": { "approved_pct": 72.70, "denied_pct": 27.30 },
+    "FY2025_Q3": { "approved_pct": 66.60, "denied_pct": 33.40 },
+    "FY2025_Q4": { "approved_pct": 53.40, "denied_pct": 46.60 },
+    "FY2026_Q1": { "approved_pct": 47.40, "denied_pct": 52.60 },
+    "FY2026_Q2": { "approved_pct": 41.70, "denied_pct": 58.30 }
+  },
+
+  "niw_adjudication_rate": {
+    "_note": "NIW 获批率。FY2026_Q2 由 Approved/Denied 原始数精算;FY2026_Q1 来自二手转述,标记为近似。",
+    "FY2026_Q1": { "approved_pct": 42.0, "approximate": true },
+    "FY2026_Q2": { "approved_pct": 48.1, "approximate": false }
+  },
+
+  "quarters": {
+    "FY2026_Q2": {
+      "_asof": "2026-03-31",
+      "_scope": "worldwide",
+      "TOTAL":        { "received": 51110, "approved": 47406, "denied": 7241, "pending": 184209 },
+      "EB1":          { "received": 11629, "approved": 6607,  "denied": 2612, "pending": 41726 },
+      "E11_EB1A":     { "received": 6647,  "approved": 1723,  "denied": 2405, "pending": 27024 },
+      "E12_ProfResearcher": { "received": 1334, "approved": 1546, "denied": 103, "pending": 1901 },
+      "E13_MultinatExec":   { "received": 3648, "approved": 3338, "denied": 104, "pending": 12801 },
+      "EB2":          { "received": 23563, "approved": 14000, "denied": 3976, "pending": 94495 },
+      "E21_AdvDegree":{ "received": 10922, "approved": 10958, "denied": 693,  "pending": 5280 },
+      "NIW":          { "received": 12641, "approved": 3042,  "denied": 3283, "pending": 89215 },
+      "EB3":          { "received": 15918, "approved": 26799, "denied": 653,  "pending": 47988 },
+      "E31_Skilled":  { "received": 5658,  "approved": 5981,  "denied": 219,  "pending": 35847 },
+      "E32_Bachelor": { "received": 5839,  "approved": 5947,  "denied": 190,  "pending": 3861 },
+      "EW3_Unskilled":{ "received": 4421,  "approved": 14871, "denied": 244,  "pending": 8280 }
+    }
+  }
+}
