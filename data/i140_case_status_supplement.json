@@ -7,8 +7,9 @@
     "此前从未纳入。补录方式同 i140_china_receipts_supplement.json。",
     "",
     "⚠️ 口径要点:",
-    "  1) 本表为【全球】口径,非中国。中国的 EB-1A 获批率可能低于全球均值(审查更严),",
-    "     故据此推算中国数据时属于【上界】,不可当作中国实测值。",
+    "  1) quarters/*_adjudication_rate 为【全球】口径。china_cohort 为【中国】口径。",
+    "     注:曾假设「中国审查更严、获批率低于全球」——china_cohort 数据不支持该假设,",
+    "     中国 EB1 各届已决获批率长期在 66%~90%,FY2023 届 79.8%,并不低于全球。已弃用该假设。",
     "  2) 获批率定义 = Approved / (Approved + Denied),不含 Pending。",
     "  3) 某些类别 Approved > Received 属正常(在消化历史积压)。"
   ],
@@ -28,6 +29,43 @@
     "_note": "NIW 获批率,均由 Approved/Denied 原始数精算。",
     "FY2026_Q1": { "approved_pct": 42.61, "approximate": false },
     "FY2026_Q2": { "approved_pct": 48.09, "approximate": false }
+  },
+
+  "china_cohort": {
+    "_note": [
+      "USCIS《I-140 Petitions Received and Current Status for China》,按【收件财年】分组、",
+      "列该组当前状态。与 quarters(按裁定季度)是两个不同切面,勿混用。",
+      "快照约 2025 年中(FY2025 仅含 Q1-Q3),故 FY2026 起的获批率塌方尚未反映在本表里。",
+      "⚠️ pending 列原名 'Pending, Other',含撤回/其它处置,作为纯待决量属上界。"
+    ],
+    "_scope": "china",
+    "_snapshot": "FY2025_Q3",
+    "eb1": {
+      "2014": { "total": 4434, "approved": 3824, "denied": 540,  "pending_other": 70 },
+      "2015": { "total": 4864, "approved": 4309, "denied": 494,  "pending_other": 61 },
+      "2016": { "total": 5328, "approved": 4615, "denied": 664,  "pending_other": 49 },
+      "2017": { "total": 6120, "approved": 4939, "denied": 1138, "pending_other": 43 },
+      "2018": { "total": 5979, "approved": 4492, "denied": 1450, "pending_other": 37 },
+      "2019": { "total": 5615, "approved": 3704, "denied": 1892, "pending_other": 19 },
+      "2020": { "total": 4390, "approved": 2964, "denied": 1403, "pending_other": 23 },
+      "2021": { "total": 4415, "approved": 3389, "denied": 998,  "pending_other": 28 },
+      "2022": { "total": 5643, "approved": 4318, "denied": 1244, "pending_other": 81 },
+      "2023": { "total": 9380, "approved": 7186, "denied": 1824, "pending_other": 370 },
+      "2024": { "total": 10486, "approved": 6288, "denied": 1307, "pending_other": 2891 },
+      "2025": { "total": 9092, "approved": 3353, "denied": 739,  "pending_other": 5000, "partial_q1q3": true }
+    },
+    "eb1_approvals_by_category": {
+      "_note": "仅有各子类【获批数】,官方未按子类拆分拒绝数,故中国 E11 单独获批率不可算。",
+      "E11": { "2022": 2335, "2023": 4308, "2024": 3608, "2025": 1538 },
+      "E12": { "2022": 1524, "2023": 2122, "2024": 1792, "2025": 1113 },
+      "E13": { "2022": 459,  "2023": 756,  "2024": 888,  "2025": 702 }
+    },
+    "eb2": {
+      "_note": "供对照:同期中国 EB2 待决同样堆积(FY2024 3,435 / FY2025 6,936)。",
+      "2023": { "total": 12978, "approved": 12439, "denied": 422,  "pending_other": 117 },
+      "2024": { "total": 17281, "approved": 12228, "denied": 1618, "pending_other": 3435 },
+      "2025": { "total": 13807, "approved": 5909,  "denied": 962,  "pending_other": 6936, "partial_q1q3": true }
+    }
   },
 
   "quarters": {

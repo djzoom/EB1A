@@ -104,7 +104,37 @@ def adjudication_rates():
         d = json.load(fh)
     rates = {k: v["approved_pct"] for k, v in d.get("eb1a_adjudication_rate", {}).items()
              if not k.startswith("_")}
-    return rates, d.get("quarters", {})
+    return rates, d.get("quarters", {}), d.get("china_cohort", {})
+
+
+def china_cohort_wall(cohort, rate_now, p):
+    """中国 EB1 按收件财年的待决存量 → 需求墙的【中国直接口径】。
+    比「全球积压 × 中国份额」可靠得多:不依赖份额假设。"""
+    eb1 = {k: v for k, v in cohort.get("eb1", {}).items() if not k.startswith("_")}
+    if not eb1:
+        return
+    yrs = sorted(eb1)
+    p(f"\n## 中国 EB1 待决存量(按收件财年，快照 {cohort.get('_snapshot','?')}) —— 需求墙【中国直接口径】")
+    recent = [y for y in yrs if eb1[y]["pending_other"] >= 100]
+    overhang = sum(eb1[y]["pending_other"] for y in recent)
+    old = sum(eb1[y]["pending_other"] for y in yrs if y not in recent)
+    for y in recent:
+        d_ = eb1[y]
+        dec = d_["approved"] + d_["denied"]
+        p(f"  FY{y}: 总 {d_['total']:,} | 已批 {d_['approved']:,} 已拒 {d_['denied']:,} "
+          f"待决 {d_['pending_other']:,} → 已决获批率 {d_['approved']/dec*100:.1f}%")
+    p(f"  → 待决集中在近两届共 {overhang:,} 件（FY2014-2022 合计仅 {old:,}，历史各届早已消化完）")
+    if rate_now:
+        p(f"  这批将在 FY2026 裁定，正撞上获批率塌方：按 {rate_now}% 计 → "
+          f"未来进入排队 ≈ {round(overhang*rate_now/100):,} 人(主申)")
+        # 表观获批率的幻觉:待决未计入,一旦按当前低获批率裁完,各届最终值大幅下修
+        for y in recent:
+            d_ = eb1[y]
+            a = d_["approved"] + d_["pending_other"] * rate_now / 100
+            dn = d_["denied"] + d_["pending_other"] * (1 - rate_now / 100)
+            p(f"     FY{y} 届最终获批率将从表观 "
+              f"{d_['approved']/(d_['approved']+d_['denied'])*100:.1f}% 降至 ≈{a/(a+dn)*100:.1f}%")
+    p("  注:pending 原列名 'Pending, Other'，含撤回/其它处置，作为纯待决量属上界。")
 
 
 def main():
@@ -140,7 +170,7 @@ def main():
 
     # 有效流入 = 收件 × 获批率。只看收件会严重低估退潮幅度——EB-1A 获批率已从
     # FY2025Q1 的 74.8% 一路跌到 FY2026Q2 的 41.7%,同一批收件真正能进排队的人腰斩。
-    rates, quarters = adjudication_rates()
+    rates, quarters, cohort = adjudication_rates()
     if rates and valid:
         p("\n## EB-1A 有效流入(= 中国收件 × 获批率) —— 真实进入排队的人")
         p("  注:获批率为【全球】口径(USCIS 季报),中国审查更严、实际可能更低,故本栏属上界。")
@@ -180,8 +210,11 @@ def main():
               f" → 中国待审积压 ≈ {round(pend*share):,} 件")
             if r_last:
                 p(f"  按最新获批率 {r_last}% → 未来将进入排队 ≈ {round(pend*share*r_last/100):,} 人(主申)")
-            p("  注:份额按单季收件比估算,占比逐季波动,仅供量级参考;"
-              "这批 PD 多在 2024+,主要影响 cutoff 进入 2024 之后的推进速度。")
+            p("  注:份额按单季收件比估算,占比逐季波动;下节的中国直接口径更可靠,本节仅作交叉对照。")
+
+    # 中国直接口径(不依赖份额假设)——优先以此为准
+    if cohort:
+        china_cohort_wall(cohort, rates.get(max(rates)) if rates else None, p)
 
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
     if sp:
