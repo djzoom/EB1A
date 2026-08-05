@@ -139,16 +139,22 @@ def main():
         p(f"- 库存实测(下界)：PD-{near} 在案 {cnt:,} 件 → ≈{prin:,.0f} 主申 ÷ 可递件跨度 "
           f"{span_days} 天（年初→max(表A {cutoff}, 表B {dff})）→ **{dens_inv:.1f} 主申/PD-日**")
         p(f"- 模型现行(densityHigh)：**{dens_model:.1f} 主申/PD-日**")
+        # 2026-08 重标定后，densityHigh 是「真实排队密度」(含 PD 未 current、尚不能递 I-485 的人)，
+        # 而库存实测只含「已递件」者。二者的预期关系不是"越高越保守"，而是结构性倍数：
+        # 待签池/I-485库存 原始比 ≈ 2.45，故合理区间取 ×1.8–3.0。
         ratio = dens_model / dens_inv if dens_inv else 0
-        if dens_model >= dens_inv:
-            p(f"- 判定：✅ 模型({dens_model:.1f}) ≥ 实测下界({dens_inv:.1f})，一致且偏保守"
-              f"（模型/实测={ratio:.2f}）。真实墙≥已递件下界，故模型合理；如需更贴近可下调至 ~{dens_inv:.0f}–{dens_model:.0f}。")
-        elif ratio >= 0.7:
-            p(f"- 判定：⚠️ 模型({dens_model:.1f}) 略低于实测下界({dens_inv:.1f})，"
-              f"近端推进可能偏快(乐观)，建议把 densityHigh 上调到 ≥{dens_inv:.0f}。")
+        LO, HI = 1.8, 3.0
+        if LO <= ratio <= HI:
+            p(f"- 判定：✅ 模型({dens_model:.1f}) / 实测下界({dens_inv:.1f}) = **×{ratio:.2f}**，"
+              f"落在预期区间 ×{LO}–{HI}（待签池/库存原始比 ≈2.45）。真实密度含未递件者，故应高于下界，量级吻合。")
+        elif ratio < LO:
+            p(f"- 判定：⚠️ 倍数偏低（×{ratio:.2f} < {LO}）：模型密度可能低估了「尚未递 I-485」的隐藏排队，"
+              f"近端推进偏快(乐观)。参考上调区间 {dens_inv*LO:.0f}–{dens_inv*HI:.0f}。")
         else:
-            p(f"- 判定：🔴 模型({dens_model:.1f}) 显著低于实测下界({dens_inv:.1f})，"
-              f"近端明显高估速度，需把 densityHigh 上调到 ~{dens_inv:.0f} 并复跑回测。")
+            p(f"- 判定：⚠️ 倍数偏高（×{ratio:.2f} > {HI}）：模型密度可能高估隐藏排队，近端推进偏慢(悲观)。"
+              f"参考下调区间 {dens_inv*LO:.0f}–{dens_inv*HI:.0f}。")
+        p(f"- 注：供给与密度须同口径同步——现行总供给 ≈6,983 张/年（对齐实际发卡 6,980），"
+          f"密度 {dens_model:.1f} 人/天；二者比值决定推进速度，单独改一个会破坏标定。")
         p("- 注：库存为「剩余排队」快照，仅 ≈cutoff 当年桶具代表性；2024+ 桶=0 系"
           "「PD 未 current、尚不能递 I-485」，故 f 仍不可由库存钉死(见 estimate_f)。")
     else:

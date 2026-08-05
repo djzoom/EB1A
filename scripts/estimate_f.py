@@ -106,7 +106,12 @@ def months(a, b):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pd", default="2024-06-10")
-    ap.add_argument("--supply", type=float, default=3662.0)  # persons/年(回测锚定)
+    # 口径为【签证/年,含派生】——thick = POOL × family × f 已乘家庭系数,故分母须同口径。
+    # 原注释"persons/年"有误。2026-08 重标定:由 3,662 改为实际发卡量(近两年均值 6,980),
+    # 与 index.html 的 PRESETS.realistic 总供给 6,983 对齐。
+    # 副作用(正向):此前 estimate_f 给 2028-10 而蒙特卡洛给 2027-10,差整一年;
+    # 对齐后二者收敛,该不一致本就源于两处供给口径不同步。
+    ap.add_argument("--supply", type=float, default=6983.0)
     ap.add_argument("--family", type=float, default=1.9)
     args = ap.parse_args()
     your_pd = date.fromisoformat(args.pd)
