@@ -17,7 +17,11 @@
   "eb1a_adjudication_rate": {
     "_note": "EB-1A(E11) 逐季获批率。denied_pct 取自官方图表标注,approved_pct = 100 - denied_pct。",
     "_source": "USCIS EB-1A Adjudications Over Time(FY2025 Q1 – FY2026 Q2)",
-    "FY2025_Q1": { "approved_pct": 74.80, "denied_pct": 25.20 },
+    "FY2024_Q1": { "approved_pct": 73.0, "approximate": true, "_src": "二手转述,无原表" },
+    "FY2024_Q2": { "approved_pct": 71.0, "approximate": true, "_src": "二手转述,无原表" },
+    "FY2024_Q3": { "approved_pct": 70.0, "approximate": true, "_src": "二手转述,无原表" },
+    "FY2024_Q4": { "approved_pct": 74.0, "approximate": true, "_src": "二手转述,无原表" },
+    "FY2025_Q1": { "approved_pct": 74.86, "denied_pct": 25.14, "_src": "原表精算 3291/(3291+1105)" },
     "FY2025_Q2": { "approved_pct": 72.70, "denied_pct": 27.30 },
     "FY2025_Q3": { "approved_pct": 66.60, "denied_pct": 33.40 },
     "FY2025_Q4": { "approved_pct": 53.40, "denied_pct": 46.60 },
@@ -27,6 +31,7 @@
 
   "niw_adjudication_rate": {
     "_note": "NIW 获批率,均由 Approved/Denied 原始数精算。",
+    "FY2025_Q1": { "approved_pct": 62.78, "approximate": false },
     "FY2026_Q1": { "approved_pct": 42.61, "approximate": false },
     "FY2026_Q2": { "approved_pct": 48.09, "approximate": false }
   },
@@ -69,6 +74,21 @@
   },
 
   "quarters": {
+    "FY2025_Q1": {
+      "_asof": "2024-12-31",
+      "_scope": "worldwide",
+      "TOTAL":        { "received": 57827, "approved": 33105, "denied": 4396, "pending": 132938 },
+      "EB1":          { "received": 13454, "approved": 7516,  "denied": 1213, "pending": 23538 },
+      "E11_EB1A":     { "received": 7338,  "approved": 3291,  "denied": 1105, "pending": 13567 },
+      "E12_ProfResearcher": { "received": 1515, "approved": 1344, "denied": 19, "pending": 1981 },
+      "E13_MultinatExec":   { "received": 4601, "approved": 2881, "denied": 89, "pending": 7990 },
+      "EB2":          { "received": 28409, "approved": 14504, "denied": 2956, "pending": 68325 },
+      "NIW":          { "received": 20124, "approved": 4722,  "denied": 2799, "pending": 56679 },
+      "EB3":          { "received": 15964, "approved": 11085, "denied": 227,  "pending": 41075 },
+      "E31_Skilled":  { "received": 6862,  "approved": 3531,  "denied": 93,   "pending": 21970 },
+      "E32_Bachelor": { "received": 4130,  "approved": 4458,  "denied": 77,   "pending": 5059 },
+      "EW3_Unskilled":{ "received": 4972,  "approved": 3096,  "denied": 57,   "pending": 14046 }
+    },
     "FY2026_Q1": {
       "_asof": "2025-12-31",
       "_scope": "worldwide",
