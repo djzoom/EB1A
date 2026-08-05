@@ -164,15 +164,23 @@ def main():
     q_latest = max(quarters) if quarters else None
     if q_latest:
         e11 = quarters[q_latest].get("E11_EB1A", {})
-        pend, recv_w = e11.get("pending"), e11.get("received")
-        if pend and recv_w and valid:
-            share = valid[-1][1] / recv_w          # 中国收件 ÷ 全球收件
+        pend = e11.get("pending")
+        # 份额必须用【同季】中国收件 ÷ 同季全球收件。跨季相除会系统性偏高
+        # (全球收件逐季下滑而中国分子不变),实测差 26.3% vs 22.5%、约 400 人。
+        cn_by_tag = dict(valid)
+        common = sorted(t for t in quarters if t in cn_by_tag
+                        and quarters[t].get("E11_EB1A", {}).get("received"))
+        if pend and common:
+            tag = common[-1]
+            recv_w = quarters[tag]["E11_EB1A"]["received"]
+            share = cn_by_tag[tag] / recv_w
             r_last = rates.get(max(rates)) if rates else None
             p(f"\n## EB-1A 待审积压({q_latest}，全球 {pend:,} 件) —— 需求墙的实测参照")
-            p(f"  中国收件占全球 ≈ {share*100:.0f}% → 中国待审积压 ≈ {round(pend*share):,} 件")
+            p(f"  中国份额(同季 {tag}): {cn_by_tag[tag]} ÷ {recv_w:,} = {share*100:.1f}%"
+              f" → 中国待审积压 ≈ {round(pend*share):,} 件")
             if r_last:
                 p(f"  按最新获批率 {r_last}% → 未来将进入排队 ≈ {round(pend*share*r_last/100):,} 人(主申)")
-            p("  注:份额按单季收件比估算,季度错位+占比波动大,仅供量级参考;"
+            p("  注:份额按单季收件比估算,占比逐季波动,仅供量级参考;"
               "这批 PD 多在 2024+,主要影响 cutoff 进入 2024 之后的推进速度。")
 
     sp = os.environ.get("GITHUB_STEP_SUMMARY")
