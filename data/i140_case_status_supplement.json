@@ -25,12 +25,26 @@
   },
 
   "niw_adjudication_rate": {
-    "_note": "NIW 获批率。FY2026_Q2 由 Approved/Denied 原始数精算;FY2026_Q1 来自二手转述,标记为近似。",
-    "FY2026_Q1": { "approved_pct": 42.0, "approximate": true },
-    "FY2026_Q2": { "approved_pct": 48.1, "approximate": false }
+    "_note": "NIW 获批率,均由 Approved/Denied 原始数精算。",
+    "FY2026_Q1": { "approved_pct": 42.61, "approximate": false },
+    "FY2026_Q2": { "approved_pct": 48.09, "approximate": false }
   },
 
   "quarters": {
+    "FY2026_Q1": {
+      "_asof": "2025-12-31",
+      "_scope": "worldwide",
+      "TOTAL":        { "received": 59148, "approved": 47922, "denied": 6453, "pending": 186875 },
+      "EB1":          { "received": 13040, "approved": 5961,  "denied": 2562, "pending": 39463 },
+      "E11_EB1A":     { "received": 7756,  "approved": 2180,  "denied": 2414, "pending": 24653 },
+      "E12_ProfResearcher": { "received": 1508, "approved": 1342, "denied": 73, "pending": 2229 },
+      "E13_MultinatExec":   { "received": 3776, "approved": 2439, "denied": 75, "pending": 12581 },
+      "EB2":          { "received": 24765, "approved": 18246, "denied": 3458, "pending": 88234 },
+      "E21_AdvDegree":{ "received": 10936, "approved": 15866, "denied": 252,  "pending": 5422 },
+      "NIW":          { "received": 13829, "approved": 2380,  "denied": 3206, "pending": 82812 },
+      "EB3":          { "received": 21343, "approved": 23715, "denied": 433,  "pending": 59178 },
+      "E31_Skilled":  { "received": 7287,  "approved": 5021,  "denied": 171,  "pending": 36263 }
+    },
     "FY2026_Q2": {
       "_asof": "2026-03-31",
       "_scope": "worldwide",
