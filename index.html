@@ -531,9 +531,9 @@ var PARAM_META = {
     source: { title: '法定基础配额 (不可调)', rows: [{ lbl: '全球年配额', val: '140,000' },{ lbl: 'EB-1 占比', val: '×28.6% = 40,040' },{ lbl: '中国上限', val: '×7% = 2,803' }], methodology: '法律规定: 140,000 × 28.6% × 7% = 2,803', sources: ['INA Section 201-203'] }
   },
   spilloverROW: {
-    label: '其他国家溢出', default: 650, min: 0, max: 3000, step: 100,
+    label: '其他国家溢出', default: 3500, min: 0, max: 9000, step: 100,
     unit: '签证/年', format: function(v) { return v; },
-    source: { title: '世界其他国家未用完的配额', rows: [{ lbl: '其他国家仅用 ~12% 配额', val: '大量余量' },{ lbl: 'FY24 中国实际', val: '~4,900' },{ lbl: 'FY26 中国实际', val: '~2,600' }], methodology: '其他国家用不完的名额会分给中国和印度，金额每年波动很大', sources: ['DOS IV Issuance'] }
+    source: { title: '世界其他国家未用完的配额（中国 EB-1 供给的大头）', rows: [{ lbl: '法定基础配额', val: '仅 2,803' },{ lbl: '实际年均发卡', val: '7,012（2014-2024）' },{ lbl: '→ 溢出承担', val: '约 4,200/年' },{ lbl: 'FY2022 峰值年', val: '11,425' },{ lbl: 'FY2020 低点年', val: '4,766' }], methodology: '法定配额只有 2,803，而实际发卡长期在 4,700–11,400 之间，差额全部来自溢出——溢出才是中国 EB-1 供给的主体，且逐年大幅波动', sources: ['DOS IV Issuance', 'data/eb1_china_visas_issued.json'] }
   },
   spilloverIndia: {
     label: '印度耦合', default: 0, min: -2000, max: 2000, step: 100,
@@ -541,7 +541,7 @@ var PARAM_META = {
     source: { title: '印度 EB-1 与中国在 overflow 中的竞争（按 PD 全球排队分配）', rows: [{ lbl: '正值', val: '印度追上中国→让出 overflow→中国多分' },{ lbl: '负值', val: '印度恶化抢占更多→中国少分' },{ lbl: '当前印度 EB-1', val: '持续 retrogression、比中国靠后' }], methodology: 'EB-1 未用完的 overflow 按 PD 全球排队发：印度若追上中国(不再有更早 PD 积压抢占)则中国多分(正值)；印度恶化抢占更多则中国少分(负值)。当前印度 EB-1 一路退坡、比中国靠后，故偏抢占方向；长期均值接近零', sources: ['DOS IV Issuance', 'Visa Bulletin'] }
   },
   eb4eb5Spillover: {
-    label: 'EB-4/5 跨类溢出', default: 200, min: 0, max: 800, step: 50,
+    label: 'EB-4/5 跨类溢出', default: 680, min: 0, max: 1600, step: 50,
     unit: '签证/年', format: function(v) { return v; },
     source: { title: 'EB-4 和 EB-5 没用完的名额流到 EB-1', rows: [{ lbl: 'EB-5 几乎用满', val: '余量少' },{ lbl: 'EB-4 部分年有余量', val: '~200' }], methodology: 'EB-5 改革后几乎用满，但 EB-4 仍有少量余量', sources: ['DOS IV Issuance'] }
   },
@@ -551,14 +551,14 @@ var PARAM_META = {
     source: { title: '一个主申请人平均用多少个签证名额', rows: [{ lbl: '单人', val: '1.0' },{ lbl: '夫妻', val: '2.0' },{ lbl: '夫妻+1孩子', val: '3.0' },{ lbl: '中国 EB-1 均值', val: '~1.9' }], methodology: '每个名额覆盖全家，中国 EB-1 多为已婚少子女，均值约 1.9', sources: ['USCIS Backlog Reports'] }
   },
   densityHigh: {
-    label: '排队密度 (2023-2024)', default: 8, min: 4, max: 40, step: 1,
-    unit: '人/天', format: function(v) { return v; },
-    source: { title: '这个时间段每天有多少人排队', rows: [{ lbl: 'I-485 库存核心 PD 月', val: '~400–680/月' },{ lbl: '有效密度', val: '~8 人/天' },{ lbl: '回测吞吐', val: '~3,700/年' }], methodology: '2026 实测 China EB1 I-485 库存核心 PD 月约 400–680/月；回测(真实 cutoff 轨迹×真实密度)反解有效吞吐 ~3,700/年，与官方实际及本模型一致', sources: ['USCIS I-485 Inventory (2026)'] }
+    label: '排队密度 (2023-2024)', default: 15.3, min: 4, max: 60, step: 0.1,
+    unit: '人/天', format: function(v) { return v.toFixed(1); },
+    source: { title: '这个时间段每天有多少人排队（含尚未递 I-485 的人）', rows: [{ lbl: 'I-485 库存实测', val: '~7.0 人/天' },{ lbl: '但那只是「已递件」', val: '下界' },{ lbl: '待签/库存 原始比', val: '×2.45' },{ lbl: '→ 真实密度', val: '~15–20 人/天' },{ lbl: '由实际发卡反推', val: '~15.3' }], methodology: '2026 I-485 库存实测 7.0 主申/PD-日，但库存只含「已递交 I-485」者，是下界；真实排队还包含 PD 未 current、尚不能递件的人。用实际发卡量(6,980/年)与实测推进速度反推，真实密度约 15–21，取 15.3', sources: ['USCIS I-485 Inventory (2026)', 'data/eb1_china_visas_issued.json'] }
   },
   densityPeak: {
-    label: '排队密度 (2024+)', default: 9, min: 4, max: 40, step: 1,
-    unit: '人/天', format: function(v) { return v; },
-    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: 'I-485 库存核心 PD 月', val: '~400–680/月' },{ lbl: '有效密度', val: '~9 人/天' }], methodology: '2023 PD 段有效排队约 9 人/天(回测已校准)；2024+ PD 的额外需求由下方"未来需求墙"承载', sources: ['USCIS I-485 Inventory'] }
+    label: '排队密度 (2024+)', default: 17.2, min: 4, max: 60, step: 0.1,
+    unit: '人/天', format: function(v) { return v.toFixed(1); },
+    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: '2023 段真实密度', val: '~15.3 人/天' },{ lbl: '2024+ 略厚', val: '~17.2 人/天' }], methodology: '2023 PD 段真实密度约 15.3 人/天；2024+ PD 的额外需求由下方"未来需求墙"在此基础上再乘', sources: ['USCIS I-485 Inventory'] }
   },
   demandWall: {
     label: '未来需求墙 (I-140 池)', default: 1.7, min: 1.0, max: 2.5, step: 0.1,
@@ -568,17 +568,24 @@ var PARAM_META = {
 };
 
 var PRESETS = {
-  realistic: { chinaBaseQuota:2803, spilloverROW:650, spilloverIndia:0, eb4eb5Spillover:200, familyMultiplier:1.9, densityHigh:8, densityPeak:9, demandWall:1.7, demandWallSigma:0.45 },
-  optimistic: { chinaBaseQuota:2803, spilloverROW:1200, spilloverIndia:600, eb4eb5Spillover:400, familyMultiplier:1.8, densityHigh:10, densityPeak:12, demandWall:1.3, demandWallSigma:0.4 },
-  pessimistic: { chinaBaseQuota:2803, spilloverROW:100, spilloverIndia:-500, eb4eb5Spillover:100, familyMultiplier:2.0, densityHigh:15, densityPeak:20, demandWall:2.1, demandWallSigma:0.55 }
+  // 2026-08 重标定(×1.911):供给对齐实际发卡量(近两年均值 6,980 张/年),密度同步放大。
+  // 供给/密度 比值与重标定前一致 → 预测不变;区别是每个参数现在都能对照现实数据。
+  realistic: { chinaBaseQuota:2803, spilloverROW:3500, spilloverIndia:0, eb4eb5Spillover:680, familyMultiplier:1.9, densityHigh:15.3, densityPeak:17.2, demandWall:1.7, demandWallSigma:0.45 },
+  optimistic: { chinaBaseQuota:2803, spilloverROW:5200, spilloverIndia:1150, eb4eb5Spillover:765, familyMultiplier:1.8, densityHigh:19.1, densityPeak:22.9, demandWall:1.3, demandWallSigma:0.4 },
+  pessimistic: { chinaBaseQuota:2803, spilloverROW:1100, spilloverIndia:-960, eb4eb5Spillover:380, familyMultiplier:2.0, densityHigh:28.7, densityPeak:38.2, demandWall:2.1, demandWallSigma:0.55 }
 };
 
 // 供给情景：只切"浮动溢出"(spilloverROW/印度耦合)+FY27右尾，不动需求侧参数(密度/需求墙仍可独立调)。
 // 对应"固定基底 2,803 小、大头是浮动溢出"的现实结构；surge=停签→FB 大转移，含小概率大扩容右尾。
 var SUPPLY_SCENARIOS = {
-  tight:  { spilloverROW: 100,  spilloverIndia: -800, supplyTailProb: 0,    supplyTailMag: 1 },
-  normal: { spilloverROW: 650,  spilloverIndia: 0,    supplyTailProb: 0,    supplyTailMag: 1 },
-  surge:  { spilloverROW: 3500, spilloverIndia: -500, supplyTailProb: 0.18, supplyTailMag: 2.0 }
+  // 三档已锚定到实际发卡量的历史区间(data/eb1_china_visas_issued.json):
+  //   tight  ≈ 4,783 → FY2020 低点 4,766(领馆停摆年)
+  //   normal ≈ 6,983 → 2014-2024 十一年均值 7,012
+  //   surge  ≈ 11,383 → FY2022 峰值 11,425(疫情期 FB 大量转入职业类)
+  // 重标定前三档为 2,303/3,653/6,003,量级不对应任何真实年份,无法按现实新闻调节。
+  tight:  { spilloverROW: 2100, spilloverIndia: -800, supplyTailProb: 0,    supplyTailMag: 1 },
+  normal: { spilloverROW: 3500, spilloverIndia: 0,    supplyTailProb: 0,    supplyTailMag: 1 },
+  surge:  { spilloverROW: 8400, spilloverIndia: -500, supplyTailProb: 0.18, supplyTailMag: 1.5 }
 };
 var supplyScenario = 'normal';
 
@@ -606,8 +613,11 @@ function getPDDensity(pdDate, params, wall) {
   var d_2023_01 = new Date('2023-01-01').getTime();
   var d_2024_01 = new Date('2024-01-01').getTime();
   var d_2025_01 = new Date('2025-01-01').getTime();
-  var d_low = 5, d_med = 10;
-  var d_high = params.densityHigh || 12, d_peak = params.densityPeak || 15;
+  // 密度口径 = 真实排队密度(含尚未递 I-485 的人),与"实际发卡量"同量级配套。
+  // 2026-08 重标定:此前供给用 3,653(约为实际 6,980 的一半)、密度亦同步偏低,
+  // 比值正确故预测无误,但参数无物理意义。现按 ×1.911 同步放大二者,比值不变。
+  var d_low = 9.6, d_med = 19.1;
+  var d_high = params.densityHigh || 23, d_peak = params.densityPeak || 29;
   // I-140 需求墙：2024+ 的 PD 大多还在 I-140 待签池(China EB1 ~13,600)、尚未进 I-485；待 DFF 放开会涌入。
   // 原始 待签/库存 ≈ 2.45，阻尼到 demandWall(默认 1.7；2026 待签池见顶退潮后由 1.8 下调)。cutoff 进入 2024 PD 后变慢。
   var d_wall = d_peak * (wall || params.demandWall || 1.7);
