@@ -36,7 +36,20 @@ EB1A/
 ├── DATA_SOURCES.md           # 完整数据源清单 (17 个)
 ├── LICENSE                   # MIT
 ├── data/                     # 公开政府数据 (USCIS / DOS / 社区)
+├── docs/                     # 运维文档 (自建 runner 部署等)
 └── scripts/                  # 数据抓取 / 校准 / 验证脚本
+```
+
+## 数据自动更新
+
+排期数据由 GitHub Actions 定时探测 DOS 签证公告并自动上线。DOS/USCIS 的 WAF
+会把 GitHub 托管 runner 的机房 IP 整段 403，导致漏抓——解法是把抓取类工作流切到
+家里的自建 runner（住宅 IP）。部署见 [`docs/self-hosted-runner.md`](./docs/self-hosted-runner.md)，
+一条命令起步：
+
+```bash
+python3 scripts/preflight_local_egress.py   # 先确认本机出口没被挡
+bash scripts/setup_local_runner.sh <令牌>    # 再装
 ```
 
 ## 关键数据源

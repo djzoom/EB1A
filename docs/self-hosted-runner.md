@@ -1,5 +1,29 @@
 # 自建 Runner 配置指南
 
+## TL;DR（20 分钟上线）
+
+```bash
+git clone https://github.com/djzoom/EB1A.git && cd EB1A
+
+# ① 预检：这条出口能不能直连 DOS/USCIS（云 VPS/公司网络多半不行，必须住宅宽带）
+python3 scripts/preflight_local_egress.py
+
+# ② 取注册令牌：https://github.com/djzoom/EB1A/settings/actions/runners/new
+# ③ 一键装（下载+注册 eb1a-fetch 标签+装开机自启服务+关休眠）
+bash scripts/setup_local_runner.sh <令牌>
+
+# ④ 看门狗：掉线自动重启 + Bark 报警（防静默排队漏抓）
+echo '<你的 BARK_KEY>' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key
+bash scripts/runner_watchdog.sh --install
+```
+
+⑤ 最后到 `Settings → Secrets and variables → Actions → Variables` 新建
+`RUNNER_LABEL = eb1a-fetch` —— 这才是真正的开关。删掉变量即刻回退托管 runner。
+
+⑥ 验证：Actions → Sniff Visa Bulletin → Run workflow，勾 `selftest`，看日志里 403 是否变 200。
+
+下面是每一步的原理与排障细节。
+
 ## 为什么要自建
 
 USCIS 与 DOS 的 Akamai 把 GitHub 托管 runner 的出口 IP（Azure 机房段）整体挡掉了，
@@ -13,6 +37,11 @@ USCIS 与 DOS 的 Akamai 把 GitHub 托管 runner 的出口 IP（Azure 机房段
 ```
 
 自建 runner 让抓取走**你自己的住宅 IP**，绕开这层封锁。
+
+代价是真实的：**2026-08 与 2026-09 两期公告都是 403 漏抓后人工录入的**
+（见 `data/release_log.json` 里的 `via: manual`）。托管 runner 下探测器只剩
+Wayback 快照这一条间接通道，快照要等社区先去存档，延迟不可控；而页面在探不到时
+只会显示「尚未发布」——静默失败，没人知道是通道断了。
 
 > **重要**：云 VPS（DigitalOcean / AWS / 阿里云等）同样是机房 IP，大概率照样被 403。
 > 只有住宅宽带出口才可靠。选机器时务必用家里的设备。
@@ -38,6 +67,10 @@ USCIS 与 DOS 的 Akamai 把 GitHub 托管 runner 的出口 IP（Azure 机房段
 ---
 
 ## 二、注册 Runner
+
+> 推荐直接跑 `bash scripts/setup_local_runner.sh <令牌>`——下面这些步骤它都做了
+> （平台/架构自动识别、带 `--labels eb1a-fetch` 注册、`svc.sh` 装服务、关休眠、查 Python 版本）。
+> 以下手动步骤留作排障时对照。
 
 ### 1. 取注册令牌
 
@@ -131,7 +164,22 @@ Settings → Secrets and variables → Actions → Variables → New repository 
 
 ## 四、验证
 
-切换后手动触发一次，看诊断行的状态码：
+### 4.0 装之前先预检（不占用令牌、不改任何配置）
+
+```bash
+python3 scripts/preflight_local_egress.py
+```
+
+它用探测器同一套 URL 和 UA，从**本机**打一遍 DOS 月份页 / DOS PDF / USCIS AOS 页 /
+两个镜像主机，基准期取上一期（官方一定已发布，所以 200 才是干净证据）：
+
+- `结论：可用` → 这台机器值得装 runner
+- `结论：不可用` → 出口被 WAF 挡（云 VPS / 公司网络 / 机房 VPN 都会这样），换住宅宽带
+- `结论：未定` → 超时或本机代理干扰，先 `unset HTTPS_PROXY` 再跑一次
+
+### 4.1 切换后在 GitHub 上验证
+
+手动触发一次，看诊断行的状态码：
 
 ```
 Actions → Check Data Updates → Run workflow
@@ -156,9 +204,28 @@ GitHub 最多等 24 小时才取消。签证公告探测在发布窗内每 10 �
 若 runner 长期离线会堆积大量排队任务。
 
 应对：
-- 机器设为不休眠（macOS：`sudo pmset -a sleep 0 disablesleep 1`）
+- 机器设为不休眠（macOS：`sudo pmset -a sleep 0 disablesleep 1`；`setup_local_runner.sh` 已自动做）
+- **装看门狗**（下节）——把"静默排队"变成手机上的一条推送
 - 长期出门 / 机器要关机前，**删掉 `RUNNER_LABEL` 变量**回退到托管 runner
 - 定期看 Actions 页面有无长时间 queued 的任务
+
+### 看门狗
+
+```bash
+bash scripts/runner_watchdog.sh --install   # 每 30 分钟一次，写 crontab
+bash scripts/runner_watchdog.sh             # 手动跑一次看输出
+bash scripts/runner_watchdog.sh --remove    # 卸载
+```
+
+每次巡检做两件事：
+
+1. **服务在不在** —— 停了先自动 `svc.sh start`；拉不起来才报警（Bark：
+   「runner 掉线，任务正在排队，请上机或先删 RUNNER_LABEL 回退」）。
+2. **出口还通不通** —— 跑一遍预检。住宅 IP 也可能被新的 WAF 规则命中，
+   这时 runner 明明在跑却什么都抓不到，是最难发现的一种坏法。
+
+Bark key 从 `~/.eb1a_bark_key` 读（cron 没有登录 shell 的环境变量）。
+同类告警 6 小时内只推一条，不会刷屏。日志在 `~/.eb1a-watchdog/watchdog.log`。
 
 **令牌与凭据**：`~/actions-runner/.credentials` 存有仓库凭据，
 别把这个目录同步到网盘或备份到公开位置。
