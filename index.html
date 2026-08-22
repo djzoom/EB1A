@@ -174,6 +174,9 @@
   .vb-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #ef4444, #f97316); border-radius: 999px; vertical-align: middle; animation: vbblink 1.6s ease-in-out infinite; }
   .vb-latest { padding: 10px 12px; background: var(--blue-bg); border-left: 3px solid var(--blue); border-radius: 8px; margin-bottom: 10px; }
   .vb-latest.is-new { border-left-color: #f97316; background: rgba(249,115,22,0.10); }
+  .vb-warn { color: #b45309; }
+  .vb-stale { display: block; margin-top: 6px; padding: 6px 8px; font-size: 11px; line-height: 1.5;
+              color: #b45309; background: rgba(180,83,9,0.08); border-radius: 6px; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
   .tab-panel .explain-content { padding-top: 14px; }
@@ -491,7 +494,8 @@ var HISTORY = [
   ['2025-10-15','2022-12-22'],['2025-12-15','2023-01-22'],['2026-01-15','2023-02-01'],
   ['2026-03-15','2023-03-15'],['2026-04-15','2023-04-01'],['2026-06-15','2023-04-01'],
   ['2026-07-15','2023-06-01'],
-  ['2026-08-15','2023-07-01']
+  ['2026-08-15','2023-07-01'],
+  ['2026-09-15','2023-07-01']
 ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; });
 
 var HISTORY_B = [
@@ -499,15 +503,16 @@ var HISTORY_B = [
   ['2025-10-15','2023-05-15'],['2025-12-15','2023-08-01'],['2026-01-15','2023-09-15'],
   ['2026-03-15','2023-11-01'],['2026-04-15','2023-12-01'],['2026-06-15','2023-12-01'],
   ['2026-07-15','2023-12-01'],
-  ['2026-08-15','2023-12-01']
+  ['2026-08-15','2023-12-01'],
+  ['2026-09-15','2023-12-01']
 ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; });
 
 // 当前签证公告状态（每月更新）：本月 AOS 职业移民递交用哪张表
 // 2026年6月：USCIS 要求用表A（Final Action），已连续第二个月
-var VB_MONTH = '2026年8月';      // 最新已发布公告对应的月份
-var VB_YEAR = 2026, VB_MON = 8;  // 同上，数值形式（用于推下月）
-var VB_RELEASED = '2026-07-20';  // 该期发布日期（显示用；探测器命中后更新）
-var VB_RELEASED_TS = 1784563200000; // 该期发布/探测时刻（epoch 毫秒, UTC）；0=未知则退回按日期算
+var VB_MONTH = '2026年9月';      // 最新已发布公告对应的月份
+var VB_YEAR = 2026, VB_MON = 9;  // 同上，数值形式（用于推下月）
+var VB_RELEASED = '2026-08-14';  // 该期发布日期（显示用；探测器命中后更新）
+var VB_RELEASED_TS = 1786723200000; // 该期发布/探测时刻（epoch 毫秒, UTC）；0=未知则退回按日期算
 var VB_RELEASED_EST = true;      // true=该时刻为估计值(显示加「约」)；探测器命中真实时刻时置 false
 
 // 历史发布日（bulletin月 → 实际发布日，来源律所同日文章）。探测器命中后自动追加；
@@ -519,9 +524,10 @@ var RELEASE_HISTORY = [
   ['2026-01','2025-12-17'],['2026-02','2026-01-13'],['2026-03','2026-02-20'],
   ['2026-04','2026-03-18'],['2026-05','2026-04-14'],['2026-06','2026-05-13'],
   ['2026-07','2026-06-16'],
-  ['2026-08','2026-07-20']
+  ['2026-08','2026-07-20'],
+  ['2026-09','2026-08-14']
 ]; // RELEASE_HISTORY_END
-var FILING_CHART = 'A'; // 'A'=用表A递交；'B'=用表B递交；'?'=自动更新后待 USCIS 确认（July 2026：USCIS 指定职业类用表A/Final Action）
+var FILING_CHART = '?'; // 'A'=用表A递交；'B'=用表B递交；'?'=自动更新后待 USCIS 确认（July 2026：USCIS 指定职业类用表A/Final Action）
 function chartLabel() { return (FILING_CHART === 'A' || FILING_CHART === 'B') ? '表' + FILING_CHART : '待确认'; }
 
 var PARAM_META = {
@@ -1846,8 +1852,13 @@ function renderBulletinPanel() {
     var tn = todayET();
     var winTxt = '常见窗口 ' + md(pr.lo) + '–' + md(pr.hi) + '（近12期）';
     if (tn > dOnly(pr.hi)) {
-      relLine = '预计发布：<b>常见窗口已过，尚未发布</b> — ' + winTxt +
-                '，历史偶至月底；官方不预告发布日，以官方为准';
+      // 逾期未命中 ≠ 未发布。「没有证据」与「有证据表明没有」证据强度完全不同：
+      // 逾期越多，"探测器坏了"的后验概率越高于"DOS 延迟了"。此处禁止再显示「尚未发布」，
+      // 改为明示探测异常并引导人工核对官网（2026-09 期即因 403 漏抓被误报成未发布）。
+      relLine = '<b class="vb-warn">⚠️ 探测异常：已超出历史发布窗口，未能确认状态</b><br>' +
+                winTxt + '；本工具未能连上官网核实，<b>不等于官方没发</b>。请手工核对 ' +
+                '<a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html"' +
+                ' target="_blank" rel="noopener">travel.state.gov 官方公告</a>';
     } else if (tn >= dOnly(pr.est)) {
       relLine = '预计发布：<b>随时可能（今起～' + md(pr.hi) + '）</b> — 中位日 ' + md(pr.est) +
                 ' 已到，' + winTxt;
@@ -1858,13 +1869,22 @@ function renderBulletinPanel() {
   }
 
   var isNew = isNewBulletin();
+  // 数据陈旧提示：公告约每月一期，超过 40 天没更新几乎必然是探测失效而非官方停发。
+  // 页脚宣称"自动同步最新签证公告"，若探测已断而不提示，用户会把旧数据当成最新状态。
+  var staleDays = Math.floor((todayET() - dOnly(new Date(VB_RELEASED))) / MS_PER_DAY);
+  var staleHtml = staleDays > 40
+    ? '<span class="vb-stale">⚠️ 上方数据已 ' + staleDays + ' 天未更新（正常约每月一期）。' +
+      '自动同步很可能已失效，页面所示未必是最新一期——请以 ' +
+      '<a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html"' +
+      ' target="_blank" rel="noopener">官方公告</a> 为准。</span>'
+    : '';
   el.innerHTML =
     '<div class="vb-latest' + (isNew ? ' is-new' : '') + '">' +
     '<p style="margin:0"><span class="step">最新公告 · ' + VB_MONTH + '</span>' +
       (isNew ? '<span class="vb-badge">🆕 有新公告</span>' : '') + '<br>' +
       '发布：<b>' + releasedDisplay() + '</b> <span style="color:var(--text3)">· ' + relReleaseText() + '</span><br>' +
       '表A 最终裁定：<b>' + ymd(aNow) + '</b>　·　表B 递交：<b>' + ymd(bNow) + '</b><br>' +
-      '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p></div>' +
+      '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p>' + staleHtml + '</div>' +
     '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
       relLine + '<br>' +
       '近期发布：<span style="color:var(--text3)">' + recentReleasesText(4) + '</span><br>' +
