@@ -4,6 +4,32 @@
 
 ---
 
+## ⚠️ 抓取可达性（2026-08-22 实测）
+
+抓不抓得到，取决于**主机名**，不是出口 IP 段。同一天在 GitHub 托管 runner 和一条
+住宅宽带上各跑一遍：
+
+| 主机 | 托管 runner | 住宅 IP | 说明 |
+|---|---|---|---|
+| `travel.state.gov` | ❌ 403 | ❌ 403 | 挡所有自动化访问 |
+| `adoption.state.gov` | ✅ 200 | ✅ 200 | **同一套内容树的镜像**，公告页路径完全一致 |
+| `childabduction.state.gov` | ✅ 200 | ✅ 200 | 同上 |
+| `www.uscis.gov`（AOS 用表页） | ❌ 403 | ✅ 200 | 只有住宅 IP 能取 |
+| `www.uscis.gov/sites/.../data`（XLSX） | ✅ | ✅ | 数据文件目录不受影响 |
+
+三条由此而来的规矩，改代码前务必知道：
+
+1. **任何抓 DOS 公告的地方都必须遍历 `HOSTS` 三个主机**，不能只打 `travel.state.gov`。
+   `probe_published()` 是对的；`selftest()` 曾经硬编码单主机，因此白白退到 Wayback 兜底。
+2. **`travel.state.gov` 返回 403 不等于「抓不到公告」**。预检脚本曾因此把一台
+   完全能干活的机器判成「不可用」。判定口径应是「公告通道任一主机通即算通」。
+3. **USCIS 用表这条路托管 runner 走不通**，`data-update.yml` 里那一步已加
+   `if: runner.environment == 'self-hosted'`；日常由本机 cron
+   `scripts/uscis_chart_watch.sh` 值守。在托管 runner 上跑只会把状态写成
+   「获取失败」，掩盖「USCIS 尚未公布」这个真相。
+
+---
+
 ## 🎯 一级数据源 (官方 + 直接结构化)
 
 ### 1. USCIS I-485 Pending Inventory (含 PD bucket)
@@ -39,8 +65,10 @@ e.g. EB-1, China, 2024, June → 320
 - 类型: 按"国家 × visa category"
 - ⚠️ 现状(2026-07 核实): 官方发布停滞于 **2025-09**(FY2025 收官月),FY2026 各月从未发布
   (Niskanen 截至 2026-06-30 的追踪同样止于 2025-09;背景为 2026 年初 39 国限签/75 国停签)。
-  另外 travel.state.gov 对 GitHub Actions runner 返回 403(反爬)。二者的判定与告警抑制
-  由 `data/dos_publication_anchor.json`(人工锚点,120 天复核一次)+ `scripts/check_data_updates.py` 处理。
+  另外 travel.state.gov 对自动化访问返回 403(反爬)——注意这是**按主机名**封的,
+  同内容树的 adoption.state.gov / childabduction.state.gov 不受影响(见开头的可达性表)。
+  二者的判定与告警抑制由 `data/dos_publication_anchor.json`(人工锚点,120 天复核一次)
+  + `scripts/check_data_updates.py` 处理。
 
 ### 4. DOS Annual Report of the Visa Office
 

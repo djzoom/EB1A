@@ -8,6 +8,8 @@
 
 跑法：python scripts/test_sniff.py
 """
+import contextlib
+import io
 import os
 import sys
 
@@ -23,6 +25,16 @@ def check(name, got, want):
     else:
         print(f"  ❌ {name}\n     期望: {want}\n     实得: {got}")
         FAILED.append(name)
+
+
+def parse_strict(text):
+    """解析并额外报告是否走了位置兜底。
+    只比对数值测不出锚定失效——兜底按位置猜，很容易把值蒙对（表B 的老毛病就是
+    这样藏了两个月）。锚定是否真的成功，只能看有没有打出那条兜底告警。"""
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        fad, dff = S.parse_eb1_china(text)
+    return fad, dff, ("锚定失败" in buf.getvalue())
 
 
 def expect_raises(name, fn):
@@ -110,9 +122,37 @@ LONG_PREAMBLE = (DECOY
                    "Certain Religious Workers 15JAN23 15JAN23 15JAN23 15JAN23 15JAN23 "
                    "5th Unreserved C 01JAN17 U C C 5th Set Aside: Rural C C C C C "
                    "5th Set Aside: High Unemployment C C C C C 5th Set Aside: Infrastructure C C C C C")
-fad2, dff2 = S.parse_eb1_china(LONG_PREAMBLE)
-check("表B 表头后隔长段说明 → 仍锚定到正确的表B 行", dff2, "2023-12-01")
-check("同一页里有诱饵 1st 行 → 表A 不被位置兜底带偏", fad2, "2023-07-01")
+fad2, dff2, fb2 = parse_strict(LONG_PREAMBLE)
+check("表B 表头后隔长段说明 → 表B 值正确", dff2, "2023-12-01")
+check("同一页里有诱饵 1st 行 → 表A 值正确", fad2, "2023-07-01")
+check("  ↑ 且两张表都靠锚定拿到，没走位置兜底", fb2, False)
+
+# 第二种失败模式（由第一次修复引入、被 CI 上的告警当场抓到）：
+# 表A 的说明文字里会再次出现「Final Action Dates ... Employment」这个短语。
+# 若把窗口截到「下一个任意表头」，表A 的窗口会被自己的说明文字切到几乎为零，
+# 于是变成表A 走兜底、表B 正常——与修复前恰好对称。正解是截到【对方】的锚点。
+SELF_ECHO = ("Final Action Dates for Employment-Based Preference Cases "
+             "The table below lists the Final Action Dates for Employment-Based preference "
+             "cases; applicants may not file until their priority date is earlier than the "
+             "date listed. "
+             "1st C 01JUL23 15OCT22 C C 2nd C 01SEP21 U C C "
+             "3rd 01SEP24 01JAN22 01JAN14 01SEP24 01AUG23 "
+             "Other Workers 01APR22 01MAY19 01JAN14 01APR22 01DEC21 4th 15DEC22 15DEC22 15DEC22 15DEC22 15DEC22 "
+             "Certain Religious Workers 15DEC22 15DEC22 15DEC22 15DEC22 15DEC22 "
+             "5th Unreserved C 01DEC16 U C C 5th Set Aside: Rural C C C C C "
+             "5th Set Aside: High Unemployment C C C C C 5th Set Aside: Infrastructure C C C C C "
+             "Dates for Filing for Employment-Based Preference Cases "
+             "This chart may be used to determine when to assemble documents. "
+             "1st C 01DEC23 01APR23 C C 2nd C 01OCT21 U C C "
+             "3rd 01FEB25 01JUN22 01JUL14 01FEB25 01JAN24 "
+             "Other Workers 01JUN22 01JUL19 01JUL14 01JUN22 01MAY22 4th 15JAN23 15JAN23 15JAN23 15JAN23 15JAN23 "
+             "Certain Religious Workers 15JAN23 15JAN23 15JAN23 15JAN23 15JAN23 "
+             "5th Unreserved C 01JAN17 U C C 5th Set Aside: Rural C C C C C "
+             "5th Set Aside: High Unemployment C C C C C 5th Set Aside: Infrastructure C C C C C")
+fad3, dff3, fb3 = parse_strict(SELF_ECHO)
+check("表A 说明里重复出现自己的标题 → 表A 值正确", fad3, "2023-07-01")
+check("同一页表B 仍然正确", dff3, "2023-12-01")
+check("  ↑ 且窗口没被自我截断，没走位置兜底", fb3, False)
 
 TRUNCATED = ("Final Action Dates for Employment-Based Preference Cases "
              "1st C 01JUL23 15OCT22 C C 2nd C 01SEP21 U C C "

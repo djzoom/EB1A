@@ -13,6 +13,44 @@
 
 重写为 agent-based simulation，模拟 DOS 真实月度签证分配。
 
+## 🛠 运维现状（接手前必读，2026-08-22）
+
+排期数据靠 `scripts/sniff_visa_bulletin.py` + 两个 workflow 自动上线。踩过的坑都在
+[`DATA_SOURCES.md`](./DATA_SOURCES.md) 开头的可达性表和
+[`docs/self-hosted-runner.md`](./docs/self-hosted-runner.md)，这里只留最省时间的三条。
+
+**分工**（同一天在托管 runner 与住宅 IP 各实测过）：
+
+- **DOS 公告**：托管 runner 就能抓，走 `adoption.state.gov` 镜像（`travel.state.gov` 403，
+  但 WAF 是按 hostname 配的，镜像不挡）。不需要自建 runner。
+- **USCIS AOS 用表**：托管 runner 403，只有住宅 IP 能取 → 本机 cron
+  `scripts/uscis_chart_watch.sh` 每小时值守，直到拿到 A/B。
+- **自建 runner**：只剩「过了 20 号仍没抓到公告」时人工接管这一个用途。
+
+**同一个 bug 模式已经咬了三次**，写解析/抓取代码时优先怀疑它：
+
+> **固定字符窗口 + 静默兜底**。锚定到某个表头后往下截 N 个字符找目标行——
+> 政府页面在表头和数据之间塞了一大段说明文字，窗口够不着；而位置兜底
+> （「取全文第 2 个 `1st` 行」之类）**很容易把值蒙对**，于是锚定早就失效了却没人发现。
+>
+> - `parse_eb1_china` 表B：700 字符窗口不够 → 靠兜底猜了两个月，每次都猜对
+> - 修复时改成「截到下一个任意表头」→ 表A 被自己说明文字里的标题回声截断，
+>   变成表A 兜底、表B 正常，完全对称的新回归
+> - 正解是**截到「对方那张表」的锚点**：边界唯一，且天然把两张表隔开
+>
+> 配套两条纪律：**兜底一旦触发必须无条件打印告警**（不能只在 debug 下可见）；
+> **测试必须断言「没走兜底」而不是只比对数值**（`test_sniff.py` 的 `parse_strict()`），
+> 否则蒙对的结果会让测试假通过。
+>
+> 同类的宽 `except` 也一样：`runner_window.py` 里一个 `NameError` 曾被
+> `except Exception` 吞成「读不到 release_log」并静默降级。兜底只兜网络错，
+> 代码错必须抛出来。
+
+**状态语义**：`FILING_CHART_STATE` 四态（`ok` / `pending` / `error` / 未取到）中，
+「够不着 USCIS」(`error`) 与「USCIS 还没更新」(`pending`) 必须分开——两台机器可达性
+不同，混为一谈会让先跑的那台留下的 `error` 把后跑的那台的正确结果永远挡在门外。
+`fetch_filing_chart()` 因此返回 `(chart, fetched_ok)`。
+
 ## 🎯 关键数据源
 
 ### USCIS 自己发布完整 cohort 数据
@@ -156,10 +194,18 @@ EB1A/
 │   ├── raw/{uscis,dos,community}/
 │   ├── processed/*.parquet
 │   └── README.md
+├── docs/
+│   └── self-hosted-runner.md   (自建 runner 部署 + 开关)
 ├── scripts/
-│   ├── scrape_uscis.py
-│   ├── scrape_dos.py
-│   └── build_initial_cohorts.py
+│   ├── sniff_visa_bulletin.py    (公告探测/解析/写回，含 --selftest --filing-chart --manual)
+│   ├── test_sniff.py             (解析器回归测试)
+│   ├── check_data_updates.py     (USCIS/DOS 数据文件巡检)
+│   ├── uscis_chart_watch.sh      (AOS 用表本机值守 cron)
+│   ├── preflight_local_egress.py (出口可达性预检)
+│   ├── setup_local_runner.sh     (自建 runner 一键安装)
+│   ├── runner_ctl.sh             (runner 手动/自动开关)
+│   ├── runner_window.py          (该不该开的判定)
+│   └── runner_watchdog.sh        (runner 掉线报警)
 ├── src/
 │   ├── cohort.py
 │   ├── allocator.py

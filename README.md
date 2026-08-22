@@ -42,16 +42,26 @@ EB1A/
 
 ## 数据自动更新
 
-排期数据由 GitHub Actions 定时探测 DOS 签证公告并自动上线。DOS/USCIS 的 WAF
-会把 GitHub 托管 runner 的机房 IP 整段 403，导致漏抓——解法是把抓取类工作流切到
-家里的自建 runner（住宅 IP）。部署见 [`docs/self-hosted-runner.md`](./docs/self-hosted-runner.md)，
-一条命令起步：
+排期数据由 GitHub Actions 定时探测 DOS 签证公告并自动上线。两条数据通道的可达性不同
+（2026-08-22 实测，托管 runner 与住宅 IP 各跑一遍）：
+
+| 数据源 | GitHub 托管 runner | 住宅 IP |
+|---|---|---|
+| **DOS 公告**（表A/表B cutoff） | ✅ 200 —— 走 `adoption.state.gov` 镜像 | ✅ 200 |
+| **USCIS AOS 递交用表**（用A还是用B） | ❌ 403 | ✅ 200 |
+
+WAF 规则挂在 hostname 上，不是按出口 IP 段封：`travel.state.gov` 挡所有自动化访问，
+但同一套内容树的镜像主机（`adoption.state.gov` / `childabduction.state.gov`）谁都不挡。
+所以**排期数字全自动，不需要自己的机器**；只有 USCIS 用表必须从住宅 IP 取。
+
+用表值守（一个 cron，不需要注册 runner）：
 
 ```bash
-python3 scripts/preflight_local_egress.py   # 先确认本机出口没被挡
-bash scripts/setup_local_runner.sh <令牌>    # 再装
-bash scripts/runner_ctl.sh on               # 排期窗打开，抓到后 off；--install-auto 可自动开合
+bash scripts/uscis_chart_watch.sh --install   # 每小时问一次 USCIS，直到拿到 A/B
 ```
+
+自建 runner 只在托管探测失效（过了 20 号仍没抓到公告）时作为人工接管的保险，
+部署与开关见 [`docs/self-hosted-runner.md`](./docs/self-hosted-runner.md)。
 
 ## 关键数据源
 

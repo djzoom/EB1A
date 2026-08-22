@@ -1,5 +1,23 @@
 # 自建 Runner 配置指南
 
+> ## 先读这段：多数情况下你不需要自建 runner
+>
+> 实测（2026-08-22，托管 runner 与住宅 IP 各跑一遍）：
+>
+> | 数据源 | GitHub 托管 runner | 住宅 IP |
+> |---|---|---|
+> | **DOS 公告**（表A/表B cutoff） | ✅ 200 —— 走 `adoption.state.gov` 镜像 | ✅ 200 |
+> | **USCIS AOS 递交用表** | ❌ **403** | ✅ 200 |
+>
+> WAF 规则是挂在 hostname 上的，不是按出口 IP 段封的：`travel.state.gov` 挡所有人，
+> 但同一套内容树的两个镜像主机谁都不挡。**排期数字托管 runner 就能抓到，不需要你的机器。**
+>
+> 真正只有住宅 IP 能做的，只剩「每小时问一次 USCIS 用表」这一个 HTTP 请求——
+> 那件事用 `scripts/uscis_chart_watch.sh` 一个 cron 就够，不必注册 runner。
+>
+> **所以自建 runner 现在只有一个用途**：托管探测万一失效（过了 20 号仍没抓到公告）时的
+> 人工接管保险。装不装取决于你要不要这层冗余。下面的步骤依然有效。
+
 ## TL;DR（20 分钟上线）
 
 ```bash
@@ -186,7 +204,27 @@ chmod 600 ~/.eb1a_gh_token                       #    权限：本仓库 Variabl
 节奏大致是：每月 7 号前后打开 → 公告出来、数据自动上线并推送到手机 → 确认后关掉。
 一个月开着一到两周，其余时间机器上什么都不跑。
 
-### 3.2 自动开合（装上就不用管）
+### 3.2 USCIS 用表值守（与 runner 无关，建议装）
+
+用表是唯一必须走住宅 IP 的东西，但它只需要一个 HTTP 请求，不值得为它开整台 runner：
+
+```bash
+bash scripts/uscis_chart_watch.sh            # 跑一次
+bash scripts/uscis_chart_watch.sh --install  # 装进 crontab（每小时 :17）
+bash scripts/uscis_chart_watch.sh --remove   # 卸载
+```
+
+**值守语义，不是跑一次就完。** USCIS 可能拖很久——实测 2026-09 期公告 8/14 发布，
+到 8/22 官网仍挂着「Coming soon」。所以拿不到就继续每小时问；一旦判定出 A/B，
+`resolve_filing_chart()` 会自己短路（不再发请求），成本趋近于零；下一期公告上线
+把 `FILING_CHART` 重置回 `'?'`，值守自动重新开始。
+
+判定出结果时推一条 Bark，并自动 commit + push 上线。
+
+> `data-update.yml` 里的用表步骤已加 `if: runner.environment == 'self-hosted'` —— 
+> 在托管 runner 上跑那一步只会写下「获取失败」，掩盖「USCIS 尚未公布」这个真相。
+
+### 3.3 自动开合（装上就不用管）
 
 ```bash
 bash scripts/runner_ctl.sh --install-auto   # 每小时 :05 判定一次
@@ -200,14 +238,13 @@ bash scripts/runner_ctl.sh --remove-auto    # 卸载
 python3 scripts/runner_window.py --verbose
 ```
 
-四条规则，按顺序：
+三条规则，按顺序：
 
 1. **当月期还没定案** → 开。说明上一轮发布被错过了，探测器会绕过发布窗门控直接补探。
-2. **下月期未定案 + 今天在 7–26 号** → 开。这是常规发布窗（历史实际落在 12–20 号，前后都留了缓冲）。
-3. **公告已定案，但 USCIS 递交用表还是 `?`** → 继续开，最多 7 天。
-   USCIS 的 AOS 页通常比公告滞后 1–2 天，抓它同样要住宅 IP——
-   抓到公告就关，用表会永远停在「待确认」。
-4. **其余** → 关。
+2. **下月期未定案 且 已过 20 号** → 开。历史 12 期发布日全部落在 12–20 号；
+   过了这天还没抓到，就不是「官方还没发」而是托管探测出了问题，此时本机接管。
+   **常规发布窗内本机保持关闭**——公告归托管 runner 抓，为它开两周是白开。
+3. **其余** → 关。用表不在这里判，由 `uscis_chart_watch.sh` 值守。
 
 判定读的是 GitHub 上 `main` 的实时状态（`release_log.json` + `index.html`），
 不是你本地 clone，所以本地仓库旧了也不影响。读不到时**按开处理**——
@@ -220,7 +257,7 @@ python3 scripts/runner_window.py --verbose
 手动和自动可以混用：手动 `on` 之后，下一次 auto 判定若认为该关，会把它关掉。
 想让它别插手，先 `--remove-auto`。
 
-### 3.3 哪些工作流读这个变量
+### 3.4 哪些工作流读这个变量
 
 只有需要外网抓取的两个工作流读 `RUNNER_LABEL`（`runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}`）：
 
