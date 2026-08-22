@@ -28,11 +28,18 @@ jobs:
         id: check
         run: python scripts/check_data_updates.py
 
+      # USCIS 的 AOS 用表页是独立于 DOS 公告的第二数据源，且通常滞后公告数日。
+      # 必须每日单独轮询——只在抓到新公告那一刻跑一次，会永远停在「尚未公布」。
+      - name: Resolve AOS filing chart (daily, independent of bulletin)
+        run: python scripts/sniff_visa_bulletin.py --filing-chart || true
+
       - name: Commit and push if new files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/raw/
+          # index.html 也要暂存：上一步的 AOS 用表补判会写回 FILING_CHART/
+          # FILING_CHART_STATE，只 add data/raw/ 会让该结果每天被丢弃、永远停在待确认。
+          git add data/raw/ index.html
           if git diff --cached --quiet; then
             echo "No new data files"
           else

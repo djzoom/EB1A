@@ -170,11 +170,17 @@
   /* 新公告提示：tab 红点角标 + 面板徽标 + 高亮 */
   .tab-btn .tab-dot { position: absolute; top: 7px; right: 9px; width: 7px; height: 7px; background: #ef4444; border-radius: 50%; animation: vbpulse 1.8s infinite; }
   @keyframes vbpulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
-  @keyframes vbblink { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-  .vb-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #ef4444, #f97316); border-radius: 999px; vertical-align: middle; animation: vbblink 1.6s ease-in-out infinite; }
   .vb-latest { padding: 10px 12px; background: var(--blue-bg); border-left: 3px solid var(--blue); border-radius: 8px; margin-bottom: 10px; }
   .vb-latest.is-new { border-left-color: #f97316; background: rgba(249,115,22,0.10); }
   .vb-warn { color: #b45309; }
+  /* 变动摘要：纯文字。本项目「胶囊圆角+实心填充」专用于可点按钮，此处不得使用，
+     故无背景/无边框/无 hover/无点击态，字号小于标题。 */
+  .vb-delta { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 600;
+              vertical-align: middle; }
+  .vb-delta.flat { color: var(--text3); }
+  .vb-delta.up   { color: var(--green); }
+  .vb-delta.down { color: #dc2626; }
+  .vb-delta.na   { color: #ea580c; }
   .vb-stale { display: block; margin-top: 6px; padding: 6px 8px; font-size: 11px; line-height: 1.5;
               color: #b45309; background: rgba(180,83,9,0.08); border-radius: 6px; }
   .tab-panel { display: none; }
@@ -511,9 +517,16 @@ var HISTORY_B = [
 // 2026年6月：USCIS 要求用表A（Final Action），已连续第二个月
 var VB_MONTH = '2026年9月';      // 最新已发布公告对应的月份
 var VB_YEAR = 2026, VB_MON = 9;  // 同上，数值形式（用于推下月）
-var VB_RELEASED = '2026-08-14';  // 该期发布日期（显示用；探测器命中后更新）
-var VB_RELEASED_TS = 1786723200000; // 该期发布/探测时刻（epoch 毫秒, UTC）；0=未知则退回按日期算
-var VB_RELEASED_EST = true;      // true=该时刻为估计值(显示加「约」)；探测器命中真实时刻时置 false
+// 发布时间的【来源】必须与数值一起保存,否则估算值会被当成观测值渲染——
+// 2026-09 期即因此事故:抓取器故障期间系统按历史规律回填了「约 2026/08/14 12:00 ET」,
+// 而那个整点 12:00 根本不可能来自真实抓取。现按来源三分:
+//   observed = 本系统抓取器首见时间戳(精确到分)  inferred = 外部可验证来源推得(仅到日)
+//   unknown  = 无可靠来源(禁止回填任何估算值)
+var VB_RELEASED = null;          // 该期发布日期；null=未知
+var VB_RELEASED_TS = 0;          // 发布/探测时刻（epoch 毫秒, UTC）；0=无观测时刻
+var VB_RELEASED_EST = false;     // 保留兼容；来源判定一律以 VB_RELEASED_SOURCE 为准
+var VB_RELEASED_SOURCE = 'unknown';   // 'observed' | 'inferred' | 'unknown'
+var VB_RELEASED_NOTE = '抓取故障期间，无首见记录';  // inferred/unknown 时的来源说明
 
 // 历史发布日（bulletin月 → 实际发布日，来源律所同日文章）。探测器命中后自动追加；
 // 供"下月发布预测(近3次均值→工作日)"与未来研究。结尾哨兵注释勿删（探测器按它追加）。
@@ -525,10 +538,33 @@ var RELEASE_HISTORY = [
   ['2026-04','2026-03-18'],['2026-05','2026-04-14'],['2026-06','2026-05-13'],
   ['2026-07','2026-06-16'],
   ['2026-08','2026-07-20'],
-  ['2026-09','2026-08-14']
+  // 2026-09：抓取器故障期间被回填成 2026-08-14（整点 12:00 ET，非真实观测）。
+  // 已置 null 并标 unknown——旁证亦不支持 8/14：该日后一周内第三方轮询站与各律所快讯
+  // 均无该期动静，实际上线更可能在 8/20–8/21。真值待 Wayback CDX 重建（见 rebuild_release_dates.py）。
+  ['2026-09', null, 'unknown']
 ]; // RELEASE_HISTORY_END
-var FILING_CHART = '?'; // 'A'=用表A递交；'B'=用表B递交；'?'=自动更新后待 USCIS 确认（July 2026：USCIS 指定职业类用表A/Final Action）
-function chartLabel() { return (FILING_CHART === 'A' || FILING_CHART === 'B') ? '表' + FILING_CHART : '待确认'; }
+var FILING_CHART = '?'; // 'A'=用表A递交；'B'=用表B递交；'?'=尚未取到（具体措辞见 FILING_CHART_STATE）
+// 'pending'=USCIS 尚未更新该月（正常滞后）；'error'=我们抓取报错。两者必须区分显示，
+// 否则「抓取根本没跑通」会被「待确认」掩盖。探测器每次解析后写回此值。
+var FILING_CHART_STATE = 'pending';
+// 四态措辞。旧版一律显示「待确认」——那会被读成「正在加载」,把「抓取根本没跑通」
+// 掩盖过去,与本次 2026-09 漏抓事故同类。故必须区分「USCIS 尚未公布」与「我们抓取失败」。
+var USCIS_CHART_URL = 'https://www.uscis.gov/green-card/green-card-processes-and-procedures/' +
+                      'visa-availability-priority-dates/adjustment-of-status-filing-charts-from-the-visa-bulletin';
+function chartLabel() {
+  if (FILING_CHART === 'A' || FILING_CHART === 'B') return '表' + FILING_CHART;
+  var link = ' <a href="' + USCIS_CHART_URL + '" target="_blank" rel="noopener">USCIS 官方页</a>';
+  if (typeof FILING_CHART_STATE !== 'undefined' && FILING_CHART_STATE === 'error') {
+    return '<span class="vb-warn">获取失败</span>' + link;
+  }
+  // 发布日未知时按公告期月份 1 号起算,避免 null 造成的荒唐天数
+  var base = (typeof VB_RELEASED !== 'undefined' && VB_RELEASED)
+    ? new Date(VB_RELEASED) : new Date(VB_YEAR, VB_MON - 1, 1);
+  var days = Math.floor((Date.now() - base.getTime()) / MS_PER_DAY);
+  return days > 7
+    ? '<span class="vb-warn">USCIS 未公布（已超常规）</span>' + link
+    : 'USCIS 尚未公布';
+}
 
 var PARAM_META = {
   chinaBaseQuota: {
@@ -1765,11 +1801,22 @@ function releasedMs() {
   return isNaN(t) ? 0 : t;
 }
 function releasedDisplay() {
+  var src = typeof VB_RELEASED_SOURCE !== 'undefined' ? VB_RELEASED_SOURCE : 'observed';
+  var note = typeof VB_RELEASED_NOTE !== 'undefined' && VB_RELEASED_NOTE ? VB_RELEASED_NOTE : '';
+  // unknown：绝不回填估算值。宁可显示「未知」,也不能把猜测渲染成事实。
+  if (src === 'unknown' || !VB_RELEASED) {
+    return '<span class="vb-warn">发布日期未知</span>' +
+           (note ? '<span style="color:var(--text3)">（' + note + '）</span>' : '');
+  }
+  // inferred：只到日,不显示具体时刻——外部来源推不出分钟级精度。
+  if (src === 'inferred') {
+    return VB_RELEASED + '<span style="color:var(--text3)">（推断' + (note ? '·' + note : '') + '）</span>';
+  }
+  // observed：本系统首见时间戳,可精确到分。
   if (typeof VB_RELEASED_TS === 'number' && VB_RELEASED_TS > 0) {
     try {
-      var t = new Date(VB_RELEASED_TS).toLocaleString('zh-CN', { timeZone: 'America/New_York', hour12: false,
+      return new Date(VB_RELEASED_TS).toLocaleString('zh-CN', { timeZone: 'America/New_York', hour12: false,
         year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' ET';
-      return (typeof VB_RELEASED_EST !== 'undefined' && VB_RELEASED_EST ? '约 ' : '') + t;
     } catch (e) {}
   }
   return VB_RELEASED;
@@ -1791,23 +1838,91 @@ function relReleaseText() {
 // 绝不把已过去的日期继续挂成"预计发布"。
 var WD = ['日', '一', '二', '三', '四', '五', '六'];
 function pLocal(s) { var a = s.split('-'); return new Date(+a[0], +a[1] - 1, +a[2]); }
-function sortedReleases() { return RELEASE_HISTORY.slice().sort(function(a, b) { return pLocal(a[1]) - pLocal(b[1]); }); }
+// 只保留有实际日期的条目：来源为 unknown(日期 null)的期不得进入「近期发布」列表,
+// 也不得参与发布日预测——否则伪造值会再次污染统计。
+// 中位数：偶数长度取中间两数均值。单测见 window.__selftest_median()。
+function median(arr) {
+  if (!arr || !arr.length) return null;
+  var s = arr.slice().sort(function(a, b) { return a - b; });
+  var m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+// 线性回归斜率与残差标准差（用于发布日趋势项）。x 取 0..n-1 的期序。
+function linfit(ys) {
+  var n = ys.length; if (n < 2) return null;
+  var sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (var i = 0; i < n; i++) { sx += i; sy += ys[i]; sxx += i * i; sxy += i * ys[i]; }
+  var d = n * sxx - sx * sx; if (!d) return null;
+  var slope = (n * sxy - sx * sy) / d, intercept = (sy - slope * sx) / n;
+  var ss = 0;
+  for (var j = 0; j < n; j++) { var r = ys[j] - (intercept + slope * j); ss += r * r; }
+  return { slope: slope, intercept: intercept, sd: Math.sqrt(ss / Math.max(1, n - 2)),
+           next: intercept + slope * n };
+}
+window.__selftest_median = function () {
+  var cases = [
+    [[19, 17, 16, 13, 16, 20], 16.5],          // 任务指定用例
+    [[13, 14, 14, 16, 18, 20], 15],            // 旧算法给 14(即面板 9/14 的来源)
+    [[1, 2, 3], 2], [[4], 4], [[], null]
+  ];
+  return cases.map(function (c) {
+    var got = median(c[0]);
+    return { input: c[0], want: c[1], got: got, pass: got === c[1] };
+  });
+};
+function sortedReleases() {
+  return RELEASE_HISTORY.filter(function(p) { return p[1] && p[2] !== 'unknown'; })
+    .sort(function(a, b) { return pLocal(a[1]) - pLocal(b[1]); });
+}
 function predictNextRelease() {
-  var ds = sortedReleases().map(function(p) { return pLocal(p[1]); });
-  if (!ds.length) return null;
-  var latest = ds[ds.length - 1];
+  var rows = sortedReleases();
+  var ds = rows.map(function(p) { return pLocal(p[1]); });
+  if (ds.length < 2) return null;
   function dayOf(d) { return d.getDate(); }
-  var med6 = ds.slice(-6).map(dayOf).sort(function(a, b) { return a - b; });
-  var med = med6[Math.floor((med6.length - 1) / 2)];
-  var win = ds.slice(-12).map(dayOf);
+
+  // 目标月必须由【公告期】推导,不能取"末条发布日的下个月"——发布日列表会因剔除
+  // 来源不可靠的期而出现空洞(2026-09 即是),那样会把目标月算错一整月。
+  // 下一期公告 = VB_MON+1,而它在 VB_MON 这个月发布(如 10 月号于 9 月发布)。
+  var y = VB_YEAR, mi = VB_MON - 1;            // mi = 发布所在月的 0-based 索引
+  function mk(day) { return new Date(y, mi, Math.max(1, Math.min(Math.round(day), 28))); }
+
+  var win = ds.slice(-12).map(dayOf);          // 近 12 期发布"日"
   var lo = Math.min.apply(null, win), hi = Math.max.apply(null, win);
-  // 目标月 = 最近一期发布日的下一个月
-  var y = latest.getFullYear(), m = latest.getMonth() + 1;
-  var est = new Date(y, m, Math.min(med, 28));
+  var med = median(win);
+  var fit = linfit(win);                       // 趋势项:线性回归外推下一期
+
+  // 漂移检测:后半段均值 − 前半段均值。超过 2 天即认为"发布日近期后移"。
+  var half = Math.floor(win.length / 2);
+  function mean(a) { return a.reduce(function(s, v) { return s + v; }, 0) / a.length; }
+  var drift = win.length >= 6 ? mean(win.slice(half)) - mean(win.slice(0, half)) : 0;
+
+  // 中心:有足够样本时用趋势外推,否则退回中位数。区间用残差标准差(±1σ)而非历史极值,
+  // 极值只作为"历史范围"单独呈现——20 号在 12 期里仅出现一次,是极大值不是中心。
+  var center = (fit && win.length >= 8) ? fit.next : med;
+  var sd = fit ? Math.max(1.2, fit.sd) : 2.2;
+  var bandLo = center - sd, bandHi = center + sd;
+
+  // 月份效应:10 月为财年重置期,DOS 有动机尽早公布新财年数字。
+  // 但当前该效应的观测样本极少,n 不足时只能作为"假设"呈现,不得据以调整中心。
+  var nextBulletinMonth = VB_MON === 12 ? 1 : VB_MON + 1;
+  var octSamples = rows.filter(function(p) { return /-10$/.test(p[0]); })
+                       .map(function(p) { return pLocal(p[1]).getDate(); });
+  var fyHypo = (nextBulletinMonth === 10)
+    ? { n: octSamples.length, days: octSamples,
+        mean: octSamples.length ? mean(octSamples) : null }
+    : null;
+
+  var est = mk(center);
   var wd = est.getDay();
   if (wd === 6) est.setDate(est.getDate() - 1);        // 周六 → 周五
   else if (wd === 0) est.setDate(est.getDate() + 1);   // 周日 → 周一
-  return { est: est, lo: new Date(y, m, Math.min(lo, 28)), hi: new Date(y, m, Math.min(hi, 28)) };
+  return {
+    est: est, lo: mk(bandLo), hi: mk(bandHi),
+    extLo: mk(lo), extHi: mk(hi),
+    center: center, sd: sd, drift: drift, n: win.length,
+    slope: fit ? fit.slope : 0, fyHypo: fyHypo,
+    spanFrom: ds[Math.max(0, ds.length - 12)], spanTo: ds[ds.length - 1]
+  };
 }
 function recentReleasesText(n) {
   return sortedReleases().slice(-n).reverse().map(function(p) {
@@ -1875,11 +1990,32 @@ function renderBulletinPanel() {
   }
   var relLine;
   if (!pr) {
-    var fb = new Date(new Date(VB_RELEASED).getTime() + 31 * MS_PER_DAY);
-    relLine = '预计发布：约 <b>' + ymd(fb.getTime()) + '</b>';
+    // 样本不足以做趋势外推时，如实说「无法预测」——不再由 VB_RELEASED+31天 硬凑一个
+    // 「约 X 月 X 日」。VB_RELEASED 现可为 null，那样会退到 1970 算出荒唐日期；
+    // 更根本的是：那个值本身就是估算，不该以确定口吻渲染。
+    relLine = '预计发布：<span class="vb-warn">样本不足，暂无法预测</span>' +
+              '<span style="color:var(--text3)">（需至少 2 期可信发布日）</span>';
   } else {
     var tn = todayET();
-    var winTxt = '常见窗口 ' + md(pr.lo) + '–' + md(pr.hi) + '（近12期）';
+    function ym(d) { return d ? (d.getFullYear() + '/' + (d.getMonth() + 1)) : '?'; }
+    // 区分「历史中心」与「历史极值」：极值只出现过一次也会拉宽区间，让用户误把极值当常态。
+    var winTxt = '中心 ' + md(pr.est) + '（±' + pr.sd.toFixed(1) + '天 → ' + md(pr.lo) + '–' + md(pr.hi) + '）'
+               + '；历史极值 ' + md(pr.extLo) + '–' + md(pr.extHi)
+               + '（近 ' + pr.n + ' 期，' + ym(pr.spanFrom) + '–' + ym(pr.spanTo) + '）';
+    var driftTxt = Math.abs(pr.drift) > 2
+      ? '<br><span class="vb-warn">发布日近期' + (pr.drift > 0 ? '后移' : '前移') + ' '
+        + Math.abs(pr.drift).toFixed(1) + ' 天（后半段均值 vs 前半段）</span>'
+      : '';
+    // 月份效应与趋势项分歧时两者都摆出来，不取中间数装作确定。
+    var fyTxt = '';
+    if (pr.fyHypo) {
+      fyTxt = '<br><span style="color:var(--text3)">10 月为新财年首月，DOS 有动机尽早公布新财年数字'
+            + (pr.fyHypo.n > 0
+                ? '；本站已记录的 10 月号发布日：' + pr.fyHypo.days.join('、') + ' 号'
+                  + (pr.fyHypo.n < 3 ? '（样本仅 ' + pr.fyHypo.n + ' 期，<b>仅作假设、未据以调整上述中心</b>）' : '')
+                : '（本站暂无 10 月号发布日样本，仅作假设）')
+            + '</span>';
+    }
     if (tn > dOnly(pr.hi)) {
       // 逾期未命中 ≠ 未发布。「没有证据」与「有证据表明没有」证据强度完全不同：
       // 逾期越多，"探测器坏了"的后验概率越高于"DOS 延迟了"。此处禁止再显示「尚未发布」，
@@ -1888,20 +2024,46 @@ function renderBulletinPanel() {
                 winTxt + '；本工具未能连上官网核实，<b>不等于官方没发</b>。请手工核对 ' +
                 '<a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html"' +
                 ' target="_blank" rel="noopener">travel.state.gov 官方公告</a>';
-    } else if (tn >= dOnly(pr.est)) {
-      relLine = '预计发布：<b>随时可能（今起～' + md(pr.hi) + '）</b> — 中位日 ' + md(pr.est) +
-                ' 已到，' + winTxt;
+    } else if (tn >= dOnly(pr.lo)) {
+      relLine = '预计发布：<b>随时可能（今起～' + md(pr.hi) + '）</b> — ' + winTxt + driftTxt + fyTxt;
     } else {
-      relLine = '预计发布：约 <b>' + ymd(pr.est.getTime()) + '（周' + WD[pr.est.getDay()] + '）</b>' +
-                '（近6期中位，' + winTxt + '）';
+      // 输出区间而非点估计：单日"约 X 月 X 日（周几）"是伪精确——残差标准差就有 ±2 天，
+      // 精确到星期几毫无依据。改为「区间 + 中心」。
+      relLine = '预计发布：<b>' + md(pr.lo) + '–' + md(pr.hi) + '</b>（中心 ' + md(pr.est) + '）' +
+                '<br><span style="color:var(--text3)">按近 ' + pr.n + ' 期线性趋势外推，' +
+                '斜率 ' + (pr.slope >= 0 ? '+' : '') + pr.slope.toFixed(2) + ' 天/期；' +
+                '历史极值 ' + md(pr.extLo) + '–' + md(pr.extHi) + '</span>' + driftTxt + fyTxt;
     }
   }
 
+  // 本期 vs 上期 表A(中国大陆 EB-1 Final Action) 变动摘要。
+  // 'U'/'unavailable' 目前数据里未出现,但公告本身有该状态(如印度 EB-2),故一并处理。
+  function chartDelta() {
+    if (!HISTORY || HISTORY.length < 2) return null;
+    var cur = HISTORY[HISTORY.length - 1].y, prv = HISTORY[HISTORY.length - 2].y;
+    var curU = cur == null || isNaN(cur), prvU = prv == null || isNaN(prv);
+    if (curU && prvU) return { cls: 'na', txt: '表A 不可用' };
+    if (curU) return { cls: 'na', txt: '表A 不可用' };
+    if (prvU) return { cls: 'up', txt: '表A 恢复' };
+    var d = Math.round((cur - prv) / MS_PER_DAY);
+    if (d === 0) return { cls: 'flat', txt: '表A 未变' };
+    var arrow = d > 0 ? '↑' : '↓';
+    var n = Math.abs(d);
+    // 不足一月按天计,避免把 11 天说成「0 个月」
+    var amt = n >= 28 ? Math.round(n / 30.44) + '个月' : n + '天';
+    return { cls: d > 0 ? 'up' : 'down', txt: '表A ' + arrow + ' ' + amt };
+  }
+  var delta = chartDelta();
+  var deltaHtml = delta ? '<span class="vb-delta ' + delta.cls + '">' + delta.txt + '</span>' : '';
+
   var isNew = isNewBulletin();
-  // 数据陈旧提示：公告约每月一期，超过 40 天没更新几乎必然是探测失效而非官方停发。
+  // 数据陈旧提示：公告约每月一期，超过 30 天没更新几乎必然是探测失效而非官方停发。
   // 页脚宣称"自动同步最新签证公告"，若探测已断而不提示，用户会把旧数据当成最新状态。
-  var staleDays = Math.floor((todayET() - dOnly(new Date(VB_RELEASED))) / MS_PER_DAY);
-  var staleHtml = staleDays > 40
+  // 发布日未知时无从计算天数（new Date(null) 会退到 1970，算出两万多天的荒唐值）。
+  // 此时改按「公告期月份」估算陈旧度：该期名义生效月的 1 号起算。
+  var staleBase = VB_RELEASED ? dOnly(new Date(VB_RELEASED)) : new Date(VB_YEAR, VB_MON - 1, 1);
+  var staleDays = Math.floor((todayET() - staleBase) / MS_PER_DAY);
+  var staleHtml = staleDays > 30
     ? '<span class="vb-stale">⚠️ 上方数据已 ' + staleDays + ' 天未更新（正常约每月一期）。' +
       '自动同步很可能已失效，页面所示未必是最新一期——请以 ' +
       '<a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html"' +
@@ -1910,7 +2072,7 @@ function renderBulletinPanel() {
   el.innerHTML =
     '<div class="vb-latest' + (isNew ? ' is-new' : '') + '">' +
     '<p style="margin:0"><span class="step">最新公告 · ' + VB_MONTH + '</span>' +
-      (isNew ? '<span class="vb-badge">🆕 有新公告</span>' : '') + '<br>' +
+      deltaHtml + '<br>' +
       '发布：<b>' + releasedDisplay() + '</b> <span style="color:var(--text3)">· ' + relReleaseText() + '</span><br>' +
       '表A 最终裁定：<b>' + ymd(aNow) + '</b>　·　表B 递交：<b>' + ymd(bNow) + '</b><br>' +
       '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p>' + staleHtml + '</div>' +
