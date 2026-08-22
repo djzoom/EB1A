@@ -286,7 +286,12 @@ def parse_eb1_china(html, debug=False):
             if debug:
                 print(f"[debug] 未找到 {label!r} 的 Employment 表头")
             return None
-        seg = text[m.end(): m.end() + 700]
+        # 截到下一张就业表的表头为止（上限 6000 字符），不要用固定小窗口：
+        # 实测 DOS 在表B 前有一大段说明文字，'1st' 行落在 700 字符窗口之外，
+        # 于是表B 每次都靠「全文第 2 个 1st 行」的位置兜底猜回来——猜对是运气。
+        rest = text[m.end():]
+        nxt = re.search(r"(?:Final Action Date|Dates for Filing).{0,80}?Employment", rest, re.I)
+        seg = rest[:min(nxt.start() if nxt else len(rest), 6000)]
         m2 = re.search(r"\b1st\b(.{0,160})", seg, re.I)
         if debug:
             print(f"[debug] {label!r} 表头@{m.start()} → 1st 段: {(m2.group(1)[:90] if m2 else '未找到 1st')!r}")
@@ -309,8 +314,11 @@ def parse_eb1_china(html, debug=False):
     # 兜底：employment 锚定失败时，用全文里第 1/2 个 '1st' 行(FA 在前、DF 在后)
     if fad is None or dff is None:
         rows = re.findall(r"\b1st\b(.{0,160})", text, re.I)
-        if debug:
-            print(f"[debug] 兜底：全文 '1st' 行数={len(rows)}")
+        # 兜底是按位置猜（FA 在前、DF 在后），不是结构化解析。一旦用上就说明 grab()
+        # 的锚定失效了，必须无条件叫出来——否则 DOS 一调结构就会静默取错行。
+        print(f"[parse] ⚠️ 锚定失败，改用位置兜底（全文 '1st' 行数={len(rows)}；"
+              f"表A={'兜底' if fad is None else '正常'}，表B={'兜底' if dff is None else '正常'}）"
+              "——请核对结果并校准 parse_eb1_china")
         if fad is None and len(rows) >= 1:
             fad = _china_from_row(rows[0])
         if dff is None and len(rows) >= 2:

@@ -84,6 +84,36 @@ fad, dff = S.parse_eb1_china(FULL)
 check("完整表 → 解析出表A EB-1 中国", fad, "2023-07-01")
 check("完整表 → 解析出表B EB-1 中国", dff, "2023-12-01")
 
+# 真实页面里，表B 的表头与 '1st' 行之间隔着一大段说明文字（实测 >700 字符），
+# 而表A 没有。旧实现用固定 700 字符窗口找行，于是表B 每次都落进「全文第 N 个 1st 行」
+# 的位置兜底——2026-09 期恰好猜对，掩盖了锚定已失效的事实。
+# 这里再放一行会被位置兜底优先选中的诱饵：若 grab() 锚定失效，表A/表B 都会取错。
+PREAMBLE = ("This chart is used to determine when an applicant may assemble and submit "
+            "required documentation to the National Visa Center. " * 12)
+# 诱饵与表A 之间必须隔开 >160 字符：位置兜底的正则一次吞 160 字符，
+# 诱饵贴太近会把表A 那行 '1st' 一并吞掉，反而让兜底又蒙对，测不出问题。
+DECOY = ("Applicants in the 1st 01JAN99 01JAN99 01JAN99 01JAN99 01JAN99 category should note. "
+         + "Consult an attorney regarding your individual circumstances before filing. " * 4)
+LONG_PREAMBLE = (DECOY
+                 + "Final Action Dates for Employment-Based Preference Cases "
+                 + "1st C 01JUL23 15OCT22 C C 2nd C 01SEP21 U C C "
+                   "3rd 01SEP24 01JAN22 01JAN14 01SEP24 01AUG23 "
+                   "Other Workers 01APR22 01MAY19 01JAN14 01APR22 01DEC21 4th 15DEC22 15DEC22 15DEC22 15DEC22 15DEC22 "
+                   "Certain Religious Workers 15DEC22 15DEC22 15DEC22 15DEC22 15DEC22 "
+                   "5th Unreserved C 01DEC16 U C C 5th Set Aside: Rural C C C C C "
+                   "5th Set Aside: High Unemployment C C C C C 5th Set Aside: Infrastructure C C C C C "
+                 + "Dates for Filing for Employment-Based Preference Cases "
+                 + PREAMBLE
+                 + "1st C 01DEC23 01APR23 C C 2nd C 01OCT21 U C C "
+                   "3rd 01FEB25 01JUN22 01JUL14 01FEB25 01JAN24 "
+                   "Other Workers 01JUN22 01JUL19 01JUL14 01JUN22 01MAY22 4th 15JAN23 15JAN23 15JAN23 15JAN23 15JAN23 "
+                   "Certain Religious Workers 15JAN23 15JAN23 15JAN23 15JAN23 15JAN23 "
+                   "5th Unreserved C 01JAN17 U C C 5th Set Aside: Rural C C C C C "
+                   "5th Set Aside: High Unemployment C C C C C 5th Set Aside: Infrastructure C C C C C")
+fad2, dff2 = S.parse_eb1_china(LONG_PREAMBLE)
+check("表B 表头后隔长段说明 → 仍锚定到正确的表B 行", dff2, "2023-12-01")
+check("同一页里有诱饵 1st 行 → 表A 不被位置兜底带偏", fad2, "2023-07-01")
+
 TRUNCATED = ("Final Action Dates for Employment-Based Preference Cases "
              "1st C 01JUL23 15OCT22 C C 2nd C 01SEP21 U C C "
              "3rd 01SEP24 01JAN22 01JAN14 01SEP24 01AUG23")
