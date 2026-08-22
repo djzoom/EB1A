@@ -394,6 +394,18 @@ def _emit_env(key, val):
         print(f"[env] 写 {key} 失败: {type(e).__name__}: {e}")
 
 
+def write_chart_state(state):
+    """写回 index.html 的 FILING_CHART_STATE('pending'|'error')，供前端区分四态措辞。"""
+    try:
+        s = open(INDEX, encoding="utf-8").read()
+        s2 = re.sub(r"(var FILING_CHART_STATE = ')[^']*(')",
+                    lambda m: m.group(1) + state + m.group(2), s, count=1)
+        if s2 != s:
+            open(INDEX, "w", encoding="utf-8").write(s2)
+    except Exception as e:
+        print(f"[chart] 写 FILING_CHART_STATE 失败: {type(e).__name__}")
+
+
 def fetch_filing_chart(ty, tm):
     """从 USCIS AOS filing-charts 页判断 (ty,tm) 月职业类(EB)用表A(Final Action)还是表B(Dates for Filing)。
     仅在能确认页面对应该月、且明确 EB 用表时返回 'A'/'B'；否则 None(保持待确认，人工兜底)。"""
@@ -403,18 +415,31 @@ def fetch_filing_chart(ty, tm):
     try:
         code, html = fetch(url)
     except Exception as e:
+        # 抓取报错 ≠ USCIS 未公布。前端必须显示「获取失败」而非「尚未公布」,
+        # 否则通道断了会被当成官方还没更新,一直沉默下去。
         print(f"[chart] 抓 USCIS AOS 页失败: {type(e).__name__}: {str(e)[:120]}")
+        write_chart_state("error")
         return None
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text)
-    if f"{month_name} {ty}" not in text:
-        print(f"[chart] AOS 页尚未更新到 {month_name} {ty}（USCIS 常滞后公告 1-2 天），保持 '?'")
+    # 先锚到就业类那一段,再在【该段之内】同时校验月份与用表。
+    # 只在整页范围内找月份是不够的:USCIS 更新滞后时,页面里往往还留着上一期的月份,
+    # 会取到上期结论并当成本期(与本次事故同类的"拿旧数据当新数据")。
+    seg_m = re.search(r"For\s+Employment[- ]?Based\s+Preference\s+Filings(.{0,400})", text, re.I)
+    seg = seg_m.group(1) if seg_m else None
+    if seg is None:
+        m0 = re.search(r"Employment[- ]?Based(.{0,400})", text, re.I)
+        seg = m0.group(1) if m0 else None
+    if seg is None:
+        print("[chart] 未能在 AOS 页定位就业类段落，保持 '?'")
         return None
-    m = re.search(r"Employment[- ]?Based.{0,200}?(Dates for Filing|Final Action)", text, re.I)
+    if not re.search(month_name + r"\s+" + str(ty), seg, re.I):
+        print(f"[chart] 就业类段落未提及 {month_name} {ty}（USCIS 常滞后公告数日），保持 '?'")
+        return None
+    m = re.search(r"(Dates for Filing|Final Action)\s+chart", seg, re.I) \
+        or re.search(r"(Dates for Filing|Final Action)", seg, re.I)
     if not m:
-        m = re.search(r"(Dates for Filing|Final Action)[^.]{0,120}?[Ee]mployment", text)
-    if not m:
-        print("[chart] 未能在 AOS 页定位 EB 用表，保持 '?'")
+        print("[chart] 就业类段落中未见用表说明，保持 '?'")
         return None
     chart = 'B' if 'dates for filing' in m.group(1).lower() else 'A'
     print(f"[chart] USCIS {month_name} {ty} 职业类用表 → {chart}")
@@ -441,9 +466,14 @@ def resolve_filing_chart():
         return "error", "读不到 VB_YEAR/VB_MON"
     chart = fetch_filing_chart(vy, vm)
     if not chart:
+        # fetch_filing_chart 内部已在"抓取报错"时写 error；此处只处理"页面未更新"。
+        s0 = open(INDEX, encoding="utf-8").read()
+        if "var FILING_CHART_STATE = 'error'" not in s0:
+            write_chart_state("pending")
         return "skip", f"{vy}-{vm:02d} AOS 用表未确认/页面未更新，保持待确认"
     s = open(INDEX, encoding="utf-8").read()
     s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
+    s = re.sub(r"(var FILING_CHART_STATE = ')[^']*(')", lambda m: m.group(1) + "ok" + m.group(2), s, count=1)
     open(INDEX, "w", encoding="utf-8").write(s)
     label = 'Final Action(表A)' if chart == 'A' else 'Dates for Filing(表B)'
     _emit_env("BARK_TITLE", f"EB1A · {vy}年{vm}月递交用表已确认")
@@ -875,11 +905,19 @@ def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None):
     s = re.sub(r"(var VB_MONTH = ')[^']*(')", lambda m: m.group(1) + f"{ty}年{tm}月" + m.group(2), s, count=1)
     s = re.sub(r"(var VB_YEAR = )\d+(, VB_MON = )\d+(;)",
                lambda m: m.group(1) + str(ty) + m.group(2) + str(tm) + m.group(3), s, count=1)
-    s = re.sub(r"(var VB_RELEASED = ')[^']*(')", lambda m: m.group(1) + released + m.group(2), s, count=1)
+    s = re.sub(r"(var VB_RELEASED = )(?:'[^']*'|null)",
+               lambda m: m.group(1) + f"'{released}'", s, count=1)
     s = re.sub(r"(var VB_RELEASED_TS = )\d+", lambda m: m.group(1) + str(released_ms), s, count=1)
     # 在线真实命中=精确时刻(去「约」)；Wayback 兜底命中=快照近似时刻(加「约」)
     s = re.sub(r"(var VB_RELEASED_EST = )(?:true|false)",
                lambda m: m.group(1) + ("true" if est else "false"), s, count=1)
+    # B1/B4) 来源必须与数值一起落盘。直连命中 = 本系统首见时间戳 → observed(精确到分);
+    # Wayback 兜底 = 外部快照推得 → inferred(只到日,前端不显示时刻)。
+    # 决不允许再出现「按历史规律回填一个整点时刻」那种把估算渲染成观测的情况。
+    src = "inferred" if est else "observed"
+    note = "Wayback 快照" if est else ""
+    s = re.sub(r"(var VB_RELEASED_SOURCE = ')[^']*(')", lambda m: m.group(1) + src + m.group(2), s, count=1)
+    s = re.sub(r"(var VB_RELEASED_NOTE = ')[^']*(')", lambda m: m.group(1) + note + m.group(2), s, count=1)
     # A2) 本月递交用哪张表是 USCIS 另发的决定：手动传入则直接用；否则从 USCIS AOS 页自动判定；判不准则 '?' 待确认
     chart = chart_override if chart_override in ('A', 'B', '?') else (fetch_filing_chart(ty, tm) or "?")
     s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
@@ -894,10 +932,17 @@ def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None):
                    f",\n  ['{bull}','{dff}']\\1", s, count=1)
 
     # 3) 追加发布日到 RELEASE_HISTORY（供"下月发布预测"和未来研究），若该期尚未记录
+    # B4) 首见时间一经写入不得覆写：已存在该期且不是 unknown 占位，就原样保留。
+    # 否则后续运行会用当次探测时刻覆盖真正的首见时刻，把"首见"退化成"最近一次见到"。
     rel_tag = f"{ty}-{tm:02d}"
-    if f"['{rel_tag}'," not in s:
+    placeholder = re.compile(r"\n\s*\['" + re.escape(rel_tag) + r"',\s*null\s*,\s*'unknown'\]")
+    if placeholder.search(s):
+        s = placeholder.sub(f"\n  ['{rel_tag}','{released}','{src}']", s, count=1)
+    elif f"['{rel_tag}'," not in s:
         s = re.sub(r"(\n)(\]; // RELEASE_HISTORY_END)",
-                   f",\n  ['{rel_tag}','{released}']\\1\\2", s, count=1)
+                   f",\n  ['{rel_tag}','{released}','{src}']\\1\\2", s, count=1)
+    else:
+        print(f"[index] {rel_tag} 发布日已存在，保留首见记录不覆写")
 
     with open(INDEX, "w", encoding="utf-8") as f:
         f.write(s)
