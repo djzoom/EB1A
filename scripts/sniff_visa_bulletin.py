@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -62,10 +63,25 @@ def now_et():
     return datetime.now(ET) if ET else datetime.utcnow()
 
 
-def bulletin_url(year, month):
+def bulletin_url(year, month, host="travel.state.gov"):
+    # 财年目录：10-12 月属次年财年(如 october-2026 在 /2027/ 下),1-9 月同年。
+    # 该边界有单元测试(tests/test_bulletin_url.py)守护,改动务必先跑测试。
     fy = year + 1 if month >= 10 else year
-    return ("https://travel.state.gov/content/travel/en/legal/visa-law0/"
+    return (f"https://{host}/content/travel/en/legal/visa-law0/"
             f"visa-bulletin/{fy}/visa-bulletin-for-{MONTHS[month-1]}-{year}.html")
+
+
+def pdf_urls(year, month, host="travel.state.gov"):
+    """PDF 常比 HTML 页早上线,且走 /content/dam/ 另一条路径(WAF 规则可能不同)。
+    历史文件名大小写不统一(visabulletin_september2019.pdf 与 _September2022.pdf 并存),两种都试。"""
+    mon = MONTHS[month - 1]
+    return [f"https://{host}/content/dam/visas/Bulletins/visabulletin_{m}{year}.pdf"
+            for m in (mon.capitalize(), mon)]
+
+
+# 同一内容树在三个 hostname 下镜像,CDN/WAF 配置与缓存 TTL 各不相同——
+# 这是彼此真正独立的冗余(不同于索引页/第三方聚合站那类同源信号)。任一命中即视为已发布。
+HOSTS = ["travel.state.gov", "adoption.state.gov", "childabduction.state.gov"]
 
 
 def next_month(y, m):
@@ -117,10 +133,67 @@ def gate(log, force=False):
     return True, f"{tier}({'已自学习' if tuned else '默认'}窗 {dlo}-{dhi}号 ET{hlo}-{hhi})"
 
 
-def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=25) as r:
+def _nocache_headers():
+    return {"User-Agent": UA, "Cache-Control": "no-cache, max-age=0", "Pragma": "no-cache"}
+
+
+def _cachebust(url):
+    """travel.state.gov 在 CDN 后,不同边缘节点 TTL 不同——同一时刻用户手机能开的页,
+    爬虫可能拿到旧副本。加随机 query 强制穿透边缘缓存。"""
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}_cb={int(time.time())}"
+
+
+def fetch(url, nocache=True):
+    req = urllib.request.Request(url, headers=_nocache_headers())
+    with urllib.request.urlopen(_cachebust(url) if nocache else url, timeout=25) as r:
         return r.getcode(), r.read().decode("utf-8", "ignore")
+
+
+def probe_pdf(ty, tm, host):
+    """PDF 探测:HEAD 优先,405 回退到 Range GET。返回命中的 URL 或 None。
+    注意某些配置下 404 会返回 200+HTML 错误页,故必须校验 Content-Type 含 pdf。"""
+    for url in pdf_urls(ty, tm, host):
+        for method, extra in (("HEAD", {}), ("GET", {"Range": "bytes=0-1023"})):
+            try:
+                req = urllib.request.Request(_cachebust(url), method=method,
+                                             headers={**_nocache_headers(), **extra})
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    if r.getcode() in (200, 206) and "pdf" in (r.headers.get("Content-Type") or "").lower():
+                        return url
+                break                       # 拿到非 200/非 pdf 的确定答复,不必再换 method
+            except urllib.error.HTTPError as e:
+                if e.code == 405 and method == "HEAD":
+                    continue                # 该主机禁 HEAD → 换 Range GET
+                break                       # 404 等确定性响应:该候选不存在
+            except Exception:
+                break
+    return None
+
+
+def probe_published(ty, tm):
+    """跨三个镜像主机 + HTML/PDF 两条通道探测某期是否已发布。
+    返回 (html_or_None, evidence_str, strength)：strength ∈ {'strong', None}。
+    强证据 = 月份页 200 且通过命中校验,或 PDF 命中且 Content-Type 正确。"""
+    last_err = ""
+    for host in HOSTS:
+        url = bulletin_url(ty, tm, host)
+        try:
+            _, html = fetch(url)
+            if looks_like_bulletin(html, ty, tm):
+                return html, f"{host} 月份页直连 200 且通过校验", "strong"
+            last_err = f"{host} 返回 200 但未通过命中校验(疑似缓存串月/软404)"
+            print(f"[probe] ⚠️ {last_err}")
+        except urllib.error.HTTPError as e:
+            last_err = f"{host} HTTP {e.code}"
+            if e.code != 404:
+                print(f"[probe] {last_err}")
+        except Exception as e:
+            last_err = f"{host} {type(e).__name__}"
+        pdf = probe_pdf(ty, tm, host)
+        if pdf:
+            return None, f"{host} PDF 已上线({pdf.rsplit('/', 1)[-1]})", "strong"
+    return None, last_err or "全部候选未命中", None
 
 
 def wayback_check(url):
@@ -218,6 +291,17 @@ def parse_eb1_china(html, debug=False):
         if debug:
             print(f"[debug] {label!r} 表头@{m.start()} → 1st 段: {(m2.group(1)[:90] if m2 else '未找到 1st')!r}")
         return _china_from_row(m2.group(1)) if m2 else None
+
+    # 结构守卫：DOS 偶尔调整表结构，静默降级会让错误数据悄悄写进 index.html。
+    # 就业类正表固定有 10 个 preference 行；实测到的行标签少于 8 个即判定结构已变，抛异常。
+    EB_ROWS = [r"\b1st\b", r"\b2nd\b", r"\b3rd\b", r"other\s+workers", r"\b4th\b",
+               r"certain\s+religious\s+workers", r"5th\s+unreserved",
+               r"set\s+aside:?\s*rural", r"high\s+unemployment", r"infrastructure"]
+    found = sum(1 for pat in EB_ROWS if re.search(pat, text, re.I))
+    if found < 8:
+        raise ValueError(
+            f"就业类表结构异常：仅识别到 {found}/10 个 preference 行（阈值 8）。"
+            "疑似 DOS 改版或页面被截断——拒绝返回半张表，请核对页面并校准 parse_eb1_china。")
 
     fad = grab(r"Final Action Date")
     dff = grab(r"Dates for Filing")
@@ -514,7 +598,15 @@ def looks_like_bulletin(html, ty, tm):
     """软404/拦截页防线：200 响应必须真的像『(ty,tm) 期签证公告』才算命中。
     直连与 Wayback 快照都可能拿到 200 状态的『页面不存在/拦截』定制页——
     那种页面不会包含 "Visa Bulletin for <Month> <Year>" 标题（Wayback 工具条
-    只含连字符 URL，不会误伤此判断）。"""
+    只含连字符 URL，不会误伤此判断）。
+
+    另:只匹配标题不够——CDN 返回的上一期缓存页也可能因导航/面包屑含目标月名而误判,
+    故再要求正文含 FINAL ACTION DATES(公告正表的固定字样),两条同时满足才算命中。"""
+    up = html.upper()
+    if MONTHS[tm - 1].upper() not in up or str(ty) not in html:
+        return False
+    if "FINAL ACTION DATES" not in up:
+        return False
     return re.search(r"visa\s+bulletin\s+for\s+" + MONTHS[tm - 1] + r"\s+" + str(ty),
                      html, re.I) is not None
 
@@ -524,15 +616,22 @@ def probe_target(ty, tm, tag, log, args, t_now):
     直连失败(403/连接重置/超时等，凡非 404)一律转 Wayback 兜底。"""
     url = bulletin_url(ty, tm)
     est_time, t, html, err = False, t_now, None, ""
-    try:
-        _, html = fetch(url)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
+
+    # 主路径:三个镜像主机 × (HTML 月份页 + PDF) 全试一遍。任一强证据命中即算已发布。
+    html, ev, strength = probe_published(ty, tm)
+    if strength == "strong":
+        print(f"[probe] ✅ 强证据命中 — {ev}")
+        if html is None:
+            # PDF 先上线而 HTML 页尚未同步:已可确认发布,但拿不到可解析的表格。
+            return "pending", (f"{tag} 已发布（强证据：{ev}），但 HTML 页尚未同步、无法解析表格；"
+                               "下一班再取，或用一键人工录入立即上线")
+    else:
+        err = ev
+        print(f"[probe] 三主机 HTML+PDF 均未命中：{ev}")
+        all404 = "404" in ev or "全部候选未命中" in ev
+        if all404:
             print(f"[probe] {tag} 尚未发布 (404)")
             return "404", f"{tag} 尚未发布（404，URL 可达）"
-        err = f"HTTP {e.code}"
-    except Exception as e:
-        err = f"{type(e).__name__}: {str(e)[:80]}"
 
     if html is None:
         # 官网不可达（屏蔽 runner）→ 转 Wayback 兜底判定
@@ -685,7 +784,23 @@ def run(args):
         return "skip", "本月与下月公告均已定案，命中即停"
     order = {"hit": 0, "pending": 1, "404": 2, "error": 3, "skip": 4}
     results.sort(key=lambda r: order.get(r[0], 9))
-    return results[0][0], "；".join(d for _, d in results)
+    status, detail = results[0][0], "；".join(d for _, d in results)
+
+    # 逾期未命中 → critical 告警。历史 12 期发布日全部落在 12–20,超过 20 号仍拿不到,
+    # "探测器坏了"的可能性已高于"官方延迟"——2026-09 期就是这样被 403 漏抓、
+    # 却在页面上误报成「尚未发布」。此时必须主动叫人,不能继续沉默。
+    if status not in ("hit", "pending") and t.day > 20:
+        ny, nm = next_month(*cur)
+        tag = f"{ny}-{nm:02d}"
+        if not any(r.get("bulletin") == tag and not r.get("partial") for r in log):
+            body = (f"⚠️ {tag} 期已超出历史发布窗口(12–20 号)仍未探到，今日 {t.day} 号。"
+                    "疑似探测通道失效而非官方延迟，请手工核对 travel.state.gov 并按需人工录入。")
+            print(f"[alert] {body}")
+            _emit_env("BARK_TITLE", "EB1A 探测异常⚠️（逾期未命中）")
+            _emit_env("BARK_BODY", body)
+            notify_bark("EB1A 探测异常⚠️（逾期未命中）", body,
+                        "https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html")
+    return status, detail
 
 
 def main():
