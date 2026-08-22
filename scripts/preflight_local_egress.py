@@ -73,53 +73,71 @@ def main():
     # 取上个月那期：一定已发布，因此 200 才是「通道通 + 资源在」的干净证据。
     py, pm = (t.year - 1, 12) if t.month == 1 else (t.year, t.month - 1)
 
-    checks = [
-        ("DOS 公告索引页", DOS_INDEX, "GET", True),
-        (f"DOS {py}-{pm:02d} 月份页", bulletin_url(py, pm), "GET", True),
-        (f"DOS {py}-{pm:02d} PDF", pdf_urls(py, pm)[0], "HEAD", True),
-        ("USCIS AOS 用表页", USCIS_AOS, "GET", True),
-        ("USCIS 数据目录", f"{USCIS_DATA}/", "HEAD", False),
+    # 判定口径必须与探测器一致：probe_published() 会挨个试三个镜像主机 + PDF，
+    # 任一命中即算「已发布」。所以 travel.state.gov 单独被挡不等于不可用——
+    # 实测存在「travel 403 但 adoption/childabduction 200」的出口（WAF 按 hostname 配规则）。
+    bulletin_checks = [
+        (f"DOS {py}-{pm:02d} 月份页", bulletin_url(py, pm), "GET"),
+        (f"DOS {py}-{pm:02d} PDF", pdf_urls(py, pm)[0], "HEAD"),
     ]
-    # 镜像主机：任一可用即够，逐个记录但不单独否决。
     for h in HOSTS[1:]:
-        checks.append((f"镜像 {h}", bulletin_url(py, pm, h), "GET", False))
+        bulletin_checks.append((f"镜像 {h} 月份页", bulletin_url(py, pm, h), "GET"))
+    # USCIS 是独立的第二数据源(AOS 递交用表)，与公告通道分开判定：
+    # 公告能抓、USCIS 抓不到 → 仍然可用，只是用表要人工补。
+    uscis_checks = [
+        ("USCIS AOS 用表页", USCIS_AOS, "GET"),
+        ("USCIS 数据目录", f"{USCIS_DATA}/", "HEAD"),
+    ]
+    other_checks = [("DOS 公告索引页", DOS_INDEX, "GET")]
 
-    results, blocked, key_blocked = [], 0, 0
-    for name, url, method, key in checks:
-        code, err = probe(url, method)
-        results.append((name, code, err, key))
-        if code == 403:
-            blocked += 1
-            if key:
-                key_blocked += 1
+    def run(items):
+        out = []
+        for name, url, method in items:
+            code, err = probe(url, method)
+            out.append((name, code, err))
+        return out
+
+    ok_codes = (200, 206, 404, 405)
+    b_res, u_res, o_res = run(bulletin_checks), run(uscis_checks), run(other_checks)
+    b_ok = [n for n, c, _ in b_res if c in ok_codes]
+    u_ok = [n for n, c, _ in u_res if c in ok_codes]
+    net_err = [n for n, c, _ in b_res + u_res if c is None]
 
     if not args.quiet:
         ip = egress_ip()
         print(f"出口 IP: {ip or '查询失败(不影响判定)'}")
         print(f"探测基准期: {py}-{pm:02d}（上一期，官方一定已发布）\n")
-        for name, code, err, key in results:
-            mark = {403: "✗ 被挡", None: "? 网络异常"}.get(code, "✓ 通")
-            if code in (404, 405):
-                mark = "✓ 通"
-            flag = "[关键]" if key else "      "
-            print(f"{flag} {_pad(name, 32)} {str(code or '—'):>5}  {mark}  {err}")
+        for label, res in (("公告通道（任一通即可）", b_res),
+                           ("USCIS 通道（用表判定）", u_res),
+                           ("参考项（不参与判定）", o_res)):
+            print(f"— {label}")
+            for name, code, err in res:
+                mark = "✓ 通" if code in ok_codes else ("✗ 被挡" if code == 403 else "? 网络异常")
+                print(f"   {_pad(name, 34)} {str(code or '—'):>5}  {mark}  {err}")
         print()
 
-    if key_blocked:
-        print(f"结论：不可用 —— {key_blocked} 个关键通道返回 403，这条出口被 WAF 挡了。")
-        print("      若当前在云 VPS / 公司网络 / 机房 VPN 上，换成家庭宽带再跑一次。")
-        return 1
-    if any(c is None for _, c, _, k in results if k):
-        print("结论：未定 —— 关键通道出现网络异常（超时/重置），不等于被封。")
+    if b_ok:
+        via = "、".join(b_ok)
+        if u_ok:
+            print(f"结论：可用 —— 公告通道 {len(b_ok)}/{len(b_res)} 条通（{via}），USCIS 通道也通。")
+            print("      执行 scripts/setup_local_runner.sh 继续。")
+            return 0
+        print(f"结论：基本可用 —— 公告通道通（{via}），但 USCIS 被挡。")
+        print("      能自动抓到排期，递交用表(表A/表B)需人工补判。仍值得装 runner。")
+        return 0
+
+    if net_err:
+        print(f"结论：未定 —— {len(net_err)} 个通道网络异常（超时/重置），不等于被封。")
         print("      检查本机代理设置后重跑；连续两次异常再判为不可用。")
         proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
         if proxy:
             print(f"      注意：当前设了 HTTPS_PROXY={proxy}——抓取会走代理出口而非本机 IP，"
                   "先 unset 再跑。")
         return 1
-    print(f"结论：可用 —— 关键通道全部放行（被挡 {blocked} 个非关键镜像）。")
-    print("      这台机器适合做自建 runner，执行 scripts/setup_local_runner.sh 继续。")
-    return 0
+
+    print(f"结论：不可用 —— {len(b_res)} 条公告通道全部被挡（含 {len(HOSTS)} 个镜像主机 + PDF）。")
+    print("      若当前在云 VPS / 公司网络 / 机房 VPN 上，换成家庭宽带再跑一次。")
+    return 1
 
 
 if __name__ == "__main__":

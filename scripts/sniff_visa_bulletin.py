@@ -488,19 +488,29 @@ def selftest():
     if not vy:
         return "error", "selftest: 读不到 VB_YEAR/VB_MON"
     url = bulletin_url(vy, vm)
-    print(f"[selftest] 抓取已发布的 {vy}-{vm:02d} 公告校验解析器：{url}")
-    html = None
-    try:
-        code, html = fetch(url)
-    except Exception as e:
-        # 官网屏蔽 runner 时改用 Wayback 快照校验——否则解析器防线因 403 永远失效
-        note = f"HTTP {e.code}" if isinstance(e, urllib.error.HTTPError) else type(e).__name__
+    print(f"[selftest] 抓取已发布的 {vy}-{vm:02d} 公告校验解析器")
+    # 必须与 probe_published() 同口径挨个试三个镜像主机：WAF 是按 hostname 配规则的,
+    # 实测存在 travel.state.gov 403 而 adoption/childabduction 200 的出口。
+    # 只打 travel 会让这类网络上的 selftest 白白退到 Wayback,甚至误判成"通道不通"。
+    html, note = None, ""
+    for host in HOSTS:
+        u = bulletin_url(vy, vm, host)
+        try:
+            code, html = fetch(u)
+            print(f"[selftest] {host} 直连 HTTP {code}")
+            break
+        except Exception as e:
+            note = f"HTTP {e.code}" if isinstance(e, urllib.error.HTTPError) else type(e).__name__
+            print(f"[selftest] {host} {note}")
+            html = None
+    if html is None:
+        # 三个主机全堵时改用 Wayback 快照校验——否则解析器防线因 403 永远失效
         wb = wayback_check(url)
         if not wb:
-            return "error", f"selftest 直连失败({note})且 Wayback 无该期快照——无法校验解析器"
+            return "error", f"selftest 三个主机全部失败(末次 {note})且 Wayback 无该期快照——无法校验解析器"
         try:
             code, html = fetch(wb[0])
-            print(f"[selftest] 直连失败({note})，改用 Wayback 快照({wb[1]:%Y-%m-%d})校验")
+            print(f"[selftest] 直连全失败(末次 {note})，改用 Wayback 快照({wb[1]:%Y-%m-%d})校验")
         except Exception as e2:
             return "error", f"selftest Wayback 快照取回失败：{type(e2).__name__}: {str(e2)[:100]}"
     fad, dff = parse_eb1_china(html, debug=True)
