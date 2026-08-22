@@ -553,7 +553,7 @@ var USCIS_CHART_URL = 'https://www.uscis.gov/green-card/green-card-processes-and
                       'visa-availability-priority-dates/adjustment-of-status-filing-charts-from-the-visa-bulletin';
 function chartLabel() {
   if (FILING_CHART === 'A' || FILING_CHART === 'B') return '表' + FILING_CHART;
-  var link = ' <a href="' + USCIS_CHART_URL + '" target="_blank" rel="noopener">USCIS 官方页</a>';
+  var link = ' <a href="' + USCIS_CHART_URL + '" target="_blank" rel="noopener">查 USCIS</a>';
   if (typeof FILING_CHART_STATE !== 'undefined' && FILING_CHART_STATE === 'error') {
     return '<span class="vb-warn">获取失败</span>' + link;
   }
@@ -562,8 +562,8 @@ function chartLabel() {
     ? new Date(VB_RELEASED) : new Date(VB_YEAR, VB_MON - 1, 1);
   var days = Math.floor((Date.now() - base.getTime()) / MS_PER_DAY);
   return days > 7
-    ? '<span class="vb-warn">USCIS 未公布（已超常规）</span>' + link
-    : 'USCIS 尚未公布';
+    ? '<span class="vb-warn">USCIS 逾期未公布</span>' + link
+    : '<span style="color:var(--text3)">待 USCIS 公布</span>';
 }
 
 var PARAM_META = {
@@ -1997,42 +1997,23 @@ function renderBulletinPanel() {
               '<span style="color:var(--text3)">（需至少 2 期可信发布日）</span>';
   } else {
     var tn = todayET();
-    function ym(d) { return d ? (d.getFullYear() + '/' + (d.getMonth() + 1)) : '?'; }
-    // 区分「历史中心」与「历史极值」：极值只出现过一次也会拉宽区间，让用户误把极值当常态。
-    var winTxt = '中心 ' + md(pr.est) + '（±' + pr.sd.toFixed(1) + '天 → ' + md(pr.lo) + '–' + md(pr.hi) + '）'
-               + '；历史极值 ' + md(pr.extLo) + '–' + md(pr.extHi)
-               + '（近 ' + pr.n + ' 期，' + ym(pr.spanFrom) + '–' + ym(pr.spanTo) + '）';
+    // 主视图只留结论。统计口径(斜率/残差/漂移算法/样本量)属内部诊断，不上屏。
+    var winTxt = '常见 ' + md(pr.lo) + '–' + md(pr.hi);
     var driftTxt = Math.abs(pr.drift) > 2
-      ? '<br><span class="vb-warn">发布日近期' + (pr.drift > 0 ? '后移' : '前移') + ' '
-        + Math.abs(pr.drift).toFixed(1) + ' 天（后半段均值 vs 前半段）</span>'
-      : '';
-    // 月份效应与趋势项分歧时两者都摆出来，不取中间数装作确定。
+      ? ' <span style="color:var(--text3)">·近期偏' + (pr.drift > 0 ? '晚' : '早') + '</span>' : '';
     var fyTxt = '';
-    if (pr.fyHypo) {
-      fyTxt = '<br><span style="color:var(--text3)">10 月为新财年首月，DOS 有动机尽早公布新财年数字'
-            + (pr.fyHypo.n > 0
-                ? '；本站已记录的 10 月号发布日：' + pr.fyHypo.days.join('、') + ' 号'
-                  + (pr.fyHypo.n < 3 ? '（样本仅 ' + pr.fyHypo.n + ' 期，<b>仅作假设、未据以调整上述中心</b>）' : '')
-                : '（本站暂无 10 月号发布日样本，仅作假设）')
-            + '</span>';
-    }
     if (tn > dOnly(pr.hi)) {
       // 逾期未命中 ≠ 未发布。「没有证据」与「有证据表明没有」证据强度完全不同：
       // 逾期越多，"探测器坏了"的后验概率越高于"DOS 延迟了"。此处禁止再显示「尚未发布」，
       // 改为明示探测异常并引导人工核对官网（2026-09 期即因 403 漏抓被误报成未发布）。
-      relLine = '<b class="vb-warn">⚠️ 探测异常：已超出历史发布窗口，未能确认状态</b><br>' +
-                winTxt + '；本工具未能连上官网核实，<b>不等于官方没发</b>。请手工核对 ' +
+      relLine = '<b class="vb-warn">已过常见发布窗口，未能确认</b> ' +
                 '<a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html"' +
-                ' target="_blank" rel="noopener">travel.state.gov 官方公告</a>';
+                ' target="_blank" rel="noopener">查官网</a>';
     } else if (tn >= dOnly(pr.lo)) {
-      relLine = '预计发布：<b>随时可能（今起～' + md(pr.hi) + '）</b> — ' + winTxt + driftTxt + fyTxt;
+      relLine = '预计发布：<b>随时可能</b>（今起～' + md(pr.hi) + '）' + driftTxt;
     } else {
-      // 输出区间而非点估计：单日"约 X 月 X 日（周几）"是伪精确——残差标准差就有 ±2 天，
-      // 精确到星期几毫无依据。改为「区间 + 中心」。
-      relLine = '预计发布：<b>' + md(pr.lo) + '–' + md(pr.hi) + '</b>（中心 ' + md(pr.est) + '）' +
-                '<br><span style="color:var(--text3)">按近 ' + pr.n + ' 期线性趋势外推，' +
-                '斜率 ' + (pr.slope >= 0 ? '+' : '') + pr.slope.toFixed(2) + ' 天/期；' +
-                '历史极值 ' + md(pr.extLo) + '–' + md(pr.extHi) + '</span>' + driftTxt + fyTxt;
+      // 区间而非点估计：单日"约 X 月 X 日（周几）"是伪精确——残差就有 ±2 天。
+      relLine = '预计发布：<b>' + md(pr.lo) + '–' + md(pr.hi) + '</b>' + driftTxt;
     }
   }
 
@@ -2064,37 +2045,39 @@ function renderBulletinPanel() {
   var staleBase = VB_RELEASED ? dOnly(new Date(VB_RELEASED)) : new Date(VB_YEAR, VB_MON - 1, 1);
   var staleDays = Math.floor((todayET() - staleBase) / MS_PER_DAY);
   var staleHtml = staleDays > 30
-    ? '<span class="vb-stale">⚠️ 上方数据已 ' + staleDays + ' 天未更新（正常约每月一期）。' +
-      '自动同步很可能已失效，页面所示未必是最新一期——请以 ' +
+    ? '<span class="vb-stale">⚠️ 已 ' + staleDays + ' 天未更新，未必是最新一期 · ' +
       '<a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html"' +
-      ' target="_blank" rel="noopener">官方公告</a> 为准。</span>'
+      ' target="_blank" rel="noopener">查官网</a></span>'
     : '';
+  // 面板只放用户真正要看的：本期数值、下期预计发布、下期预测区间。
+  // 内部诊断(首见记录缺失原因、回归斜率、漂移的统计口径、样本量免责)一律不上主视图——
+  // 「不知道」时直接不显示发布行即可,把我们怎么坏的解释一遍并不能帮到任何人。
+  var relDisp = (VB_RELEASED && VB_RELEASED_SOURCE !== 'unknown')
+    ? '<br>发布：<b>' + releasedDisplay() + '</b> <span style="color:var(--text3)">· '
+      + relReleaseText() + '</span>'
+    : '';
+  var fyLine = (band && isFyReset)
+    ? '<br><span style="color:var(--text3)">' + nm + ' 月是新财年首月，历来跳幅最大</span>' : '';
+  function bandTxt(off) {
+    var a = Math.min(band.lo, band.hi) + off, b2 = Math.max(band.lo, band.hi) + off;
+    return '<b>' + ymd(band.mid + off) + '</b> <span style="color:var(--text3)">（'
+         + ymd(a) + ' ~ ' + ymd(b2) + '）</span>';
+  }
   el.innerHTML =
     '<div class="vb-latest' + (isNew ? ' is-new' : '') + '">' +
-    '<p style="margin:0"><span class="step">最新公告 · ' + VB_MONTH + '</span>' +
-      deltaHtml + '<br>' +
-      '发布：<b>' + releasedDisplay() + '</b> <span style="color:var(--text3)">· ' + relReleaseText() + '</span><br>' +
+    '<p style="margin:0"><span class="step">最新公告 · ' + VB_MONTH + '</span>' + deltaHtml +
+      relDisp + '<br>' +
       '表A 最终裁定：<b>' + ymd(aNow) + '</b>　·　表B 递交：<b>' + ymd(bNow) + '</b><br>' +
       '本月 AOS 递交用：<b style="color:var(--blue)">' + chartLabel() + '</b></p>' + staleHtml + '</div>' +
     '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
       relLine + '<br>' +
-      '近期发布：<span style="color:var(--text3)">' + recentReleasesText(4) + '</span><br>' +
       (band
-        // 区间一律按日期升序显示。注意此处「靠后的 cutoff」= 推进更快，与顶部大数字的
-        // 快/慢(日期越早越快)方向相反——故不套用快/慢标签，只写区间，避免读反。
-        ? '预测表A：<b>' + ymd(band.mid) + '</b>（区间 ' + ymd(Math.min(band.lo, band.hi)) +
-            ' ~ ' + ymd(Math.max(band.lo, band.hi)) + '）<br>' +
-          '预测表B：<b>' + ymd(band.mid + lead) + '</b>（区间 ' +
-            ymd(Math.min(band.lo, band.hi) + lead) + ' ~ ' + ymd(Math.max(band.lo, band.hi) + lead) + '）'
-        : '预测表A：<b>' + range(aNow, advA) + '</b><br>预测表B：<b>' + range(bNow, advB) + '</b>') +
-      (band && isFyReset
-        ? '<br><span class="vb-warn">↑ ' + nm + ' 月为新财年首月：配额重置且前置投放全年约三分之一，'
-          + '历来是全年跳幅最大的一期</span>'
-        : '') + '</p>' +
-    '<p class="explain-note">' + (band
-      ? '下月数值取自上方图表所用的蒙特卡洛模型（粗体为中位数，括号内为 10–90 分位区间），已计入财年配额节奏；'
-      : '下月数值为按近期推进速度的估算；') +
-      '月度移动有较大不确定性（常见停滞或跳进），一切以官方公告为准。</p>';
+        // 区间按日期升序。此处「靠后的 cutoff」= 推进更快，与顶部大数字的快/慢方向相反，
+        // 故不套用快/慢标签，只写区间，避免读反。
+        ? '表A：' + bandTxt(0) + '<br>表B：' + bandTxt(lead)
+        : '表A：<b>' + range(aNow, advA) + '</b><br>表B：<b>' + range(bNow, advB) + '</b>') +
+      fyLine + '</p>' +
+    '<p class="explain-note">括号内为模型 10–90 分位区间；月度移动不确定性大，以官方公告为准。</p>';
   updateBulletinDot();
   // 看过几秒后自动标记已读（仅本次加载调度一次）：徽标本次仍显示，下次加载不再提示
   if (isNew && !window._vbSeenScheduled) { window._vbSeenScheduled = true; setTimeout(markBulletinSeen, 3500); }
