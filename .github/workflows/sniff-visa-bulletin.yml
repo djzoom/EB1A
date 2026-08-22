@@ -100,9 +100,11 @@ jobs:
           fi
 
       # 补判本月递交用表：FILING_CHART 仍为 '?' 时从 USCIS AOS 页确认(USCIS 常滞后公告 1-2 天)。
-      # 仅 '?' 时才抓 USCIS；判定到则改 index.html → 下面的 create-PR 自动收口、自动合并上线。
-      - name: Resolve filing chart if pending
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.drill && !inputs.backfill && !inputs.selftest && !inputs.announce) }}
+      # ⚠️ 只在自建 runner(住宅 IP)上跑。USCIS 对托管 runner 返 403 → 状态被写成
+      # 「获取失败」→ index.html 变了 → 自动开 PR → Bark 误报「探测到新签证公告」。
+      # 2026-08-22 真实发生过一次。日常由本机 cron scripts/uscis_chart_watch.sh 值守。
+      - name: Resolve filing chart if pending (residential IP only; USCIS 403s hosted runners)
+        if: ${{ runner.environment == 'self-hosted' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.drill && !inputs.backfill && !inputs.selftest && !inputs.announce)) }}
         run: python scripts/sniff_visa_bulletin.py --filing-chart
 
       # 数据若改动则开 PR；无改动时静默跳过（不建 PR）。
