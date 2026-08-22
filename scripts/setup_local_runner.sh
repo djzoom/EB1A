@@ -107,24 +107,29 @@ else
   echo "已尝试禁用挂起（无 systemd 时请自行确认）。"
 fi
 
-step "6/6 最后一步：在 GitHub 打开开关"
+step "6/6 安装完成——但默认是【关】的"
 cat <<EOF
 
-runner 已就绪，但工作流还没切过来。到：
+runner 已装好并注册，但抓取类工作流还没切过来（RUNNER_LABEL 变量未设）——
+这是故意的：装好 ≠ 一直开着。用开关脚本按需开合：
 
-  $REPO_URL/settings/variables/actions
+  bash scripts/runner_ctl.sh on       # 打开：起服务 + 设变量，工作流切到本机
+  bash scripts/runner_ctl.sh off      # 关闭：删变量 + 停服务，回退 ubuntu-latest
+  bash scripts/runner_ctl.sh status   # 看服务/变量/当前该不该开
 
-新建仓库变量：
-  Name : RUNNER_LABEL
-  Value: eb1a-fetch
+改变量需要凭据，二选一（只配一次）：
+  gh auth login
+  echo '<细粒度 PAT，本仓库 Variables=Read and write>' > ~/.eb1a_gh_token && chmod 600 ~/.eb1a_gh_token
 
-设上 = 抓取类工作流走这台机器；删掉 = 立刻回退 ubuntu-latest（逃生口）。
+想让它自己开合（每月排期窗自动打开、抓到后自动关）：
+  bash scripts/runner_ctl.sh --install-auto
 
-验证（约 1 分钟）：
+掉线报警（建议装上，防静默排队漏抓）：
+  echo '<你的 BARK_KEY>' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key
+  bash $REPO_ROOT/scripts/runner_watchdog.sh --install
+
+验证（先 on，再触发一次）：
   $REPO_URL/actions/workflows/sniff-visa-bulletin.yml
   → Run workflow，勾 selftest → 看日志里 403 是否变成 200
-
-看门狗（强烈建议，防机器掉线后静默排队）：
-  bash $REPO_ROOT/scripts/runner_watchdog.sh --install
 
 EOF

@@ -74,6 +74,13 @@ case "${1:-}" in
   *) echo "未知参数 $1（可用：--install / --remove）" >&2; exit 2 ;;
 esac
 
+# ⓪ 开关关着就别巡检：故意关掉的 runner 不是故障，报警只会变成噪音。
+SWITCH="$(bash "$REPO_ROOT/scripts/runner_ctl.sh" state 2>/dev/null || echo unknown)"
+if [ "$SWITCH" = off ]; then
+  log "开关处于【关】——跳过巡检（打开：bash scripts/runner_ctl.sh on）"
+  exit 0
+fi
+
 fail=0
 
 # ① runner 服务在不在

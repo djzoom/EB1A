@@ -17,10 +17,19 @@ echo '<你的 BARK_KEY>' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key
 bash scripts/runner_watchdog.sh --install
 ```
 
-⑤ 最后到 `Settings → Secrets and variables → Actions → Variables` 新建
-`RUNNER_LABEL = eb1a-fetch` —— 这才是真正的开关。删掉变量即刻回退托管 runner。
+⑤ 配一次改变量的凭据，然后开关随手用：
 
-⑥ 验证：Actions → Sniff Visa Bulletin → Run workflow，勾 `selftest`，看日志里 403 是否变 200。
+```bash
+gh auth login            # 或：echo '<PAT>' > ~/.eb1a_gh_token && chmod 600 ~/.eb1a_gh_token
+
+bash scripts/runner_ctl.sh on       # 排期快到了，打开
+bash scripts/runner_ctl.sh off      # 抓到了，关掉
+bash scripts/runner_ctl.sh status   # 看现在什么状态
+
+bash scripts/runner_ctl.sh --install-auto   # 想省心：自动开、自动关
+```
+
+⑥ 验证：先 `on`，再 Actions → Sniff Visa Bulletin → Run workflow 勾 `selftest`，看日志里 403 是否变 200。
 
 下面是每一步的原理与排障细节。
 
@@ -137,21 +146,83 @@ python3 --version   # 确认 ≥ 3.11
 
 ---
 
-## 三、切到自建 runner
+## 三、开关：手动开合 / 自动开合
 
-工作流的 `runs-on` 读仓库变量 `RUNNER_LABEL`，**没设时默认用 GitHub 托管**，
-所以随时可一键切换、一键回退：
+### 3.0 先分清两个东西
 
+| | 是什么 | 状态在哪 |
+|---|---|---|
+| `RUNNER_LABEL` 变量 | **真正的开关**——决定抓取类工作流的活派给谁 | GitHub 仓库变量 |
+| 本机 runner 服务 | 有没有人接活 | 你机器上的 launchd / systemd |
+
+变量没设时，本机服务即使在跑也只是空转、接不到任何活。所以：
+
+- **开**：先起服务、后设变量（避免活派过来却没人接）
+- **关**：先删变量、后停服务（避免活堆在本机队列里排队）
+
+`runner_ctl.sh` 就是按这个顺序做的，别手动分开操作。
+
+### 3.1 手动开合（日常用法）
+
+```bash
+bash scripts/runner_ctl.sh on       # 打开
+bash scripts/runner_ctl.sh off      # 关闭
+bash scripts/runner_ctl.sh status   # 服务 / 变量 / 当前该不该开，三行看全
+bash scripts/runner_ctl.sh state    # 只打印 on|off|unknown（给脚本用）
 ```
-Settings → Secrets and variables → Actions → Variables → New repository variable
-  Name:  RUNNER_LABEL
-  Value: eb1a-fetch
+
+改 GitHub 变量需要凭据，二选一，只配一次：
+
+```bash
+gh auth login                                    # ① 装了 gh CLI 最省事
+echo 'github_pat_xxx' > ~/.eb1a_gh_token         # ② 细粒度 PAT
+chmod 600 ~/.eb1a_gh_token                       #    权限：本仓库 Variables = Read and write
 ```
 
-- **设为 `eb1a-fetch`** → 抓取类工作流走你的自建 runner
-- **删掉该变量** → 立刻回退到 `ubuntu-latest`（出问题时的逃生口）
+> PAT 只需要 Variables 读写这一项权限，别给多。这个文件别同步到网盘。
+> 没有凭据时脚本会提示你手动改：
+> `Settings → Secrets and variables → Actions → Variables`。
 
-只有需要外网抓取的两个工作流读这个变量：
+节奏大致是：每月 7 号前后打开 → 公告出来、数据自动上线并推送到手机 → 确认后关掉。
+一个月开着一到两周，其余时间机器上什么都不跑。
+
+### 3.2 自动开合（装上就不用管）
+
+```bash
+bash scripts/runner_ctl.sh --install-auto   # 每小时 :05 判定一次
+bash scripts/runner_ctl.sh --remove-auto    # 卸载
+```
+
+判定逻辑在 `scripts/runner_window.py`，与探测器 `run()` 的目标口径一致
+（当月 + 下月中所有尚未定案的期），可以单独跑来看它怎么想的：
+
+```bash
+python3 scripts/runner_window.py --verbose
+```
+
+四条规则，按顺序：
+
+1. **当月期还没定案** → 开。说明上一轮发布被错过了，探测器会绕过发布窗门控直接补探。
+2. **下月期未定案 + 今天在 7–26 号** → 开。这是常规发布窗（历史实际落在 12–20 号，前后都留了缓冲）。
+3. **公告已定案，但 USCIS 递交用表还是 `?`** → 继续开，最多 7 天。
+   USCIS 的 AOS 页通常比公告滞后 1–2 天，抓它同样要住宅 IP——
+   抓到公告就关，用表会永远停在「待确认」。
+4. **其余** → 关。
+
+判定读的是 GitHub 上 `main` 的实时状态（`release_log.json` + `index.html`），
+不是你本地 clone，所以本地仓库旧了也不影响。读不到时**按开处理**——
+宁可多开一会儿，也别漏掉当期公告。
+
+> **自动模式的已知缺口**：27 号–6 号这段窗外时间是关着的，交给托管 runner
+> 的稀疏哨兵（它会 403）。历史 12 期发布日全部落在 12–20 号，所以风险很小；
+> 真出现极端早发，规则 1 会在下个月 1 号把它捞回来（当月期未定案 → 开 → 补探）。
+
+手动和自动可以混用：手动 `on` 之后，下一次 auto 判定若认为该关，会把它关掉。
+想让它别插手，先 `--remove-auto`。
+
+### 3.3 哪些工作流读这个变量
+
+只有需要外网抓取的两个工作流读 `RUNNER_LABEL`（`runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}`）：
 
 | 工作流 | 是否走自建 | 原因 |
 |---|---|---|
@@ -159,6 +230,9 @@ Settings → Secrets and variables → Actions → Variables → New repository 
 | `sniff-visa-bulletin.yml` | ✅ | 抓 DOS 签证公告，需绕 403 |
 | `deploy-pages.yml` | ❌ 固定托管 | Pages 部署依赖 GitHub 环境，且不抓外网 |
 | `package-offline.yml` | ❌ 固定托管 | 只打包，不抓外网 |
+
+删掉变量 = 立刻回退 `ubuntu-latest`，这是任何时候都能用的逃生口
+（`runner_ctl.sh off` 做的就是这件事，外加停掉本机服务）。
 
 ---
 
@@ -198,6 +272,8 @@ Actions → Check Data Updates → Run workflow
 ---
 
 ## 五、运维注意
+
+**开关关着时，看门狗会自动跳过巡检**——故意关掉的 runner 不是故障，不该报警。
 
 **机器离线时任务会排队。** 自建 runner 掉线后，指向它的 job 会一直等，
 GitHub 最多等 24 小时才取消。签证公告探测在发布窗内每 10 分钟一次，

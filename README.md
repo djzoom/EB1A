@@ -50,6 +50,7 @@ EB1A/
 ```bash
 python3 scripts/preflight_local_egress.py   # 先确认本机出口没被挡
 bash scripts/setup_local_runner.sh <令牌>    # 再装
+bash scripts/runner_ctl.sh on               # 排期窗打开，抓到后 off；--install-auto 可自动开合
 ```
 
 ## 关键数据源
