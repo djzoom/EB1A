@@ -360,7 +360,7 @@
       <div class="result-lead" id="result-lead">预计排到</div>
       <span class="result-date" id="hero-value">--</span>
       <span class="result-sub" id="hero-sub">距今约 --</span>
-      <span class="result-note">仅供参考的统计估算 · 非官方、非法律建议 · 以官方公告为准</span>
+      <span class="result-note">统计估算 · 非官方 · 以官方公告为准</span>
     </div>
     <div class="result-chips">
       <span class="stat green" data-pct="p10"><small>快</small> <b id="stat-p10">--</b></span>
@@ -415,10 +415,10 @@
     <div class="tab-panel" id="tab-explain" role="tabpanel">
       <div class="explain-content" id="explain-box"></div>
       <div class="explain-content explain-static">
-        <p><span class="step">表 A 与 表 B</span><br><b>表 A（Final Action Date，最终裁定日）</b>决定何时获批绿卡；<b>表 B（Dates for Filing，递交日期）</b>决定何时可递交 I-485。当月以官方公告指定的表为准，本工具同时呈现两者。</p>
-        <p><span class="step">数据更新</span><br>后台探测器在每期签证公告发布的高发时段（工作日午后）约 10 分钟内捕获，自动更新表 A / 表 B 并部署上线、刷新离线包；并按 USCIS I-485 库存与 I-140 数据持续校准模型。</p>
-        <p><span class="step">隐私</span><br>优先日等信息仅存于本地浏览器（localStorage），不上传服务器。基础数据取自 USCIS 与 DOS 的公开发布。</p>
-        <p><span class="step">安装</span><br>可作为 PWA 添加到主屏幕、离线打开，像原生 App 一样使用。</p>
+        <p><span class="step">表 A 与 表 B</span><br><b>表 A</b>（最终裁定日）决定何时获批；<b>表 B</b>（递交日期）决定何时能递 I-485。每月用哪张由官方指定。</p>
+        <p><span class="step">数据更新</span><br>公告发布后自动抓取更新；模型按 USCIS I-485 库存与 I-140 数据校准。</p>
+        <p><span class="step">隐私</span><br>你填的信息只存在本地浏览器，不上传。</p>
+        <p><span class="step">安装</span><br>可添加到主屏幕，离线可用。</p>
         <p><span class="step">作者</span><br>由 <a href="https://x.com/DJWZ" target="_blank" rel="noopener">0xGarfield · @DJWZ</a> 制作。</p>
         <p class="explain-note">本工具为基于公开数据的统计估算，<b>不构成法律或移民建议</b>。结果受配额、政策、立法及个人情况影响，请以官方签证公告为准，并咨询持牌移民律师。</p>
       </div>
@@ -445,7 +445,7 @@
   <div class="footer">
     EB-1A 中国大陆排期预测 · 自动同步最新签证公告 · 数据源 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a><br>
     本项目开源，采用 <a href="https://github.com/djzoom/EB1A/blob/main/LICENSE" target="_blank" rel="noopener">MIT 协议</a> · 源码 <a href="https://github.com/djzoom/EB1A" target="_blank" rel="noopener">github.com/djzoom/EB1A</a><br>
-    <span class="footer-legal">法律声明：本工具仅为基于公开数据的统计估算，<b>不构成法律或移民建议</b>，亦不对预测准确性作任何保证。实际排期受配额、政策、立法及个人情况影响，请以美国国务院官方签证公告为准，并咨询持牌移民律师。你输入的信息仅存于本地浏览器，绝不上传。</span><br>
+    <span class="footer-legal">本工具为统计估算，<b>不构成法律或移民建议</b>，不保证准确。以官方签证公告为准，并咨询持牌移民律师。你填的信息只存在本地浏览器。</span><br>
     © 2026 djzoom
   </div>
   <table style="display:none"><tbody id="monthly-tbody"></tbody></table>
@@ -575,12 +575,12 @@ var PARAM_META = {
   spilloverROW: {
     label: '其他国家溢出', default: 3500, min: 0, max: 9000, step: 100,
     unit: '签证/年', format: function(v) { return v; },
-    source: { title: '世界其他国家未用完的配额（中国 EB-1 供给的大头）', rows: [{ lbl: '法定基础配额', val: '仅 2,803' },{ lbl: '实际年均发卡', val: '7,012（2014-2024）' },{ lbl: '→ 溢出承担', val: '约 4,200/年' },{ lbl: 'FY2022 峰值年', val: '11,425' },{ lbl: 'FY2020 低点年', val: '4,766' }], methodology: '法定配额只有 2,803，而实际发卡长期在 4,700–11,400 之间，差额全部来自溢出——溢出才是中国 EB-1 供给的主体，且逐年大幅波动', sources: ['DOS IV Issuance', 'data/eb1_china_visas_issued.json'] }
+    source: { title: '世界其他国家未用完的配额（中国 EB-1 供给的大头）', rows: [{ lbl: '法定基础配额', val: '仅 2,803' },{ lbl: '实际年均发卡', val: '7,012（2014-2024）' },{ lbl: '→ 溢出承担', val: '约 4,200/年' },{ lbl: 'FY2022 峰值年', val: '11,425' },{ lbl: 'FY2020 低点年', val: '4,766' }], methodology: '法定配额仅 2,803，实际发卡长期 4,700–11,400，差额全来自溢出。溢出是供给主体，逐年波动大', sources: ['DOS IV Issuance', 'data/eb1_china_visas_issued.json'] }
   },
   spilloverIndia: {
     label: '印度耦合', default: 0, min: -2000, max: 2000, step: 100,
     unit: '签证/年', format: function(v) { return v; },
-    source: { title: '印度 EB-1 与中国在 overflow 中的竞争（按 PD 全球排队分配）', rows: [{ lbl: '正值', val: '印度追上中国→让出 overflow→中国多分' },{ lbl: '负值', val: '印度恶化抢占更多→中国少分' },{ lbl: '当前印度 EB-1', val: '持续 retrogression、比中国靠后' }], methodology: 'EB-1 未用完的 overflow 按 PD 全球排队发：印度若追上中国(不再有更早 PD 积压抢占)则中国多分(正值)；印度恶化抢占更多则中国少分(负值)。当前印度 EB-1 一路退坡、比中国靠后，故偏抢占方向；长期均值接近零', sources: ['DOS IV Issuance', 'Visa Bulletin'] }
+    source: { title: '印度 EB-1 与中国在 overflow 中的竞争（按 PD 全球排队分配）', rows: [{ lbl: '正值', val: '印度追上中国→让出 overflow→中国多分' },{ lbl: '负值', val: '印度恶化抢占更多→中国少分' },{ lbl: '当前印度 EB-1', val: '持续 retrogression、比中国靠后' }], methodology: '溢出按 PD 全球排队发：印度追上中国则中国多分(正值)，印度恶化抢占更多则中国少分(负值)。当前印度靠后，偏抢占方向', sources: ['DOS IV Issuance', 'Visa Bulletin'] }
   },
   eb4eb5Spillover: {
     label: 'EB-4/5 跨类溢出', default: 680, min: 0, max: 1600, step: 50,
@@ -595,17 +595,17 @@ var PARAM_META = {
   densityHigh: {
     label: '排队密度 (2023-2024)', default: 15.3, min: 4, max: 60, step: 0.1,
     unit: '人/天', format: function(v) { return v.toFixed(1); },
-    source: { title: '这个时间段每天有多少人排队（含尚未递 I-485 的人）', rows: [{ lbl: 'I-485 库存实测', val: '~7.0 人/天' },{ lbl: '但那只是「已递件」', val: '下界' },{ lbl: '待签/库存 原始比', val: '×2.45' },{ lbl: '→ 真实密度', val: '~15–20 人/天' },{ lbl: '由实际发卡反推', val: '~15.3' }], methodology: '2026 I-485 库存实测 7.0 主申/PD-日，但库存只含「已递交 I-485」者，是下界；真实排队还包含 PD 未 current、尚不能递件的人。用实际发卡量(6,980/年)与实测推进速度反推，真实密度约 15–21，取 15.3', sources: ['USCIS I-485 Inventory (2026)', 'data/eb1_china_visas_issued.json'] }
+    source: { title: '这个时间段每天有多少人排队（含尚未递 I-485 的人）', rows: [{ lbl: 'I-485 库存实测', val: '~7.0 人/天' },{ lbl: '但那只是「已递件」', val: '下界' },{ lbl: '待签/库存 原始比', val: '×2.45' },{ lbl: '→ 真实密度', val: '~15–20 人/天' },{ lbl: '由实际发卡反推', val: '~15.3' }], methodology: 'I-485 库存实测 7.0 人/天，但只含已递件者，是下界。按实际发卡量与推进速度反推，真实密度约 15–21，取 15.3', sources: ['USCIS I-485 Inventory (2026)', 'data/eb1_china_visas_issued.json'] }
   },
   densityPeak: {
     label: '排队密度 (2024+)', default: 17.2, min: 4, max: 60, step: 0.1,
     unit: '人/天', format: function(v) { return v.toFixed(1); },
-    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: '2023 段真实密度', val: '~15.3 人/天' },{ lbl: '2024+ 略厚', val: '~17.2 人/天' }], methodology: '2023 PD 段真实密度约 15.3 人/天；2024+ PD 的额外需求由下方"未来需求墙"在此基础上再乘', sources: ['USCIS I-485 Inventory'] }
+    source: { title: '最近时段每天有多少人排队 (你所在区域)', rows: [{ lbl: '2023 段真实密度', val: '~15.3 人/天' },{ lbl: '2024+ 略厚', val: '~17.2 人/天' }], methodology: '2024+ PD 的额外需求由下方「未来需求墙」在此基础上再乘', sources: ['USCIS I-485 Inventory'] }
   },
   demandWall: {
     label: '未来需求墙 (I-140 池)', default: 1.7, min: 1.0, max: 2.5, step: 0.1,
     unit: '×', format: function(v) { return v.toFixed(1); },
-    source: { title: '2024+ PD 的隐藏需求 (I-140 待签池)', rows: [{ lbl: 'I-140 待签 (China EB1)', val: '~13,600' },{ lbl: '近半年增量', val: '+429（见顶退潮）' },{ lbl: '收件较峰', val: '−23%' },{ lbl: 'I-485 库存', val: '~5,650' },{ lbl: '原始比', val: '×2.45' },{ lbl: '阻尼后(默认)', val: '×1.7' }], methodology: '2024+ 的 PD 大多还在 I-140 待签池、尚未进 I-485；待 DFF 放开会涌入，使 cutoff 进入 2024 PD 后变慢。原始 待签/库存≈2.45；2026 数据显示待签池已见顶(近半年仅 +429)、收件较峰 −23%，据此由 1.8 下调到 ~1.7 并收窄悲观尾部(仍保留不确定区间,因 f 尚未被 2024 PD 库存钉死)', sources: ['USCIS I-140 Awaiting Visa', 'USCIS I-485 Inventory'] }
+    source: { title: '2024+ PD 的隐藏需求 (I-140 待签池)', rows: [{ lbl: 'I-140 待签 (China EB1)', val: '~13,600' },{ lbl: '近半年增量', val: '+429（见顶退潮）' },{ lbl: '收件较峰', val: '−23%' },{ lbl: 'I-485 库存', val: '~5,650' },{ lbl: '原始比', val: '×2.45' },{ lbl: '阻尼后(默认)', val: '×1.7' }], methodology: '2024+ 的 PD 多在 I-140 待签池、尚未进 I-485，放开后涌入会让 cutoff 变慢。待签/库存原始比 ≈2.45，因待签池已见顶、收件退潮，阻尼到 1.7', sources: ['USCIS I-140 Awaiting Visa', 'USCIS I-485 Inventory'] }
   }
 };
 
@@ -1592,10 +1592,10 @@ function updateSupplyDisplay() {
   var te = document.getElementById('supply-total');
   if (te) te.textContent = '≈ ' + total.toLocaleString() + ' 签证/年';
   var be = document.getElementById('supply-breakdown');
-  if (be) be.innerHTML = '固定基底 <b>' + base.toLocaleString() + '</b> ' + (flt >= 0 ? '+' : '−') +
-    ' 浮动溢出 <b>' + Math.abs(flt).toLocaleString() + '</b>（浮动约占 <b>' + pct +
-    '%</b>，随 ROW 用剩量 / 印度耦合 / FB 转移逐年大幅波动）' +
-    (supplyScenario === 'surge' ? '<br><span style="color:#b45309">FB 大转移：另含 FY27 起小概率大扩容右尾（停签→FB 转移+印度追上→中国可能 current）</span>' : '');
+  if (be) be.innerHTML = '固定 <b>' + base.toLocaleString() + '</b> ' + (flt >= 0 ? '+' : '−') +
+    ' 溢出 <b>' + Math.abs(flt).toLocaleString() + '</b>　溢出占 <b>' + pct + '%</b>，逐年波动大' +
+    (supplyScenario === 'surge'
+      ? '<br><span style="color:#b45309">另含 FY27 起小概率大扩容</span>' : '');
 }
 
 // 切换供给情景：只改浮动溢出 + FY27 右尾，重跑模型
@@ -1672,26 +1672,26 @@ function renderExplanation() {
   var fm = currentParams.familyMultiplier.toFixed(1);
 
   if (gapDays <= 0) {
-    el.innerHTML = '<p>当前排期已推进到 <b>' + formatDate(cutoff) + '</b>，已达到或超过你的优先日 <b>' +
-      formatDate(pd) + '</b>——也就是说你的排期理论上已经 current。一切仍以官方签证公告（Visa Bulletin）为准。</p>';
+    el.innerHTML = '<p>裁定日已推进到 <b>' + formatDate(cutoff) + '</b>，超过你的优先日 <b>' +
+      formatDate(pd) + '</b>——你的排期已 current。以官方公告为准。</p>';
     return;
   }
 
   el.innerHTML =
-    '<p>本工具不外推历史趋势线，而是基于签证供需关系建模，分四步代入你的数字推算：</p>' +
-    '<p><span class="step">① 估算队列长度</span><br>' +
-      '当前裁定日为 <b>' + formatDate(cutoff) + '</b>，你的优先日为 <b>' + formatDate(pd) + '</b>，相差 <b>' +
-      gapDays.toLocaleString() + ' 天</b>。以该时段的排队密度（约 ' + densityRound +
-      ' 人/天）估算，你前方约有 <b>' + queueAhead.toLocaleString() + ' 名主申请人</b>。</p>' +
-    '<p><span class="step">② 估算年消化量</span><br>' +
-      '年度可用签证数 ≈ 法定配额 ' + currentParams.chinaBaseQuota.toLocaleString() + ' ' + spillStr +
-      ' 跨国别/类别溢出 = <b>' + totalSupply.toLocaleString() + ' 个</b>。按家庭系数（平均 ' + fm +
-      ' 人/主申）折算，约可消化 <b>' + mainPerYear.toLocaleString() + ' 名主申请人/年</b>。</p>' +
-    '<p><span class="step">③ 得到中心估计</span><br>' +
-      queueAhead.toLocaleString() + ' ÷ ' + mainPerYear.toLocaleString() + ' ≈ <b>' + yearsEst +
-      ' 年</b>，作为粗略中心值。</p>' +
-    '<p><span class="step">④ 蒙特卡洛模拟</span><br>' +
-      '实际推进非匀速：财年前段发放较快、后段趋缓；每年 10 月新财年配额释放时常见"跳进"（约四分之一年份为大幅跳进）；叠加随机扰动。据此运行 <b>500 次蒙特卡洛模拟</b>，取各路径裁定日追上你优先日的时间分布，输出 <b>快（P10）/ 中（P50）/ 慢（P90）</b> 三档及置信区间。</p>';
+    '<p>按供需建模，非趋势外推：</p>' +
+    '<p><span class="step">① 前方队列</span><br>' +
+      '裁定日 <b>' + formatDate(cutoff) + '</b> 到你的 <b>' + formatDate(pd) + '</b> 相差 <b>' +
+      gapDays.toLocaleString() + ' 天</b>，按 ' + densityRound + ' 人/天算，前方约 <b>' +
+      queueAhead.toLocaleString() + ' 人</b>（主申）。</p>' +
+    '<p><span class="step">② 年消化量</span><br>' +
+      '配额 ' + currentParams.chinaBaseQuota.toLocaleString() + ' ' + spillStr + ' 溢出 = <b>' +
+      totalSupply.toLocaleString() + '</b>，÷ 家庭系数 ' + fm + ' ≈ <b>' +
+      mainPerYear.toLocaleString() + ' 主申/年</b>。</p>' +
+    '<p><span class="step">③ 中心值</span><br>' +
+      queueAhead.toLocaleString() + ' ÷ ' + mainPerYear.toLocaleString() + ' ≈ <b>' + yearsEst + ' 年</b>。</p>' +
+    '<p><span class="step">④ 蒙特卡洛</span><br>' +
+      '推进并非匀速——财年前段快、后段缓，10 月配额重置常有跳进。跑 <b>500 次模拟</b>取分布，' +
+      '给出<b>快 / 中 / 慢</b>三档。</p>';
 }
 
 function renderParams() {
@@ -2077,7 +2077,7 @@ function renderBulletinPanel() {
         ? '表A：' + bandTxt(0) + '<br>表B：' + bandTxt(lead)
         : '表A：<b>' + range(aNow, advA) + '</b><br>表B：<b>' + range(bNow, advB) + '</b>') +
       fyLine + '</p>' +
-    '<p class="explain-note">括号内为模型 10–90 分位区间；月度移动不确定性大，以官方公告为准。</p>';
+    '<p class="explain-note">括号内为 10–90 分位区间，以官方公告为准。</p>';
   updateBulletinDot();
   // 看过几秒后自动标记已读（仅本次加载调度一次）：徽标本次仍显示，下次加载不再提示
   if (isNew && !window._vbSeenScheduled) { window._vbSeenScheduled = true; setTimeout(markBulletinSeen, 3500); }
