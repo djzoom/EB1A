@@ -898,10 +898,18 @@ def main():
         write_run_summary(status, detail)
         return
     if args.send_bark:
-        title = os.environ.get("BARK_TITLE") or "EB1A 排期更新待复核"
-        body = os.environ.get("BARK_BODY") or "探测到新签证公告，已开复核 PR，请核对后合并。"
-        ok = notify_bark(title, body)
-        status, detail = ("hit" if ok else "error"), ("Bark 已发送" if ok else "Bark 未发送(未配置/失败)")
+        # 没有 BARK_TITLE/BARK_BODY 就什么都不发。原来这里兜了一句默认文案
+        # 「探测到新签证公告」——可是它由 workflow 在"PR 被创建"时无条件调用，
+        # 而 PR 也可能只是因为 FILING_CHART_STATE 翻了一下就被创建。
+        # 2026-08-22 就这样对着一次 USCIS 403 谎报了一条"新公告"。
+        # 通知内容必须由真正做出判断的那一步经 $GITHUB_ENV 传进来，不能在这里编。
+        title, body = os.environ.get("BARK_TITLE"), os.environ.get("BARK_BODY")
+        if not body:
+            print("[bark] 未收到 BARK_BODY——上游未产出可通知的结论，跳过推送（不编造文案）")
+            status, detail = "skip", "无 BARK_BODY，跳过推送"
+        else:
+            ok = notify_bark(title or "EB1A 排期更新待复核", body)
+            status, detail = ("hit" if ok else "error"), ("Bark 已发送" if ok else "Bark 未发送(未配置/失败)")
     elif args.announce:
         status, detail = announce()
     elif args.drill:
