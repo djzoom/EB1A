@@ -286,7 +286,12 @@ def parse_eb1_china(html, debug=False):
             if debug:
                 print(f"[debug] 未找到 {label!r} 的 Employment 表头")
             return None
-        seg = text[m.end(): m.end() + 700]
+        # 截到下一张就业表的表头为止（上限 6000 字符），不要用固定小窗口：
+        # 实测 DOS 在表B 前有一大段说明文字，'1st' 行落在 700 字符窗口之外，
+        # 于是表B 每次都靠「全文第 2 个 1st 行」的位置兜底猜回来——猜对是运气。
+        rest = text[m.end():]
+        nxt = re.search(r"(?:Final Action Date|Dates for Filing).{0,80}?Employment", rest, re.I)
+        seg = rest[:min(nxt.start() if nxt else len(rest), 6000)]
         m2 = re.search(r"\b1st\b(.{0,160})", seg, re.I)
         if debug:
             print(f"[debug] {label!r} 表头@{m.start()} → 1st 段: {(m2.group(1)[:90] if m2 else '未找到 1st')!r}")
@@ -309,8 +314,11 @@ def parse_eb1_china(html, debug=False):
     # 兜底：employment 锚定失败时，用全文里第 1/2 个 '1st' 行(FA 在前、DF 在后)
     if fad is None or dff is None:
         rows = re.findall(r"\b1st\b(.{0,160})", text, re.I)
-        if debug:
-            print(f"[debug] 兜底：全文 '1st' 行数={len(rows)}")
+        # 兜底是按位置猜（FA 在前、DF 在后），不是结构化解析。一旦用上就说明 grab()
+        # 的锚定失效了，必须无条件叫出来——否则 DOS 一调结构就会静默取错行。
+        print(f"[parse] ⚠️ 锚定失败，改用位置兜底（全文 '1st' 行数={len(rows)}；"
+              f"表A={'兜底' if fad is None else '正常'}，表B={'兜底' if dff is None else '正常'}）"
+              "——请核对结果并校准 parse_eb1_china")
         if fad is None and len(rows) >= 1:
             fad = _china_from_row(rows[0])
         if dff is None and len(rows) >= 2:
@@ -488,19 +496,29 @@ def selftest():
     if not vy:
         return "error", "selftest: 读不到 VB_YEAR/VB_MON"
     url = bulletin_url(vy, vm)
-    print(f"[selftest] 抓取已发布的 {vy}-{vm:02d} 公告校验解析器：{url}")
-    html = None
-    try:
-        code, html = fetch(url)
-    except Exception as e:
-        # 官网屏蔽 runner 时改用 Wayback 快照校验——否则解析器防线因 403 永远失效
-        note = f"HTTP {e.code}" if isinstance(e, urllib.error.HTTPError) else type(e).__name__
+    print(f"[selftest] 抓取已发布的 {vy}-{vm:02d} 公告校验解析器")
+    # 必须与 probe_published() 同口径挨个试三个镜像主机：WAF 是按 hostname 配规则的,
+    # 实测存在 travel.state.gov 403 而 adoption/childabduction 200 的出口。
+    # 只打 travel 会让这类网络上的 selftest 白白退到 Wayback,甚至误判成"通道不通"。
+    html, note = None, ""
+    for host in HOSTS:
+        u = bulletin_url(vy, vm, host)
+        try:
+            code, html = fetch(u)
+            print(f"[selftest] {host} 直连 HTTP {code}")
+            break
+        except Exception as e:
+            note = f"HTTP {e.code}" if isinstance(e, urllib.error.HTTPError) else type(e).__name__
+            print(f"[selftest] {host} {note}")
+            html = None
+    if html is None:
+        # 三个主机全堵时改用 Wayback 快照校验——否则解析器防线因 403 永远失效
         wb = wayback_check(url)
         if not wb:
-            return "error", f"selftest 直连失败({note})且 Wayback 无该期快照——无法校验解析器"
+            return "error", f"selftest 三个主机全部失败(末次 {note})且 Wayback 无该期快照——无法校验解析器"
         try:
             code, html = fetch(wb[0])
-            print(f"[selftest] 直连失败({note})，改用 Wayback 快照({wb[1]:%Y-%m-%d})校验")
+            print(f"[selftest] 直连全失败(末次 {note})，改用 Wayback 快照({wb[1]:%Y-%m-%d})校验")
         except Exception as e2:
             return "error", f"selftest Wayback 快照取回失败：{type(e2).__name__}: {str(e2)[:100]}"
     fad, dff = parse_eb1_china(html, debug=True)
