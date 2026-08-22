@@ -21,14 +21,16 @@ import urllib.request
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sniff_visa_bulletin import (UA, DEFAULT_DAY_LO, DEFAULT_DAY_HI,  # noqa: E402
-                                 next_month, now_et)
+from sniff_visa_bulletin import UA, next_month, now_et  # noqa: E402
 
 REPO = os.environ.get("EB1A_REPO", "djzoom/EB1A")
 RAW = f"https://raw.githubusercontent.com/{REPO}/main"
 # 公告定案后，USCIS 的 AOS 用表页通常还要滞后 1–2 天才更新，抓它同样需要住宅 IP。
 # 所以"抓到公告"不等于"可以关"，再留几天把用表补判掉；超过宽限期就不再为它开着。
 CHART_GRACE_DAYS = 7
+# 历史 12 期发布日全部落在 12–20 号。过了这天还没抓到，就不是「官方还没发」，
+# 而是托管探测出了问题——此时才值得让本机接管。
+OVERDUE_DAY = 20
 
 
 def _get(path, timeout=20):
@@ -86,10 +88,14 @@ def decide(verbose=False):
         return "on", f"当月期 {cur_tag} 尚未定案——探测器会绕过发布窗门控直接补探，需要通道"
 
     if not settled(log, nxt_tag):
-        if DEFAULT_DAY_LO <= t.day <= DEFAULT_DAY_HI:
-            return "on", f"下月期 {nxt_tag} 未定案，且今日 {t.day} 号落在发布窗 {DEFAULT_DAY_LO}–{DEFAULT_DAY_HI} 号内"
-        return "off", (f"两期均无待办：{cur_tag} 已定案，{nxt_tag} 要等发布窗"
-                       f"（{DEFAULT_DAY_LO}–{DEFAULT_DAY_HI} 号，今日 {t.day} 号）")
+        # 公告本身托管 runner 就能抓到（实测：travel.state.gov 403 但 adoption.state.gov 200，
+        # WAF 按 hostname 配规则）。所以发布窗内不必让本机常开——那是每月白开两周。
+        # 只在「历史发布日 12–20 全部过完仍没抓到」时接管，作为托管探测失效的保险。
+        if t.day > OVERDUE_DAY:
+            return "on", (f"下月期 {nxt_tag} 未定案，且今日 {t.day} 号已过历史发布窗末（{OVERDUE_DAY} 号）"
+                          "——托管探测疑似失效，本机接管")
+        return "off", (f"{nxt_tag} 未定案，但仍在正常发布窗内（今日 {t.day} 号）——"
+                       "公告由托管 runner 抓，本机不必开")
 
     pending, detail = chart_pending()
     if pending:
