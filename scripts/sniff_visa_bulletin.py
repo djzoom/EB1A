@@ -420,7 +420,14 @@ def write_chart_state(state):
 
 def fetch_filing_chart(ty, tm):
     """从 USCIS AOS filing-charts 页判断 (ty,tm) 月职业类(EB)用表A(Final Action)还是表B(Dates for Filing)。
-    仅在能确认页面对应该月、且明确 EB 用表时返回 'A'/'B'；否则 None(保持待确认，人工兜底)。"""
+
+    返回 (chart, fetched_ok)：
+      chart      'A'/'B'，或 None(页面未更新 / 段落里读不出用表)
+      fetched_ok 页面是否成功取回
+
+    这两件事必须分开报。「够不着 USCIS」和「USCIS 还没更新」在前端是两种措辞,
+    而且两台机器的可达性不同(实测:托管 runner 被 USCIS 403、住宅 IP 200)——
+    只看 chart is None 会让先跑的那台留下的 'error' 被后跑的那台永远焊死。"""
     url = ("https://www.uscis.gov/green-card/green-card-processes-and-procedures/"
            "visa-availability-priority-dates/adjustment-of-status-filing-charts-from-the-visa-bulletin")
     month_name = MONTHS[tm - 1].capitalize()
@@ -429,9 +436,9 @@ def fetch_filing_chart(ty, tm):
     except Exception as e:
         # 抓取报错 ≠ USCIS 未公布。前端必须显示「获取失败」而非「尚未公布」,
         # 否则通道断了会被当成官方还没更新,一直沉默下去。
+        # 状态由调用方按 fetched_ok 写,本函数不再有副作用。
         print(f"[chart] 抓 USCIS AOS 页失败: {type(e).__name__}: {str(e)[:120]}")
-        write_chart_state("error")
-        return None
+        return None, False
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text)
     # 先锚到就业类那一段,再在【该段之内】同时校验月份与用表。
@@ -444,18 +451,18 @@ def fetch_filing_chart(ty, tm):
         seg = m0.group(1) if m0 else None
     if seg is None:
         print("[chart] 未能在 AOS 页定位就业类段落，保持 '?'")
-        return None
+        return None, True
     if not re.search(month_name + r"\s+" + str(ty), seg, re.I):
         print(f"[chart] 就业类段落未提及 {month_name} {ty}（USCIS 常滞后公告数日），保持 '?'")
-        return None
+        return None, True
     m = re.search(r"(Dates for Filing|Final Action)\s+chart", seg, re.I) \
         or re.search(r"(Dates for Filing|Final Action)", seg, re.I)
     if not m:
         print("[chart] 就业类段落中未见用表说明，保持 '?'")
-        return None
+        return None, True
     chart = 'B' if 'dates for filing' in m.group(1).lower() else 'A'
     print(f"[chart] USCIS {month_name} {ty} 职业类用表 → {chart}")
-    return chart
+    return chart, True
 
 
 def read_vb_state():
@@ -476,13 +483,14 @@ def resolve_filing_chart():
         return "skip", f"FILING_CHART 已是 {cur}，无需补判"
     if not vy:
         return "error", "读不到 VB_YEAR/VB_MON"
-    chart = fetch_filing_chart(vy, vm)
+    chart, ok = fetch_filing_chart(vy, vm)
     if not chart:
-        # fetch_filing_chart 内部已在"抓取报错"时写 error；此处只处理"页面未更新"。
-        s0 = open(INDEX, encoding="utf-8").read()
-        if "var FILING_CHART_STATE = 'error'" not in s0:
-            write_chart_state("pending")
-        return "skip", f"{vy}-{vm:02d} AOS 用表未确认/页面未更新，保持待确认"
+        # 关键:按【本次】是否取回页面来写状态,不去嗅探 index.html 里的旧值。
+        # 旧写法遇到已有 'error' 就不覆盖,于是托管 runner(被 403)留下的 error
+        # 会把后来真正抓通了的结果永远挡在门外。
+        write_chart_state("pending" if ok else "error")
+        why = "USCIS 页面尚未更新到该月" if ok else "抓取 USCIS 失败"
+        return "skip", f"{vy}-{vm:02d} AOS 用表未确认（{why}），保持待确认"
     s = open(INDEX, encoding="utf-8").read()
     s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
     s = re.sub(r"(var FILING_CHART_STATE = ')[^']*(')", lambda m: m.group(1) + "ok" + m.group(2), s, count=1)
@@ -941,8 +949,15 @@ def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None):
     s = re.sub(r"(var VB_RELEASED_SOURCE = ')[^']*(')", lambda m: m.group(1) + src + m.group(2), s, count=1)
     s = re.sub(r"(var VB_RELEASED_NOTE = ')[^']*(')", lambda m: m.group(1) + note + m.group(2), s, count=1)
     # A2) 本月递交用哪张表是 USCIS 另发的决定：手动传入则直接用；否则从 USCIS AOS 页自动判定；判不准则 '?' 待确认
-    chart = chart_override if chart_override in ('A', 'B', '?') else (fetch_filing_chart(ty, tm) or "?")
+    if chart_override in ('A', 'B', '?'):
+        chart, chart_state = chart_override, ("ok" if chart_override in ('A', 'B') else "pending")
+    else:
+        c, ok = fetch_filing_chart(ty, tm)
+        chart = c or "?"
+        chart_state = "ok" if c else ("pending" if ok else "error")
     s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
+    s = re.sub(r"(var FILING_CHART_STATE = ')[^']*(')",
+               lambda m: m.group(1) + chart_state + m.group(2), s, count=1)
 
     # 2) 追加 HISTORY（表A）与 HISTORY_B（表B）最新点（若该 bulletin 月尚未存在）
     if bull not in s:
