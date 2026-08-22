@@ -1828,6 +1828,35 @@ function renderBulletinPanel() {
   }
   var advA = monthlyAdv(HISTORY), advB = monthlyAdv(HISTORY_B);
   var nm = VB_MON + 1, ny = VB_YEAR; if (nm > 12) { nm = 1; ny += 1; }
+
+  // 下月预测改用蒙特卡洛模型(即上方图表所用),不再线性外推。
+  // 线性外推没有"财年"概念：10 月是新财年首月、独占全年 33.8% 配额并常有试探性放宽，
+  // 而 8/9 月配额近乎枯竭。按近 6 期均速外推会把十月大跳压成一个月的常规推进，
+  // 与上方图表直接矛盾(实测：面板给 ~2023-08-07，模型中位 2023-10-27)。
+  function modelBandFor(y, m) {
+    var P = lastPercentiles;
+    // 未填 PD 时 render() 不跑、lastPercentiles 为空。但 simulate() 只推 cutoff 轨迹，
+    // 与个人 PD 无关(yourPD 在其中未参与计算)，故可就地跑一轮小样本补上——
+    // 否则新访客看到的仍是错误的线性外推(十月会被压成常规月)。
+    if (!P || !P.p50 || !P.p10 || !P.p90) {
+      if (!window._panelPct) {
+        var ps = []; for (var k = 0; k < 800; k++) ps.push(simulate(currentParams));
+        window._panelPct = percentilePaths(ps);
+      }
+      P = window._panelPct;
+    }
+    if (!P || !P.p50 || !P.p10 || !P.p90) return null;
+    for (var i = 0; i < P.p50.length; i++) {
+      var d = new Date(P.p50[i].x);
+      if (d.getFullYear() === y && d.getMonth() + 1 === m) {
+        return { lo: P.p10[i].y, mid: P.p50[i].y, hi: P.p90[i].y };
+      }
+    }
+    return null;
+  }
+  var band = modelBandFor(ny, nm);
+  var lead = currentLead();      // 表B 领先表A 的 PD 距离；模型只推表A，表B 按此平移
+  var isFyReset = (nm === 10);   // 新财年首月：配额重置 + 前置投放，跳幅显著高于其他月
   function ymd(ts) { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   // 区间：低端=可能停滞(不前进)，高端=按 2 倍近期月推进的较快情形
   function range(now, adv) { return ymd(now) + ' ~ ' + ymd(now + adv * 2); }
@@ -1888,8 +1917,22 @@ function renderBulletinPanel() {
     '<p><span class="step">下月预测 · ' + ny + '年' + nm + '月</span><br>' +
       relLine + '<br>' +
       '近期发布：<span style="color:var(--text3)">' + recentReleasesText(4) + '</span><br>' +
-      '预测表A：<b>' + range(aNow, advA) + '</b><br>预测表B：<b>' + range(bNow, advB) + '</b></p>' +
-    '<p class="explain-note">下月数值为按近期推进速度的估算，月度移动有较大不确定性（常见停滞或跳进），一切以官方公告为准。</p>';
+      (band
+        // 区间一律按日期升序显示。注意此处「靠后的 cutoff」= 推进更快，与顶部大数字的
+        // 快/慢(日期越早越快)方向相反——故不套用快/慢标签，只写区间，避免读反。
+        ? '预测表A：<b>' + ymd(band.mid) + '</b>（区间 ' + ymd(Math.min(band.lo, band.hi)) +
+            ' ~ ' + ymd(Math.max(band.lo, band.hi)) + '）<br>' +
+          '预测表B：<b>' + ymd(band.mid + lead) + '</b>（区间 ' +
+            ymd(Math.min(band.lo, band.hi) + lead) + ' ~ ' + ymd(Math.max(band.lo, band.hi) + lead) + '）'
+        : '预测表A：<b>' + range(aNow, advA) + '</b><br>预测表B：<b>' + range(bNow, advB) + '</b>') +
+      (band && isFyReset
+        ? '<br><span class="vb-warn">↑ ' + nm + ' 月为新财年首月：配额重置且前置投放全年约三分之一，'
+          + '历来是全年跳幅最大的一期</span>'
+        : '') + '</p>' +
+    '<p class="explain-note">' + (band
+      ? '下月数值取自上方图表所用的蒙特卡洛模型（粗体为中位数，括号内为 10–90 分位区间），已计入财年配额节奏；'
+      : '下月数值为按近期推进速度的估算；') +
+      '月度移动有较大不确定性（常见停滞或跳进），一切以官方公告为准。</p>';
   updateBulletinDot();
   // 看过几秒后自动标记已读（仅本次加载调度一次）：徽标本次仍显示，下次加载不再提示
   if (isNew && !window._vbSeenScheduled) { window._vbSeenScheduled = true; setTimeout(markBulletinSeen, 3500); }
