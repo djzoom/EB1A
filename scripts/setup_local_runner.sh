@@ -75,7 +75,7 @@ else
   rm -f "$RUNNER_DIR/actions-runner.tar.gz"
 fi
 
-step "3/6 注册（标签 $LABELS）"
+step "3/6 注册（标签 ${LABELS}）"
 cd "$RUNNER_DIR"
 if [ -f .runner ]; then
   echo "已注册过，跳过。要重装先注销："
