@@ -19,7 +19,7 @@
 # 改 GitHub 变量需要凭据，二选一：
 #   ① 装了 gh CLI 并 gh auth login（最省事）
 #   ② 细粒度 PAT 写进 ~/.eb1a_gh_token（权限：本仓库 Variables = Read and write）
-#      echo 'github_pat_xxx' > ~/.eb1a_gh_token && chmod 600 ~/.eb1a_gh_token
+#      echo '粘贴你的真 PAT' > ~/.eb1a_gh_token && chmod 600 ~/.eb1a_gh_token
 set -uo pipefail
 
 REPO="${EB1A_REPO:-djzoom/EB1A}"

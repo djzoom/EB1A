@@ -31,7 +31,7 @@ python3 scripts/preflight_local_egress.py
 bash scripts/setup_local_runner.sh <令牌>
 
 # ④ 看门狗：掉线自动重启 + Bark 报警（防静默排队漏抓）
-echo '<你的 BARK_KEY>' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key
+echo '粘贴你的真 key(Bark App 首页 URL 中间那段)' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key
 bash scripts/runner_watchdog.sh --install
 ```
 
@@ -193,7 +193,7 @@ bash scripts/runner_ctl.sh state    # 只打印 on|off|unknown（给脚本用）
 
 ```bash
 gh auth login                                    # ① 装了 gh CLI 最省事
-echo 'github_pat_xxx' > ~/.eb1a_gh_token         # ② 细粒度 PAT
+echo '粘贴你的真 PAT' > ~/.eb1a_gh_token         # ② 细粒度 PAT
 chmod 600 ~/.eb1a_gh_token                       #    权限：本仓库 Variables = Read and write
 ```
 
