@@ -52,7 +52,7 @@ cd "$REPO_ROOT" || { log "进不去仓库目录"; exit 1; }
 cur_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
 if [ "$cur_branch" != "$BRANCH" ]; then
   # 不擅自切分支——你可能正在这个 clone 上做别的事。只读跑一遍报告结果，不提交。
-  log "当前在 $cur_branch 而非 $BRANCH，只做只读检查、不提交"
+  log "当前在 $cur_branch 而非 ${BRANCH}，只做只读检查、不提交"
   READONLY=1
 else
   READONLY=0
@@ -70,7 +70,7 @@ if git diff --quiet -- index.html; then
 fi
 
 if [ "$READONLY" = 1 ]; then
-  log "有变化但当前不在 $BRANCH，已回滚改动、不提交"
+  log "有变化但当前不在 ${BRANCH}，已回滚改动、不提交"
   git checkout -- index.html
   exit 0
 fi
@@ -94,10 +94,10 @@ if [ "$chart" = A ] || [ "$chart" = B ]; then
   label=$([ "$chart" = A ] && echo "表A(Final Action)" || echo "表B(Dates for Filing)")
   if [ -n "$key" ]; then
     BARK_KEY="$key" BARK_TITLE="EB1A · 本月递交用表已确认" \
-    BARK_BODY="USCIS 确认本月职业类递交用 $label。已自动上线。" \
+    BARK_BODY="USCIS 确认本月职业类递交用 ${label}。已自动上线。" \
       python3 scripts/sniff_visa_bulletin.py --send-bark >/dev/null 2>&1 \
-      && log "已推送 Bark（用表 $chart）" || log "Bark 推送失败"
+      && log "已推送 Bark（用表 ${chart}）" || log "Bark 推送失败"
   else
-    log "用表判定为 $chart（未配置 BARK_KEY，跳过推送）"
+    log "用表判定为 ${chart}（未配置 BARK_KEY，跳过推送）"
   fi
 fi

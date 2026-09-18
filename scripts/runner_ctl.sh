@@ -105,7 +105,7 @@ var_del() {
 
 no_creds_hint() {
   cat >&2 <<EOF
-  无法改 GitHub 变量：既没有可用的 gh CLI，也没有 $TOKEN_FILE。
+  无法改 GitHub 变量：既没有可用的 gh CLI，也没有 ${TOKEN_FILE}。
   二选一：
     gh auth login
     echo '<细粒度 PAT，本仓库 Variables=Read and write>' > $TOKEN_FILE && chmod 600 $TOKEN_FILE
@@ -138,7 +138,7 @@ do_on() {
   # 服务先起、变量后设：避免活已经派过来却没人接。
   var_set; local rc=$?
   if [ $rc = 0 ]; then
-    log "  变量：$VAR_NAME=$VAR_VALUE（抓取类工作流已切到本机）"
+    log "  变量：$VAR_NAME=${VAR_VALUE}（抓取类工作流已切到本机）"
     echo on > "$STATE_DIR/switch"
   else
     [ $rc = 2 ] && no_creds_hint || log "  ⚠️ 变量设置失败"
@@ -203,7 +203,7 @@ do_auto() {
     *) cur="$(cat "$STATE_DIR/switch" 2>/dev/null || echo unknown)" ;;
   esac
   if [ "$cur" = "$want" ]; then
-    log "auto：维持【$cur】——$reason"
+    log "auto：维持【${cur}】——$reason"
     return 0
   fi
   log "auto：$cur → $want ——$reason"
@@ -215,7 +215,7 @@ install_auto() {
   crontab -l 2>/dev/null | grep -qF "$MARKER" && { log "已装过，先 --remove-auto 再重装"; exit 0; }
   { crontab -l 2>/dev/null; echo "$line"; } | crontab -
   log "已装入 crontab：每小时 :05 判定一次，日志 $STATE_DIR/auto.log"
-  log "注意 cron 里没有登录 shell 的环境变量——改变量的凭据请用 $TOKEN_FILE（gh CLI 的登录态也可用）"
+  log "注意 cron 里没有登录 shell 的环境变量——改变量的凭据请用 ${TOKEN_FILE}（gh CLI 的登录态也可用）"
   exit 0
 }
 
