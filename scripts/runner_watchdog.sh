@@ -57,7 +57,7 @@ install_cron() {
   fi
   { crontab -l 2>/dev/null; echo "$line"; } | crontab -
   log "已装入 crontab（每 30 分钟一次），日志：$STATE_DIR/watchdog.log"
-  log "Bark 报警需要 key：echo '<你的 BARK_KEY>' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key"
+  log "Bark 报警需要 key：echo '粘贴你的真 key(Bark App 首页 URL 中间那段)' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key"
   exit 0
 }
 
