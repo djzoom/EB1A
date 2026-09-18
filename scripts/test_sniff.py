@@ -160,6 +160,52 @@ TRUNCATED = ("Final Action Dates for Employment-Based Preference Cases "
 expect_raises("表被裁剪至 3 行 → 抛异常（不返回半张表）",
               lambda: S.parse_eb1_china(TRUNCATED))
 
+print("\n## 5. 密探窗口:cron 与门控必须同步")
+# cron 决定"跑不跑",CORE_DAY_HI 决定"探不探"。只放宽一边等于没放宽——
+# 2026-09 就差点这样:cron 加密到 17 号,而实测发布日含 20 号。
+import os as _os  # noqa: E402
+import re as _re  # noqa: E402
+_wf = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                    ".github", "workflows", "sniff-visa-bulletin.yml")
+_m = _re.search(r"cron:\s*'[\d,]+ [\d-]+ (\d+)-(\d+) \* \*'", open(_wf, encoding="utf-8").read())
+check("cron 加密档期与 CORE_DAY_LO/HI 一致",
+      (int(_m.group(1)), int(_m.group(2))) if _m else None,
+      (S.CORE_DAY_LO, S.CORE_DAY_HI))
+# 历史实测发布日必须全部落在密探窗内,否则命中当天会被稀疏探测拖慢数小时
+import json as _json  # noqa: E402
+_days = [r["day"] for r in _json.load(open(_os.path.join(
+    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "data", "release_log.json"),
+    encoding="utf-8"))]
+check(f"历史发布日 {sorted(_days)} 全在密探窗 {S.CORE_DAY_LO}-{S.CORE_DAY_HI} 内",
+      all(S.CORE_DAY_LO <= d <= S.CORE_DAY_HI for d in _days), True)
+
+print("\n## 6. 兜底分支不得谎报「已发布」")
+# 2026-09 的真实 bug:fetch_filing_chart 改成返回 (chart, fetched_ok) 后,
+# probe_target 里的 Wayback 兜底分支漏改,接成了单值 → 拿到元组 → 元组恒为真
+# → 无条件走进「USCIS AOS 页已出现该月 → 公告已发布！」。
+# 更糟的是它返回 pending,而 run() 的逾期告警条件是 status not in ("hit","pending"),
+# 于是「过 20 号仍未命中推 critical 告警」这道防线被一并抑制。
+import types  # noqa: E402
+
+_saved = {k: getattr(S, k) for k in
+          ("probe_published", "wayback_check", "wayback_last_capture",
+           "wayback_save", "fetch_filing_chart")}
+try:
+    S.probe_published = lambda ty, tm: (None, "travel.state.gov HTTP 403", None)
+    S.wayback_check = lambda url: None
+    S.wayback_last_capture = lambda url: None
+    S.wayback_save = lambda url: None
+    # USCIS 页取回成功、但没提到目标月 —— 也就是"还没发布"
+    S.fetch_filing_chart = lambda ty, tm: (None, True)
+    st, detail = S.probe_target(2026, 10, "2026-10", [],
+                                types.SimpleNamespace(dry_run=True, force=True),
+                                S.now_et())
+    check("USCIS 未提及该月 → 不得判为已发布", "公告已发布" in detail, False)
+    check("  ↑ 且状态不能是 pending(否则逾期 critical 告警会被抑制)", st == "pending", False)
+finally:
+    for k, v in _saved.items():
+        setattr(S, k, v)
+
 print()
 if FAILED:
     print(f"❌ {len(FAILED)} 项失败: {FAILED}")

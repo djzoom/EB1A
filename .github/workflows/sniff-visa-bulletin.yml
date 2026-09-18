@@ -11,6 +11,9 @@ on:
         description: '抓取已发布的当前那期，校验解析器是否正确（不写文件/不开 PR）'
         type: boolean
         default: false
+      rehearse:
+        description: '彩排·拿已发布的某期(形如 2026-09)把整条命中链路跑一遍；只写临时副本，不改仓库'
+        default: ''
       backfill:
         description: '用 Wayback 拉历史释出日分布并打印推荐窗口/核心区（仅分析，不改文件）'
         type: boolean
@@ -47,8 +50,10 @@ on:
     # 注意：GitHub 定时任务不保证准点、高负载会延迟/丢弃，故时段放宽 + 多槽位以降低漏抓概率。
     - cron: '*/30 13-23 7-26 * *'   # 美东上午~晚（ET09–19 EDT ≈ UTC13–23）；覆盖安全窗 7–26 号
     - cron: '*/30 0-2 8-27 * *'     # 傍晚 ET 溢出到 UTC 次日 0–2 点（含冬令时）
-    # 提速：核心日(10–17号) ET09–17（≈UTC13–21）补 :10/:20/:40/:50，与 */30 合成每 10 分钟。
-    - cron: '10,20,40,50 13-21 10-17 * *'
+    # 提速：核心日(10–20号) ET09–17（≈UTC13–21）补 :10/:20/:40/:50，与 */30 合成每 10 分钟。
+    # 上界与脚本里的 CORE_DAY_HI 必须一致——只放宽一边等于没放宽:cron 决定"跑不跑",
+    # 门控决定"探不探"。实测发布日含 20 号,故两边同步取 20。
+    - cron: '10,20,40,50 13-21 10-20 * *'
     # 窗外稀疏哨兵（每天 ET 上午/下午各一次）：覆盖 27号–6号的空窗——极端早发/晚发，
     # 以及"上月期错过后的跨月补探"（run() 对缺失的当月期绕过门控直接补）。
     - cron: '0 14,20 1-6,27-31 * *'
@@ -89,6 +94,8 @@ jobs:
               --dff "${{ inputs.manual_dff }}" \
               --released "${{ inputs.manual_released }}" \
               --chart "${{ inputs.manual_chart }}"
+          elif [ -n "${{ github.event_name == 'workflow_dispatch' && inputs.rehearse || '' }}" ]; then
+            python scripts/sniff_visa_bulletin.py --rehearse "${{ inputs.rehearse }}"
           elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
             python scripts/sniff_visa_bulletin.py --drill
           elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.announce }}" = "true" ]; then
@@ -104,7 +111,7 @@ jobs:
       # 「获取失败」→ index.html 变了 → 自动开 PR → Bark 误报「探测到新签证公告」。
       # 2026-08-22 真实发生过一次。日常由本机 cron scripts/uscis_chart_watch.sh 值守。
       - name: Resolve filing chart if pending (residential IP only; USCIS 403s hosted runners)
-        if: ${{ runner.environment == 'self-hosted' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.drill && !inputs.backfill && !inputs.selftest && !inputs.announce)) }}
+        if: ${{ runner.environment == 'self-hosted' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.drill && !inputs.backfill && !inputs.selftest && !inputs.announce && !inputs.rehearse)) }}
         run: python scripts/sniff_visa_bulletin.py --filing-chart
 
       # 数据若改动则开 PR；无改动时静默跳过（不建 PR）。
