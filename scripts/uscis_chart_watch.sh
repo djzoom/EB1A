@@ -38,7 +38,7 @@ case "${1:-}" in
     fi
     { crontab -l 2>/dev/null; echo "$line"; } | crontab -
     log "已装入 crontab：每小时 :17 值守一次，日志 $STATE_DIR/chart.log"
-    log "Bark：echo '<BARK_KEY>' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key"
+    log "Bark：echo '粘贴你的真 key(Bark App 首页 URL 中间那段)' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key"
     exit 0 ;;
   --remove)
     crontab -l 2>/dev/null | grep -vF "$MARKER" | crontab -
