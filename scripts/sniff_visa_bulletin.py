@@ -384,12 +384,22 @@ def notify_bark(title, body, url="https://github.com/djzoom/EB1A/pulls"):
     if not key:
         print("[bark] 未配置 BARK_KEY，跳过推送")
         return False
-    # 占位符原样写进 ~/.eb1a_bark_key 是最容易犯也最难看出的错:文档里的
-    # `echo '<BARK_KEY>' > ...` 被整条粘贴,于是 key 真就是 "<BARK_KEY>"。
-    # Bark 只回一个光秃秃的 400,得自己认出来并说人话。
-    if key.startswith("<") or key.endswith(">") or key.lower() in ("bark_key", "your_key"):
-        print(f"[bark] BARK_KEY 看起来是占位符而非真 key（当前值 {key!r}）——"
-              "请从 Bark App 首页复制推送 URL 中间那段，写进 ~/.eb1a_bark_key")
+    # 整条复制推送 URL 是很常见的手滑,而它本身就含着正确的 key —— 直接取出来用,
+    # 比报错更省一轮往返。
+    m = re.search(r"https?://[^/\s]+/([A-Za-z0-9_-]{8,64})/?", key)
+    if m:
+        print(f"[bark] BARK_KEY 是整条推送 URL，已自动取出其中的 key（…{m.group(1)[-4:]}）")
+        key = m.group(1)
+
+    # 反过来用白名单判断"这看着不像 key",而不是枚举占位符的长相:
+    # 真 key 是一串字母数字。之前只挡 <BARK_KEY> 这一种写法,于是文档改成中文
+    # 提示后,把那句中文整条粘进去照样会漏到网络层,再换回一个光秃秃的 400。
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", key):
+        shown = key if len(key) <= 40 else key[:40] + "…"
+        print(f"[bark] BARK_KEY 不像一个 Bark device key（当前值 {shown!r}）——"
+              "应是一串 8-64 位的字母数字，"
+              "取自 Bark App 首页推送 URL https://api.day.app/<这一段>/ ；"
+              "请写进 ~/.eb1a_bark_key 后重试")
         return False
     payload = json.dumps({"device_key": key, "title": title, "body": body,
                           "group": "EB1A", "url": url}).encode("utf-8")
