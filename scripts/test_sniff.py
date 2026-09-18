@@ -160,7 +160,26 @@ TRUNCATED = ("Final Action Dates for Employment-Based Preference Cases "
 expect_raises("表被裁剪至 3 行 → 抛异常（不返回半张表）",
               lambda: S.parse_eb1_china(TRUNCATED))
 
-print("\n## 5. 密探窗口:cron 与门控必须同步")
+print("\n## 5. shell 脚本:变量后紧跟中文必须加花括号")
+# 2026-09-18 真实事故:uscis_chart_watch.sh 里的 "...递交用 $label。已自动上线。"
+# 在 macOS 自带的 bash 3.2 上,全角句号被吞进变量名 → 查 `label。` 这个不存在的
+# 变量 → 撞上 set -u → 脚本当场退出。数据已推送但 Bark 没发出去。
+# 这类写法在 Linux/新 bash 上正常,只在用户的机器上炸——本地跑测试也测不出来,
+# 只能靠静态扫描。
+import glob as _glob  # noqa: E402
+import os as _os  # noqa: E402
+import re as _re  # noqa: E402
+_bad = []
+_pat = _re.compile(r'\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]')
+_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+for _f in sorted(_glob.glob(_os.path.join(_root, "scripts", "*.sh"))):
+    for _i, _line in enumerate(open(_f, encoding="utf-8"), 1):
+        if _pat.search(_line):
+            _bad.append(f"{_os.path.basename(_f)}:{_i}")
+check(f"scripts/*.sh 无裸 $VAR 紧跟多字节字符{'（命中: ' + ', '.join(_bad) + '）' if _bad else ''}",
+      _bad, [])
+
+print("\n## 6. 密探窗口:cron 与门控必须同步")
 # cron 决定"跑不跑",CORE_DAY_HI 决定"探不探"。只放宽一边等于没放宽——
 # 2026-09 就差点这样:cron 加密到 17 号,而实测发布日含 20 号。
 import os as _os  # noqa: E402
@@ -179,7 +198,7 @@ _days = [r["day"] for r in _json.load(open(_os.path.join(
 check(f"历史发布日 {sorted(_days)} 全在密探窗 {S.CORE_DAY_LO}-{S.CORE_DAY_HI} 内",
       all(S.CORE_DAY_LO <= d <= S.CORE_DAY_HI for d in _days), True)
 
-print("\n## 6. 兜底分支不得谎报「已发布」")
+print("\n## 7. 兜底分支不得谎报「已发布」")
 # 2026-09 的真实 bug:fetch_filing_chart 改成返回 (chart, fetched_ok) 后,
 # probe_target 里的 Wayback 兜底分支漏改,接成了单值 → 拿到元组 → 元组恒为真
 # → 无条件走进「USCIS AOS 页已出现该月 → 公告已发布！」。
