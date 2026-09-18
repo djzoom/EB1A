@@ -125,7 +125,7 @@ runner 已装好并注册，但抓取类工作流还没切过来（RUNNER_LABEL 
   bash scripts/runner_ctl.sh --install-auto
 
 掉线报警（建议装上，防静默排队漏抓）：
-  echo '<你的 BARK_KEY>' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key
+  echo '粘贴你的真 key(Bark App 首页 URL 中间那段)' > ~/.eb1a_bark_key && chmod 600 ~/.eb1a_bark_key
   bash $REPO_ROOT/scripts/runner_watchdog.sh --install
 
 验证（先 on，再触发一次）：

@@ -380,9 +380,16 @@ def _movement(old, new):
 
 def notify_bark(title, body, url="https://github.com/djzoom/EB1A/pulls"):
     """经 Bark 推送到手机。需环境变量 BARK_KEY；未配置则跳过。返回是否成功。"""
-    key = os.environ.get("BARK_KEY")
+    key = (os.environ.get("BARK_KEY") or "").strip()
     if not key:
         print("[bark] 未配置 BARK_KEY，跳过推送")
+        return False
+    # 占位符原样写进 ~/.eb1a_bark_key 是最容易犯也最难看出的错:文档里的
+    # `echo '<BARK_KEY>' > ...` 被整条粘贴,于是 key 真就是 "<BARK_KEY>"。
+    # Bark 只回一个光秃秃的 400,得自己认出来并说人话。
+    if key.startswith("<") or key.endswith(">") or key.lower() in ("bark_key", "your_key"):
+        print(f"[bark] BARK_KEY 看起来是占位符而非真 key（当前值 {key!r}）——"
+              "请从 Bark App 首页复制推送 URL 中间那段，写进 ~/.eb1a_bark_key")
         return False
     payload = json.dumps({"device_key": key, "title": title, "body": body,
                           "group": "EB1A", "url": url}).encode("utf-8")
@@ -392,6 +399,17 @@ def notify_bark(title, body, url="https://github.com/djzoom/EB1A/pulls"):
         with urllib.request.urlopen(req, timeout=20) as r:
             print(f"[bark] 推送成功 HTTP {r.getcode()}")
         return True
+    except urllib.error.HTTPError as e:
+        # Bark 会把原因写在响应体里(如 device_key 无效),不读出来就只剩一个状态码。
+        try:
+            why = e.read().decode("utf-8", "ignore")[:200]
+        except Exception:
+            why = ""
+        print(f"[bark] 推送失败 HTTP {e.code}{'：' + why if why else ''}")
+        if e.code == 400:
+            print("[bark] 400 多半是 device_key 不对——核对 ~/.eb1a_bark_key "
+                  "是否就是 Bark App 首页 URL 里的那段")
+        return False
     except Exception as e:
         print(f"[bark] 推送失败: {type(e).__name__}: {str(e)[:160]}")
         return False
