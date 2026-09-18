@@ -54,8 +54,11 @@ FED_HOLIDAYS = {
 DEFAULT_DAY_LO, DEFAULT_DAY_HI = 7, 26
 DEFAULT_HOUR_LO, DEFAULT_HOUR_HI = 9, 21    # 美东 09:00–21:00（含上午：DOS 偶在 ET 上午上线）
 MIN_RECORDS_TO_TUNE = 3
-# 分层探测：核心日(历史释出高发 10–17)全时段密探；窗口内其余为肩部日，仅少数时点稀疏探，省请求。
-CORE_DAY_LO, CORE_DAY_HI = 10, 17
+# 分层探测：核心日全时段密探；窗口内其余为肩部日，仅少数时点稀疏探，省请求。
+# 上界原为 17，但 release_log 里实测发布日是 13/14/14/16/20——20 号发生过，
+# 却落在肩部日里(一天只探 ET 10/13/16/19 四次)。命中当天最多要晚 3 小时才发现，
+# 与"第一时间"相悖。按实测分布把核心日拉到 20，与 cron 的加密档期同步放宽。
+CORE_DAY_LO, CORE_DAY_HI = 10, 20
 SHOULDER_HOURS = (10, 13, 16, 19)   # 肩部日只在这些 ET 整点(及其 :30)探测；含上午 10 点兜住早发
 
 
@@ -671,6 +674,68 @@ def looks_like_bulletin(html, ty, tm):
                      html, re.I) is not None
 
 
+def rehearse(tag_str, args):
+    """彩排:拿一期【已发布】的公告,把整条命中链路真跑一遍,只写到临时副本上。
+
+    与 --selftest 的分工:selftest 只验"取回 + 解析"两步;真正会出事的在后面——
+    命中校验、理智门禁、写回 index.html、追加 release_log、发布日记录。
+    10 月号(FY2027 首月)还多一道财年目录换档(october-2026 在 /2027/ 下),
+    只有整条跑通才算数。
+
+    做法:把模块级 INDEX/LOG 指到临时副本,调用与定时任务完全相同的 probe_target,
+    然后 diff。不碰仓库文件、不开 PR、不推送、不发通知。
+    """
+    import shutil
+    import tempfile
+    m = re.match(r"(\d{4})-(\d{1,2})$", (tag_str or "").strip())
+    if not m:
+        return "error", f"--rehearse 需形如 2026-09,收到 {tag_str!r}"
+    ty, tm = int(m.group(1)), int(m.group(2))
+    tag = f"{ty}-{tm:02d}"
+
+    global INDEX, LOG
+    orig_index, orig_log = INDEX, LOG
+    # 彩排绝不能把 BARK_* 漏进 $GITHUB_ENV——否则后续步骤可能拿它去发通知。
+    saved_env = os.environ.pop("GITHUB_ENV", None)
+    tmp = tempfile.mkdtemp(prefix="eb1a-rehearse-")
+    try:
+        INDEX = os.path.join(tmp, "index.html")
+        LOG = os.path.join(tmp, "release_log.json")
+        shutil.copy(orig_index, INDEX)
+        before = open(INDEX, encoding="utf-8").read()
+        # 从副本 log 里摘掉目标期,让它被当成"尚未抓到"
+        rows = [r for r in json.load(open(orig_log, encoding="utf-8"))
+                if r.get("bulletin") != tag]
+        json.dump(rows, open(LOG, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+
+        print(f"[rehearse] 目标 {tag}｜URL = {bulletin_url(ty, tm)}")
+        print(f"[rehearse] 财年目录 = /{ty + 1 if tm >= 10 else ty}/"
+              f"{'（10-12 月走次年财年，本期换档）' if tm >= 10 else ''}")
+        status, detail = probe_target(ty, tm, tag, rows, args, now_et())
+        print(f"[rehearse] probe_target → {status}｜{detail}")
+
+        after = open(INDEX, encoding="utf-8").read()
+        changed = [(a, b) for a, b in zip(before.splitlines(), after.splitlines()) if a != b]
+        print(f"[rehearse] index.html 改动 {len(changed)} 行:")
+        for a, b in changed[:12]:
+            print(f"    - {a.strip()[:100]}")
+            print(f"    + {b.strip()[:100]}")
+        newrec = [r for r in json.load(open(LOG, encoding="utf-8"))
+                  if r.get("bulletin") == tag]
+        print(f"[rehearse] release_log 新记录: "
+              f"{json.dumps(newrec, ensure_ascii=False) if newrec else '（无——未定案）'}")
+
+        ok = status == "hit" and changed and newrec
+        return ("hit" if ok else "error"), (
+            f"彩排 {tag}: probe={status}, index.html 改 {len(changed)} 行, "
+            f"log 记录 {'有' if newrec else '无'} → {'✅ 整条链路跑通' if ok else '❌ 未跑通,见上'}")
+    finally:
+        INDEX, LOG = orig_index, orig_log
+        if saved_env is not None:
+            os.environ["GITHUB_ENV"] = saved_env
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def probe_target(ty, tm, tag, log, args, t_now):
     """探测并处理一期公告，返回 (status, detail)。
     直连失败(403/连接重置/超时等，凡非 404)一律转 Wayback 兜底。"""
@@ -703,7 +768,11 @@ def probe_target(ty, tm, tag, log, args, t_now):
             # ② USCIS AOS 页(另一域名)出现该月 = 公告已发布（独立信号）
             last = wayback_last_capture(url)
             wayback_save(url)   # 主动叫档案馆抓一次；下一班若已发布即可从快照命中
-            chart = fetch_filing_chart(ty, tm)
+            # 必须解包:fetch_filing_chart 返回 (chart, fetched_ok)。
+            # 直接接成单值会拿到元组——元组恒为真,这条分支就会无条件谎报
+            # 「公告已发布」,并因返回 pending 而把 run() 里那条「过 20 号未命中
+            # 推 critical 告警」的防线一并抑制掉。
+            chart, _ok = fetch_filing_chart(ty, tm)
             if chart:
                 return "pending", (f"{tag} USCIS AOS 页已出现该月(用表{chart}) → 公告已发布！"
                                    "但官网屏蔽 runner 且 Wayback 尚无 200 快照；已请求主动存档，下一班取回")
@@ -867,6 +936,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--rehearse", default="",
+                    help="彩排:拿已发布的某期(形如 2026-09)把整条命中链路跑到临时副本上,不改仓库")
     ap.add_argument("--selftest", action="store_true",
                     help="抓取已发布的当前那期，验证 parse_eb1_china 对真实 HTML 是否正确；不写文件")
     ap.add_argument("--drill", action="store_true",
@@ -914,6 +985,8 @@ def main():
         status, detail = announce()
     elif args.drill:
         status, detail = drill()
+    elif args.rehearse:
+        status, detail = rehearse(args.rehearse, args)
     elif args.selftest:
         status, detail = selftest()
     else:
