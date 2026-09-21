@@ -40,8 +40,8 @@ jobs:
 
       - name: Commit and push if new files
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "djzoom"
+          git config user.email "djwangzhong@gmail.com"
           # index.html 也要暂存：上一步的 AOS 用表补判会写回 FILING_CHART/
           # FILING_CHART_STATE，只 add data/raw/ 会让该结果每天被丢弃、永远停在待确认。
           git add data/raw/ index.html
