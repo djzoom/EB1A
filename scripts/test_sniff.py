@@ -225,6 +225,36 @@ finally:
     for k, v in _saved.items():
         setattr(S, k, v)
 
+print("\n## 6. 逾期提醒限频（每天至多一次）")
+# 发布窗外每天约 28 次 cron(*/30)，早期实现每次探测都推 Bark → 刷屏。
+# 只认 ET 09:00–09:29 一个槽；此处遍历当日全部 cron 槽，命中数必须恰好为 1。
+from datetime import datetime, timezone  # noqa: E402
+
+try:
+    from zoneinfo import ZoneInfo
+    _ET = ZoneInfo("America/New_York")
+except Exception:
+    _ET = None
+
+
+def _slots(y, mo):
+    """当日实际会触发的 cron 槽（UTC 13–23 与 0–2，每半小时），换算到 ET。"""
+    out = []
+    for h in list(range(13, 24)) + [0, 1, 2]:
+        for mi in (0, 30):
+            out.append(datetime(y, mo, 22, h, mi, tzinfo=timezone.utc).astimezone(_ET))
+    return out
+
+
+if _ET:
+    summer = [s for s in _slots(2026, 9) if S.is_daily_alert_slot(s)]
+    winter = [s for s in _slots(2026, 12) if S.is_daily_alert_slot(s)]
+    check("夏令时当日命中次数 = 1", len(summer), 1)
+    check("冬令时当日命中次数 = 1", len(winter), 1)
+    check("命中的是 ET 09:00 那一槽", summer and summer[0].hour == 9, True)
+else:
+    print("  ⏭ 无 zoneinfo，跳过")
+
 print()
 if FAILED:
     print(f"❌ {len(FAILED)} 项失败: {FAILED}")
