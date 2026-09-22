@@ -910,6 +910,17 @@ def probe_target(ty, tm, tag, log, args, t_now):
     return "error", f"{tag} 重试仍未定案（{why}），继续每班静默重试"
 
 
+def is_daily_alert_slot(t):
+    """逾期提醒的每日唯一时段：ET 09:00–09:29。
+
+    发布窗外每天约 26–28 次 cron(*/30)，若每次都推就是刷屏。只认这一个半小时槽，
+    保证每天恰好一次（夏/冬令时下 ET 09:00 分别对应 UTC 13:00 / 14:00，均在 cron 覆盖内）。
+    用固定时段而非状态文件：runner 是临时的，跨运行去重得把状态提交进仓库，
+    每天为一个状态文件产生一次提交/PR，噪音比问题本身还大。
+    """
+    return t.hour == 9 and t.minute < 30
+
+
 def run(args):
     """执行一次探测，返回 (status, detail) 供运行摘要使用。
     目标 = 本月 + 下月中所有『尚未定案』的期：下月是常规新期（走发布窗门控）；
@@ -943,10 +954,16 @@ def run(args):
     results.sort(key=lambda r: order.get(r[0], 9))
     status, detail = results[0][0], "；".join(d for _, d in results)
 
-    # 逾期未命中 → critical 告警。历史 12 期发布日全部落在 12–20,超过 20 号仍拿不到,
+    # 逾期未命中 → 每日一次提醒。历史 12 期发布日全部落在 12–20,超过 20 号仍拿不到,
     # "探测器坏了"的可能性已高于"官方延迟"——2026-09 期就是这样被 403 漏抓、
-    # 却在页面上误报成「尚未发布」。此时必须主动叫人,不能继续沉默。
-    if status not in ("hit", "pending") and t.day > 20:
+    # 却在页面上误报成「尚未发布」。此时要主动叫人,但不能变成刷屏。
+    #
+    # 限频用「固定时段」而非状态文件:runner 是临时的,跨运行去重得把状态提交进仓库,
+    # 那样每天会为一个状态文件产生一次提交/PR,噪音比问题本身还大。
+    # 发布窗外每天约 26 次 cron(*/30),只认 ET 09:00–09:29 这一个槽 → 每天恰好一次。
+    # 代价:该槽若被 GitHub 丢掉就当天不提醒——对「逐日重复的提醒」可以接受。
+    alert_slot = is_daily_alert_slot(t)
+    if status not in ("hit", "pending") and t.day > 20 and alert_slot:
         ny, nm = next_month(*cur)
         tag = f"{ny}-{nm:02d}"
         if not any(r.get("bulletin") == tag and not r.get("partial") for r in log):
@@ -957,6 +974,8 @@ def run(args):
             _emit_env("BARK_BODY", body)
             notify_bark("EB1A 探测异常⚠️（逾期未命中）", body,
                         "https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html")
+    elif status not in ("hit", "pending") and t.day > 20:
+        print(f"[alert] 逾期未命中，但非每日提醒时段(ET {t.hour:02d}:{t.minute:02d})，跳过推送")
     return status, detail
 
 
