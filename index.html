@@ -679,6 +679,27 @@ function getPDDensity(pdDate, params, wall) {
 // 近四个十月号 +14/+7/+37/0 天，近 12 个月逐月 +31,+10,+42,+17,0,+61,+30,0,0，无季节性。
 var MONTHLY_WEIGHTS = [1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12];
 
+// 财年末锚点：10 月号(财年首期)的表B ≈ DOS 对本财年 9 月表A 的预期。实测(9 月表A − 10 月表B)：
+//   FY24  2022-08-01 → 2022-11-01  +92 天
+//   FY25  2022-12-01 → 2022-11-15  −16 天
+//   FY26  2023-05-15 → 2023-07-01  +47 天
+// 同口径纯供需模型(10→9 月 ~180 天)误差 +79 / −173 / +11，RMS 110 天 vs 锚点 60 天。更早年份表B 贴近 current
+// (FY20 2019-09-01、FY23 C)，不是预测值，不计入。
+// 只有三年样本，且 FY27 锚点隐含一年推进 ~366 天，远超近年最大 267 天；10 月号表A 又零推进
+// (财年首月罕见)，两个信号方向相反 → 偏差均值取 0(不采信 +41 的平均超额)，σ 放宽到 90 天，
+// 与模型自身的财年末结果各占一半。
+var FY_ANCHOR_SIGMA = 90;
+var FY_ANCHOR_WEIGHT = 0.5;
+// 最新一期所属财年的 10 月号表B；缺失则无锚点
+function fyAnchor() {
+  var fy = VB_MON >= 10 ? VB_YEAR + 1 : VB_YEAR;
+  for (var i = 0; i < HISTORY_B.length; i++) {
+    var d = new Date(HISTORY_B[i].x);
+    if (d.getUTCFullYear() === fy - 1 && d.getUTCMonth() === 9) return { fy: fy, y: HISTORY_B[i].y };
+  }
+  return null;
+}
+
 function simulate(params) {
   var months = 144, path = [];
   var cutoff = getCurrentCutoff(), yourPD = getYourPD();
@@ -696,12 +717,27 @@ function simulate(params) {
   // 路径级抽一个 demandWall(≈抽一个 f)：把"待签池前方占比 f"的真实不确定注入快/慢区间。
   // 近 PD(走 2023 已验证密度区)几乎不受影响；深 PD(2024+)区间据此变宽，并随数据收窄。
   var regimeWall = Math.max(1.0, gaussian(params.demandWall || 1.7, params.demandWallSigma || 0.45));
+  var anchor = fyAnchor();
+  var anchorEnd = anchor ? anchor.y + gaussian(0, FY_ANCHOR_SIGMA) * MS_PER_DAY : null;
 
   for (var i = 0; i < months; i++) {
     var monthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 15);
     var jsMonth = monthDate.getMonth();
     var fyYear = jsMonth >= 9 ? monthDate.getFullYear() + 1 : monthDate.getFullYear();
     var fyMonth = (jsMonth - 9 + 12) % 12;
+
+    // 锚定财年跑完：把本财年剩余月份按比例缩放，使 9 月值 = 模型与锚点各半(停滞月仍是 0)
+    if (anchorEnd != null && fyYear !== anchor.fy) {
+      var c0 = path[0].y, raw = cutoff - c0;
+      var target = Math.max(c0, FY_ANCHOR_WEIGHT * anchorEnd + (1 - FY_ANCHOR_WEIGHT) * cutoff);
+      var n = path.length - 1;
+      for (var k = 1; k <= n; k++) {
+        path[k].y = raw > MS_PER_DAY ? c0 + (path[k].y - c0) * (target - c0) / raw
+                                     : c0 + (target - c0) * k / n;   // 模型整年全停：线性补齐
+      }
+      if (n > 0) cutoff = target;
+      anchorEnd = null;
+    }
 
     if (fyYear !== currentFY) {
       currentFY = fyYear;
@@ -1727,6 +1763,7 @@ function renderExplanation() {
   var spillTotal = totalSupply - currentParams.chinaBaseQuota;
   var spillStr = (spillTotal >= 0 ? '＋ ' : '－ ') + Math.abs(spillTotal).toLocaleString();
   var fm = currentParams.familyMultiplier.toFixed(1);
+  var anchor = fyAnchor();
 
   if (gapDays <= 0) {
     el.innerHTML = '<p>裁定日已推进到 <b>' + formatDate(cutoff) + '</b>，超过你的优先日 <b>' +
@@ -1746,7 +1783,12 @@ function renderExplanation() {
       mainPerYear.toLocaleString() + ' 主申/年</b>。</p>' +
     '<p><span class="step">③ 中心值</span><br>' +
       queueAhead.toLocaleString() + ' ÷ ' + mainPerYear.toLocaleString() + ' ≈ <b>' + yearsEst + ' 年</b>。</p>' +
-    '<p><span class="step">④ 蒙特卡洛</span><br>' +
+    (anchor && VB_MON !== 9
+      ? '<p><span class="step">④ 年底校准</span><br>' +
+        '10 月号表B <b>' + formatDate(anchor.y) + '</b> 往往就是当年 9 月表A 的落点（近三年偏差 −16 ~ +92 天）。' +
+        anchor.fy + ' 财年末按模型与它各半取值。</p>'
+      : '') +
+    '<p><span class="step">' + (anchor && VB_MON !== 9 ? '⑤' : '④') + ' 蒙特卡洛</span><br>' +
       '逐月推进快慢不一，常有停滞。跑 <b>500 次模拟</b>取分布，' +
       '给出<b>快 / 中 / 慢</b>三档。</p>';
 }
