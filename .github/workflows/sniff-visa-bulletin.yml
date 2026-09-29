@@ -38,7 +38,7 @@ on:
         description: '人工录入·表B Dates for Filing（形如 2023-12-01 或 current）'
         default: ''
       manual_released:
-        description: '人工录入·官方发布日 YYYY-MM-DD（留空=今天）'
+        description: '人工录入·官方发布日 YYYY-MM-DD（留空=未知，不会用今天顶替）'
         default: ''
       manual_chart:
         description: '人工录入·本月职业类递交用表'

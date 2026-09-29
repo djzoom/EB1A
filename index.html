@@ -480,7 +480,7 @@ function getCurrentCutoff() { return getCutoffData(profile.category, profile.cou
 
 // 工具锁定 EB-1A 中国大陆；探测器 update_index 依赖此处 EB-1A/CN 的结构
 var CUTOFF_DATA = {
-  'EB-1A': { 'CN': { A: '2023-07-01', B: '2023-12-01' } }
+  'EB-1A': { 'CN': { A: '2023-07-01', B: '2024-07-01' } }
 };
 
 function getCutoffData(category, country, chartType) {
@@ -501,7 +501,8 @@ var HISTORY = [
   ['2026-03-15','2023-03-15'],['2026-04-15','2023-04-01'],['2026-06-15','2023-04-01'],
   ['2026-07-15','2023-06-01'],
   ['2026-08-15','2023-07-01'],
-  ['2026-09-15','2023-07-01']
+  ['2026-09-15','2023-07-01'],
+  ['2026-10-15','2023-07-01']
 ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; });
 
 var HISTORY_B = [
@@ -510,13 +511,14 @@ var HISTORY_B = [
   ['2026-03-15','2023-11-01'],['2026-04-15','2023-12-01'],['2026-06-15','2023-12-01'],
   ['2026-07-15','2023-12-01'],
   ['2026-08-15','2023-12-01'],
-  ['2026-09-15','2023-12-01']
+  ['2026-09-15','2023-12-01'],
+  ['2026-10-15','2024-07-01']
 ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; });
 
 // 当前签证公告状态（每月更新）：本月 AOS 职业移民递交用哪张表
 // 2026年6月：USCIS 要求用表A（Final Action），已连续第二个月
-var VB_MONTH = '2026年9月';      // 最新已发布公告对应的月份
-var VB_YEAR = 2026, VB_MON = 9;  // 同上，数值形式（用于推下月）
+var VB_MONTH = '2026年10月';      // 最新已发布公告对应的月份
+var VB_YEAR = 2026, VB_MON = 10;  // 同上，数值形式（用于推下月）
 // 发布时间的【来源】必须与数值一起保存,否则估算值会被当成观测值渲染——
 // 2026-09 期即因此事故:抓取器故障期间系统按历史规律回填了「约 2026/08/14 12:00 ET」,
 // 而那个整点 12:00 根本不可能来自真实抓取。现按来源三分:
@@ -524,9 +526,9 @@ var VB_YEAR = 2026, VB_MON = 9;  // 同上，数值形式（用于推下月）
 //   unknown  = 无可靠来源(禁止回填任何估算值)
 var VB_RELEASED = null;          // 该期发布日期；null=未知
 var VB_RELEASED_TS = 0;          // 发布/探测时刻（epoch 毫秒, UTC）；0=无观测时刻
-var VB_RELEASED_EST = false;     // 保留兼容；来源判定一律以 VB_RELEASED_SOURCE 为准
+var VB_RELEASED_EST = true;     // 保留兼容；来源判定一律以 VB_RELEASED_SOURCE 为准
 var VB_RELEASED_SOURCE = 'unknown';   // 'observed' | 'inferred' | 'unknown'
-var VB_RELEASED_NOTE = '抓取故障期间，无首见记录';  // inferred/unknown 时的来源说明
+var VB_RELEASED_NOTE = '';  // inferred/unknown 时的来源说明
 
 // 历史发布日（bulletin月 → 实际发布日，来源律所同日文章）。探测器命中后自动追加；
 // 供"下月发布预测(近3次均值→工作日)"与未来研究。结尾哨兵注释勿删（探测器按它追加）。
@@ -541,12 +543,13 @@ var RELEASE_HISTORY = [
   // 2026-09：抓取器故障期间被回填成 2026-08-14（整点 12:00 ET，非真实观测）。
   // 已置 null 并标 unknown——旁证亦不支持 8/14：该日后一周内第三方轮询站与各律所快讯
   // 均无该期动静，实际上线更可能在 8/20–8/21。真值待 Wayback CDX 重建（见 rebuild_release_dates.py）。
-  ['2026-09', null, 'unknown']
+  ['2026-09', null, 'unknown'],
+  ['2026-10', null, 'unknown']
 ]; // RELEASE_HISTORY_END
-var FILING_CHART = 'A'; // 'A'=用表A递交；'B'=用表B递交；'?'=尚未取到（具体措辞见 FILING_CHART_STATE）
+var FILING_CHART = '?'; // 'A'=用表A递交；'B'=用表B递交；'?'=尚未取到（具体措辞见 FILING_CHART_STATE）
 // 'pending'=USCIS 尚未更新该月（正常滞后）；'error'=我们抓取报错。两者必须区分显示，
 // 否则「抓取根本没跑通」会被「待确认」掩盖。探测器每次解析后写回此值。
-var FILING_CHART_STATE = 'ok';
+var FILING_CHART_STATE = 'pending';
 // 四态措辞。旧版一律显示「待确认」——那会被读成「正在加载」,把「抓取根本没跑通」
 // 掩盖过去,与本次 2026-09 漏抓事故同类。故必须区分「USCIS 尚未公布」与「我们抓取失败」。
 var USCIS_CHART_URL = 'https://www.uscis.gov/green-card/green-card-processes-and-procedures/' +

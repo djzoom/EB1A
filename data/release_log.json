@@ -47,5 +47,16 @@
     "fad": "2023-07-01",
     "dff": "2023-12-01",
     "via": "manual"
+  },
+  {
+    "bulletin": "2026-10",
+    "detected_et": null,
+    "day": null,
+    "hour": null,
+    "weekday": null,
+    "fad": "2023-07-01",
+    "dff": "2024-07-01",
+    "via": "manual",
+    "release_date_source": "unknown"
   }
 ]
