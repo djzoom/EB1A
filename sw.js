@@ -1,6 +1,6 @@
 // EB1A PWA Service Worker
 // 策略：HTML 网络优先（保证排期数据最新），静态资源缓存优先；离线可用。
-var CACHE = 'eb1a-v3';
+var CACHE = 'eb1a-v4';
 var ASSETS = [
   './', './index.html', './manifest.json', './vendor/gsap.min.js',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'
