@@ -115,6 +115,11 @@
   .ab-chip.selected b { color: var(--blue); }
   .ab-chip.open b { text-decoration: underline; text-decoration-color: var(--blue-light); text-underline-offset: 2px; }
   .ab-hint { font-size: 11px; color: var(--text3); margin-top: 8px; text-align: center; line-height: 1.5; }
+  .ab-pred { font-size: 11.5px; color: var(--text2); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .ab-pred em { font-style: normal; font-weight: 700; color: var(--text); }
+  .ab-pred.done { color: var(--green); font-weight: 700; }
+  .ab-range { font-size: 10.5px; color: var(--text3); font-variant-numeric: tabular-nums; }
+  .ab-chip.selected .ab-pred em { color: var(--blue); }
   .ab-hint .open { color: var(--blue); font-weight: 700; }
   .ab-hint .ab-warn { color: #b45309; }
   .supply-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; background: var(--bg2, rgba(0,0,0,.02)); }
@@ -1984,14 +1989,23 @@ function renderHero() {
   var dateB = fmtCut('B');
   var aOpen = FILING_CHART === 'A' ? ' open' : '';
   var bOpen = FILING_CHART === 'B' ? ' open' : '';
+  // 两张表的预测并排常显：不必切换也能同时看到「何时可递交(表B)」与「何时批准(表A)」
+  function predLine(t) {
+    var c = t === 'B' ? crossingsByPctB : crossingsByPct;
+    var cut = getCutoffData(profile.category, profile.country, t);
+    if (pd0 && cut && pd0 < cut) return '<span class="ab-pred done">' + (t === 'B' ? '已可递交' : '已排到') + '</span>';
+    if (!c) return '';
+    return '<span class="ab-pred">' + (t === 'B' ? '预计可递交 ' : '预计排到 ') + '<em>' + formatDate(c.p50) + '</em></span>' +
+           '<span class="ab-range">' + formatDate(c.p10) + ' ~ ' + formatDate(c.p90) + '</span>';
+  }
   document.getElementById('ab-status').innerHTML =
     '<div class="ab-chips" role="tablist">' +
       '<button class="ab-chip' + (abView === 'A' ? ' selected' : '') + aOpen + '" role="tab" aria-selected="' + (abView === 'A') + '" onclick="setAbView(\'A\')">' +
-        '<small>表A · 裁定</small><b>' + dateA + '</b></button>' +
+        '<small>表A · 裁定</small><b>' + dateA + '</b>' + predLine('A') + '</button>' +
       '<button class="ab-chip' + (abView === 'B' ? ' selected' : '') + bOpen + '" role="tab" aria-selected="' + (abView === 'B') + '" onclick="setAbView(\'B\')">' +
-        '<small>表B · 递交</small><b>' + dateB + '</b></button>' +
+        '<small>表B · 递交</small><b>' + dateB + '</b>' + predLine('B') + '</button>' +
     '</div>' +
-    '<div class="ab-hint">点上方切换图中推演 · ' + VB_MONTH + ' 官方递交用 <span class="open">' + chartLabel() + '</span>' +
+    '<div class="ab-hint">上方为两张表各自的预测（中位 · 快~慢）；点选切换大数字与图中推演 · ' + VB_MONTH + ' 官方递交用 <span class="open">' + chartLabel() + '</span>' +
       (abView === 'B' ? '<br><span class="ab-warn">表B为 DOS 预筛日期，推演不确定性高于表A</span>' : '') + '</div>';
 
   animateHero();
