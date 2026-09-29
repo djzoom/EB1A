@@ -674,12 +674,19 @@ function getPDDensity(pdDate, params, wall) {
   return d_wall;  // 2025+ PD：待签池满负荷
 }
 
-var MONTHLY_WEIGHTS = [0.338, 0.183, 0.139, 0.110, 0.057, 0.037, 0.047, 0.017, 0.022, 0.026, 0.020, 0.004];
+// 月度推进权重：拉平。旧版取自 DOS 月度签证【发放】节奏(十月 33.8%)，但发放前置给的是
+// cutoff 以下早已排到的人，cutoff 本身不必跟着动。中国 EB-1 表A 的实际记录也不支持十月集中推进：
+// 近四个十月号 +14/+7/+37/0 天，近 12 个月逐月 +31,+10,+42,+17,0,+61,+30,0,0，无季节性。
+var MONTHLY_WEIGHTS = [1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12];
 
 function simulate(params) {
   var months = 144, path = [];
   var cutoff = getCurrentCutoff(), yourPD = getYourPD();
-  var startDate = new Date(TODAY);
+  // 起点 = 最新一期公告的【下一期】。cutoff 已是最新一期(VB_MON)的值；若从今天所在月起步，
+  // 最新一期当月会被再推进一次(如 10 月号已公布且零推进，却仍按 9、10 两个月叠加推进)。
+  var startDate = new Date(VB_YEAR, VB_MON, 1);
+  // 第 0 点 = 最新一期本身(已知值)，让预测线与历史线首尾相接、已 current 时穿越点落在本期。
+  path.push({ x: new Date(VB_YEAR, VB_MON - 1, 15).getTime(), y: cutoff });
   var familyMultiplier = params.familyMultiplier;
   var currentFY = null, mainPerFY = 0;
   // 路径级"情景系数"（整条路径不变）：捕捉结构性不确定性，避免逐年/逐月噪声在长路径上被平均掉，
@@ -714,11 +721,14 @@ function simulate(params) {
     var density = getPDDensity(cutoff, params, regimeWall) * regimeDensity;
     var advanceDays = monthlyMain / density;
 
-    if (fyMonth === 0) {
-      var isBigJump = rng() < 0.25;
-      if (isBigJump) advanceDays += 30 * (2 + rng() * 2);
-      else advanceDays += 30 * (0.7 + rng() * 0.6);
-    }
+    // 已删除「十月必跳」加成(旧版财年首月额外 +21~120 天)：它让模型给「十月不动」的概率为 0，
+    // 而 2026-10 号表A 恰好零推进；近三个十月号也都只有 +7~+37 天。
+
+    // 原地不动：实测约四成月份表A 零推进(DOS 按块推进、常停一两个月再跳)。
+    // 停的月份不动，动的月份按 1/(1−p) 放大，全年期望推进量不变，只是更贴近实际的"停停走走"。
+    var P_HOLD = 0.4;
+    if (rng() < P_HOLD) advanceDays = 0;
+    else advanceDays /= (1 - P_HOLD);
 
     var noise = (rng() + rng() + rng() - 1.5) / 1.5;
     advanceDays *= (1 + noise * 0.3);
@@ -737,11 +747,43 @@ function findCrossingDate(path, targetPD) {
   return null;
 }
 
-// 表B 领先表A 的 PD 距离(当前表B − 当前表A)；表B 穿越你 PD ⟺ 表A 穿越(你PD − lead)
+// 表B 领先表A 的 PD 距离(当前表B − 当前表A)
 function currentLead() {
   var a = HISTORY.length ? HISTORY[HISTORY.length - 1].y : 0;
   var b = HISTORY_B.length ? HISTORY_B[HISTORY_B.length - 1].y : a;
   return b - a;
+}
+// 历史中位领先量：同月表B − 表A 的中位数。
+function typicalLead() {
+  var byM = {}, leads = [];
+  HISTORY.forEach(function(p) { var d = new Date(p.x); byM[d.getUTCFullYear() * 12 + d.getUTCMonth()] = p.y; });
+  HISTORY_B.forEach(function(p) {
+    var d = new Date(p.x), a = byM[d.getUTCFullYear() * 12 + d.getUTCMonth()];
+    if (a != null) leads.push(p.y - a);
+  });
+  return leads.length ? median(leads) : currentLead();
+}
+// 表B 推演：先原地不动，等表A 追到历史中位领先距离后再跟着走。
+// 旧版按"表A + 当前领先量"平移，默认两表同步推进；实际表B 是跳一下、然后等表A 追上
+// (2026-04~09 停在 2023-12-01，领先量 244→153 天；10 月号再跳到 2024-07-01，领先 366 天)。
+function projectB(aY) {
+  var bNow = HISTORY_B.length ? HISTORY_B[HISTORY_B.length - 1].y : aY;
+  return Math.max(bNow, aY + typicalLead());
+}
+// 按当前视图取路径：表A 原样；表B 经 projectB 推演。图表的面条线/等待图都走它，保证与中位线同口径。
+function viewPath(path) {
+  if (abView !== 'B' || !path) return path;
+  return path.map(function(p) { return { x: p.x, y: projectB(p.y) }; });
+}
+// 表B 穿越你 PD 的时间分布：已 current 则为"现在"，否则等表A 穿越(PD − 中位领先)
+function crossingsForB(paths) {
+  var bNow = HISTORY_B.length ? HISTORY_B[HISTORY_B.length - 1].y : 0, pd = getYourPD();
+  if (pd && bNow > pd) {
+    // 已 current：可递交时间就是最新这一期公告
+    var now = new Date(VB_YEAR, VB_MON - 1, 15).getTime();
+    return { p10: now, p25: now, p50: now, p75: now, p90: now };
+  }
+  return findCrossingsDistribution(paths, pd - typicalLead());
 }
 
 function monteCarlo(params, n) {
@@ -1186,7 +1228,7 @@ function drawForecastChart(percentiles) {
     if (lead !== 0) {
       var _shift = {};
       ['p10', 'p25', 'p50', 'p75', 'p90'].forEach(function(k) {
-        _shift[k] = (percentiles[k] || []).map(function(pt) { return { x: pt.x, y: pt.y + lead }; });
+        _shift[k] = (percentiles[k] || []).map(function(pt) { return { x: pt.x, y: projectB(pt.y) }; });
       });
       percentiles = _shift;                   // 后续预测带/穿越点自动走表B版
     }
@@ -1310,7 +1352,7 @@ function drawForecastChart(percentiles) {
   var cloud = '';
   if (lastCloudPaths && lastCloudPaths.length) {
     for (var ci = 0; ci < lastCloudPaths.length; ci++) {
-      var cd = linePathD(lastCloudPaths[ci], sx, sy);
+      var cd = linePathD(viewPath(lastCloudPaths[ci]), sx, sy);
       if (cd) cloud += '<path class="mc-line" d="' + cd + '" fill="none" stroke="#15734F" stroke-width="0.6" opacity="0.13" stroke-linejoin="round"/>';
     }
   }
@@ -1333,16 +1375,21 @@ function drawWaitTimeChart(percentiles) {
   var PAD = { left: 54, right: 16, top: 18, bottom: 32 };
   var PW = W - PAD.left - PAD.right, PH = H - PAD.top - PAD.bottom;
   var yourPD = getYourPD();
+  // 表B 视图：历史取 HISTORY_B、预测路径经 projectB 推演，与走势图同口径
+  var HV = abView === 'B' ? HISTORY_B : HISTORY;
+  var _pv = {};
+  ['p10', 'p25', 'p50', 'p75', 'p90'].forEach(function(k) { _pv[k] = viewPath(percentiles[k] || []); });
+  percentiles = _pv;
 
   var histWait = [];
-  for (var i = 0; i < HISTORY.length; i++) {
-    var wait = (HISTORY[i].x - HISTORY[i].y) / (365.25 * MS_PER_DAY);
-    if (wait >= 0) histWait.push({ x: HISTORY[i].y, y: wait });
+  for (var i = 0; i < HV.length; i++) {
+    var wait = (HV[i].x - HV[i].y) / (365.25 * MS_PER_DAY);
+    if (wait >= 0) histWait.push({ x: HV[i].y, y: wait });
   }
   histWait.sort(function(a, b) { return a.x - b.x; });
 
   function pathToWait(path) {
-    var result = [], lastPD = HISTORY[HISTORY.length - 1].y;
+    var result = [], lastPD = HV[HV.length - 1].y;
     for (var i = 0; i < path.length; i++) {
       var wait = (path[i].x - path[i].y) / (365.25 * MS_PER_DAY);
       if (wait >= 0 && path[i].y > lastPD) result.push({ x: path[i].y, y: wait });
@@ -1454,14 +1501,14 @@ function drawWaitTimeChart(percentiles) {
   // —— 不确定性-透明度 协调设计 ——
   // 等待图的「已知/预测」边界在“当前排到的 PD”(非今天)：PD 小于它=已裁定(确定),大于它=预测。
   // 故揭示与渐隐都从 sx(lastPD) 向右(PD 越大=越晚的申请人=预测越远+越深入需求墙)展开。
-  var lastPD = HISTORY[HISTORY.length - 1].y;
+  var lastPD = HV[HV.length - 1].y;
   var revX = Math.max(PAD.left, Math.min(sx(lastPD), PAD.left + PW));
   var fcRight = PAD.left + PW;
   // 蒙特卡洛"面条线"(同一批 paths 转入等待空间);随 PD 渐透
   var cloud = '';
   if (lastCloudPaths && lastCloudPaths.length) {
     for (var ci = 0; ci < lastCloudPaths.length; ci++) {
-      var cd = linePathD(pathToWait(lastCloudPaths[ci]), sx, sy);
+      var cd = linePathD(pathToWait(viewPath(lastCloudPaths[ci])), sx, sy);
       if (cd) cloud += '<path class="mc-line" d="' + cd + '" fill="none" stroke="#15734F" stroke-width="0.6" opacity="0.13" stroke-linejoin="round"/>';
     }
   }
@@ -1503,13 +1550,19 @@ function renderHero() {
   var cx = activeCrossings();
   if (!cx) return;
   // 表B 视图：大数字/快中慢/进度切成"预计可递交"(表B 穿越)；表A 视图为"预计排到"(批准)
+  var pd0 = getYourPD();
+  var viewCut = abView === 'B' ? getCutoffData('EB-1A', 'CN', 'B') : getCurrentCutoff();
+  var reached = !!(pd0 && viewCut && pd0 < viewCut);   // 本期公告已覆盖你的 PD：说"已"，不说"预计"
   var leadEl = document.getElementById('result-lead');
-  if (leadEl) leadEl.textContent = abView === 'B' ? '预计可递交' : '预计排到';
+  if (leadEl) leadEl.textContent = abView === 'B' ? (reached ? '已可递交' : '预计可递交')
+                                                  : (reached ? '已排到' : '预计排到');
   var p50 = cx[selectedPercentile];
   // 先杀掉可能仍在进行的首屏"滚动"补间：否则它会用旧视图(表A)的目标覆盖刚设好的表B大数字
   if (heroRollTween) { heroRollTween.kill(); heroRollTween = null; }
-  document.getElementById('hero-value').textContent = formatDateFull(p50);
-  document.getElementById('hero-sub').textContent = '距今' + formatWait(p50);
+  document.getElementById('hero-value').textContent = reached ? VB_MONTH : formatDateFull(p50);
+  document.getElementById('hero-sub').textContent = reached
+    ? (abView === 'B' ? '表B ' + formatDate(viewCut) + ' 已过你的 PD' : '表A 已过你的 PD')
+    : '距今' + formatWait(p50);
   document.getElementById('hero-fast').textContent = formatDate(cx.p10);
   document.getElementById('hero-slow').textContent = formatDate(cx.p90);
 
@@ -1541,7 +1594,8 @@ function renderHero() {
     note = '你的 PD 还有 ' + fmtMonths(untilMonths) + '到，预计排到约需 ' + formatWait(p50);
   } else {
     var elapsedMonths = Math.round(elapsed / (30.44 * MS_PER_DAY));
-    note = '从 PD 到今天已等 ' + fmtMonths(elapsedMonths) + '，预计还需 ' + formatWait(p50);
+    note = '从 PD 到今天已等 ' + fmtMonths(elapsedMonths) +
+           (reached ? '' : '，预计还需 ' + formatWait(p50));
   }
   document.getElementById('progress-note').textContent = note;
 
@@ -1632,14 +1686,14 @@ function renderMonthlyTable(percentiles) {
   if (!tbody || !percentiles.p50 || !percentiles.p50.length) return;
   var months = Math.min(8, percentiles.p50.length);
   var yourPD = getYourPD();
-  var lead = abView === 'B' ? currentLead() : 0;   // 表B 视图：各点前移领先量，命中=可递交
-  var hitWord = abView === 'B' ? '可递交' : '排到';
+  var isB = abView === 'B';                         // 表B 视图：按 projectB 推演，命中=可递交
+  var hitWord = isB ? '可递交' : '排到';
   var html = '', found = false;
   for (var i = 0; i < months; i++) {
     var pt = percentiles.p50[i];
     var d = new Date(pt.x);
     var label = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0');
-    var y = pt.y + lead;
+    var y = isB ? projectB(pt.y) : pt.y;
     var isHit = !found && y >= yourPD;
     if (isHit) found = true;
     html += '<tr' + (isHit ? ' class="highlight"' : '') + '><td>' + label + '</td><td>' + formatDate(y) + '</td><td>' + (isHit ? hitWord : '') + '</td></tr>';
@@ -1693,7 +1747,7 @@ function renderExplanation() {
     '<p><span class="step">③ 中心值</span><br>' +
       queueAhead.toLocaleString() + ' ÷ ' + mainPerYear.toLocaleString() + ' ≈ <b>' + yearsEst + ' 年</b>。</p>' +
     '<p><span class="step">④ 蒙特卡洛</span><br>' +
-      '推进并非匀速——财年前段快、后段缓，10 月配额重置常有跳进。跑 <b>500 次模拟</b>取分布，' +
+      '逐月推进快慢不一，常有停滞。跑 <b>500 次模拟</b>取分布，' +
       '给出<b>快 / 中 / 慢</b>三档。</p>';
 }
 
@@ -1764,7 +1818,7 @@ function render() {
   lastPercentiles = percentiles;
   lastCloudPaths = sampleCloud(paths, 60);                 // 面条线(轨迹)
   crossingsByPct = findCrossingsDistribution(paths);
-  crossingsByPctB = findCrossingsDistribution(paths, getYourPD() - currentLead());  // 表B=表A+lead 穿越你PD
+  crossingsByPctB = crossingsForB(paths);   // 表B：已 current 则为现在，否则等表A 追到中位领先距离
 
   renderProfileView();
   renderExplanation();
@@ -1947,15 +2001,12 @@ function renderBulletinPanel() {
   var advA = monthlyAdv(HISTORY), advB = monthlyAdv(HISTORY_B);
   var nm = VB_MON + 1, ny = VB_YEAR; if (nm > 12) { nm = 1; ny += 1; }
 
-  // 下月预测改用蒙特卡洛模型(即上方图表所用),不再线性外推。
-  // 线性外推没有"财年"概念：10 月是新财年首月、独占全年 33.8% 配额并常有试探性放宽，
-  // 而 8/9 月配额近乎枯竭。按近 6 期均速外推会把十月大跳压成一个月的常规推进，
-  // 与上方图表直接矛盾(实测：面板给 ~2023-08-07，模型中位 2023-10-27)。
+  // 下月预测取自蒙特卡洛模型(即上方图表所用)，保证面板与图表口径一致。
   function modelBandFor(y, m) {
     var P = lastPercentiles;
     // 未填 PD 时 render() 不跑、lastPercentiles 为空。但 simulate() 只推 cutoff 轨迹，
     // 与个人 PD 无关(yourPD 在其中未参与计算)，故可就地跑一轮小样本补上——
-    // 否则新访客看到的仍是错误的线性外推(十月会被压成常规月)。
+    // 否则新访客看到的会是另一套口径(线性外推)，与图表不一致。
     if (!P || !P.p50 || !P.p10 || !P.p90) {
       if (!window._panelPct) {
         var ps = []; for (var k = 0; k < 800; k++) ps.push(simulate(currentParams));
@@ -1973,8 +2024,7 @@ function renderBulletinPanel() {
     return null;
   }
   var band = modelBandFor(ny, nm);
-  var lead = currentLead();      // 表B 领先表A 的 PD 距离；模型只推表A，表B 按此平移
-  var isFyReset = (nm === 10);   // 新财年首月：配额重置 + 前置投放，跳幅显著高于其他月
+  // 模型只推表A；表B 用 projectB(先原地不动，等表A 追到中位领先距离再跟随)
   function ymd(ts) { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   // 区间：低端=可能停滞(不前进)，高端=按 2 倍近期月推进的较快情形
   function range(now, adv) { return ymd(now) + ' ~ ' + ymd(now + adv * 2); }
@@ -2059,13 +2109,12 @@ function renderBulletinPanel() {
     ? '<br>发布：<b>' + releasedDisplay() + '</b> <span style="color:var(--text3)">· '
       + relReleaseText() + '</span>'
     : '';
-  var fyLine = (band && isFyReset)
-    ? '<br><span style="color:var(--text3)">' + nm + ' 月是新财年首月，历来跳幅最大</span>' : '';
-  function bandTxt(off) {
-    var a = Math.min(band.lo, band.hi) + off, b2 = Math.max(band.lo, band.hi) + off;
-    return '<b>' + ymd(band.mid + off) + '</b> <span style="color:var(--text3)">（'
-         + ymd(a) + ' ~ ' + ymd(b2) + '）</span>';
+  function bandTxt(fn) {
+    var lo = fn(Math.min(band.lo, band.hi)), hi = fn(Math.max(band.lo, band.hi)), mid = fn(band.mid);
+    return '<b>' + ymd(mid) + '</b>' + (lo === hi ? '' : ' <span style="color:var(--text3)">（'
+         + ymd(lo) + ' ~ ' + ymd(hi) + '）</span>');
   }
+  function idA(y) { return y; }
   el.innerHTML =
     '<div class="vb-latest' + (isNew ? ' is-new' : '') + '">' +
     '<p style="margin:0"><span class="step">最新公告 · ' + VB_MONTH + '</span>' + deltaHtml +
@@ -2077,9 +2126,9 @@ function renderBulletinPanel() {
       (band
         // 区间按日期升序。此处「靠后的 cutoff」= 推进更快，与顶部大数字的快/慢方向相反，
         // 故不套用快/慢标签，只写区间，避免读反。
-        ? '表A：' + bandTxt(0) + '<br>表B：' + bandTxt(lead)
+        ? '表A：' + bandTxt(idA) + '<br>表B：' + bandTxt(projectB)
         : '表A：<b>' + range(aNow, advA) + '</b><br>表B：<b>' + range(bNow, advB) + '</b>') +
-      fyLine + '</p>' +
+      '</p>' +
     '<p class="explain-note">括号内为 10–90 分位区间，以官方公告为准。</p>';
   updateBulletinDot();
   // 看过几秒后自动标记已读（仅本次加载调度一次）：徽标本次仍显示，下次加载不再提示
