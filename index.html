@@ -942,7 +942,7 @@ function makeModel(key, c, borrowedFrom) {
   else if (c.co === 'IN') note = '印度队伍极长（I-140 待签数十万），近端 cutoff 推进快是因为 PD 稀疏区；越往后密度越厚，推进会明显放慢。';
   if (borrowedFrom) note = '本 cell 当前无日期，参数借用 ' + borrowedFrom + '，仅在出现 cutoff 时才有意义。' + (note ? ' ' + note : '');
   return { key: key, presets: { realistic: realistic, optimistic: optimistic, pessimistic: pessimistic }, meta: meta, scen: scen,
-    density: density, pHold: c.hold, regimeSupplySigma: c.mode === 'flow' && c.co !== 'ROW' ? 0.3 : 0.25, anchor: false, note: note };
+    density: density, pHold: c.hold, regimeSupplySigma: c.mode === 'flow' && c.co !== 'ROW' ? 0.3 : 0.25, anchor: !borrowedFrom && !!FY_ANCHOR_CELLS[key], note: note };
 }
 
 var _modelCache = {};
@@ -1036,6 +1036,11 @@ var MONTHLY_WEIGHTS = [1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/1
 // (财年首月罕见)，两个信号方向相反 → 偏差均值取 0(不采信 +41 的平均超额)，σ 放宽到 90 天，
 // 与模型自身的财年末结果各占一半。
 var FY_ANCHOR_SIGMA = 90;
+// 锚点在其他 cell 的回测(9 月表A − 10 月表B，近三个财年 FY24/25/26)：
+//   EB-3 中国  0 / +16 / 0 天      EB-2 中国  +60 / +75 / −91 天
+// 两格均比纯模型准，启用；其余 cell 近三年误差数百天(印度/ROW/EB-5 多次倒退)，不启用。
+var FY_ANCHOR_CELLS = { 'EB-3|CN': 1, 'EB-2|CN': 1 };
+var FY_ANCHOR_ERR = { 'EB-1A|CN': '−16 ~ +92', 'EB-3|CN': '0 ~ +16', 'EB-2|CN': '−91 ~ +75' };
 var FY_ANCHOR_WEIGHT = 0.5;
 // 最新一期所属财年的 10 月号表B；缺失则无锚点
 function fyAnchor() {
@@ -1065,7 +1070,7 @@ function simulate(params) {
   // 路径级抽一个 demandWall(≈抽一个 f)：把"待签池前方占比 f"的真实不确定注入快/慢区间。
   // 近 PD(走 2023 已验证密度区)几乎不受影响；深 PD(2024+)区间据此变宽，并随数据收窄。
   var regimeWall = Math.max(1.0, gaussian(params.demandWall || 1.7, params.demandWallSigma || 0.45));
-  var anchor = M.anchor ? fyAnchor() : null;   // 「10 月号表B ≈ 9 月表A」的校准只对 EB-1A 中国验证过
+  var anchor = M.anchor ? fyAnchor() : null;   // 「10 月号表B ≈ 9 月表A」只对回测验证过的 cell 启用(见 FY_ANCHOR_CELLS)
   var anchorEnd = anchor ? anchor.y + gaussian(0, FY_ANCHOR_SIGMA) * MS_PER_DAY : null;
 
   for (var i = 0; i < months; i++) {
@@ -1150,12 +1155,13 @@ function typicalLead() {
 // 表B 推演：先原地不动，等表A 追到历史中位领先距离后再跟着走。
 // 旧版按"表A + 当前领先量"平移，默认两表同步推进；实际表B 是跳一下、然后等表A 追上
 // (2026-04~09 停在 2023-12-01，领先量 244→153 天；10 月号再跳到 2024-07-01，领先 366 天)。
-// 停留上限：表B 原地不动最多 B_HOLD_MAX_MONTHS 个月(从它跳到现值那期算起)。
-// 否则当前领先远超历史中位时(如 2026-10 EB-3 中国领先 814 天 vs 中位 200 天)，表A 追得慢，
-// 表B 会被推成一条拉平三年的直线——历史上从未有过。取值=2016 起各(类别×CN/IN/ROW)格
-// 表B 最长停留月数的 75 分位(16 个月；中位 13.5，最长 EB-5 印度 27)。到期后表B 保留当时的
-// 领先量、随表A 平行推进；表A 追近到中位领先距离后仍按原规则跟随。
-var B_HOLD_MAX_MONTHS = 16;
+// 停留上限：表B 原地不动最多 N 个月(从它跳到现值那期算起)，N = 该格 2016-10 起表B 历史最长
+// 停留月数(data/visa_bulletin_history.json 实测)。否则当前领先远超历史中位时(如 2026-10 EB-3 中国
+// 领先 814 天 vs 中位 200 天)，表B 会被推成拉平数年的直线——历史上从未有过。
+// 到期后表B 保留当时的领先量、随表A 平行推进；表A 追近到中位领先距离后仍按原规则跟随。
+var B_HOLD_MAX_BY_CELL = {"EB-1A|CN": 21, "EB-1A|IN": 12, "EB-1A|MX": 7, "EB-1A|PH": 7, "EB-1A|ROW": 7, "EB-2|CN": 12, "EB-2|IN": 12, "EB-2|MX": 10, "EB-2|PH": 10, "EB-2|ROW": 10, "EB-3|CN": 10, "EB-3|IN": 16, "EB-3|MX": 12, "EB-3|PH": 12, "EB-3|ROW": 12, "EB-4|CN": 15, "EB-4|IN": 15, "EB-4|MX": 15, "EB-4|PH": 15, "EB-4|ROW": 15, "EB-5|CN": 21, "EB-5|IN": 27};
+var B_HOLD_MAX_DEFAULT = 14;   // 无历史的格子：各格最长停留的中位
+function bHoldMaxMonths() { return B_HOLD_MAX_BY_CELL[profile.category + '|' + profile.country] || B_HOLD_MAX_DEFAULT; }
 // 表B 跳到现值的那期(停留起点)
 function bHoldStart() {
   var h = histB(); if (!h.length) return 0;
@@ -1167,7 +1173,7 @@ function bHoldStart() {
 function projectBPath(path) {
   if (!path || !path.length) return path;
   var h = histB(), bNow = h.length ? h[h.length - 1].y : path[0].y, typ = typicalLead();
-  var holdEnd = bHoldStart() + B_HOLD_MAX_MONTHS * 30.44 * MS_PER_DAY;
+  var holdEnd = bHoldStart() + bHoldMaxMonths() * 30.44 * MS_PER_DAY;
   var out = [], prev = -Infinity, capB = null, capA = null;
   for (var i = 0; i < path.length; i++) {
     var p = path[i], b = Math.max(bNow, p.y + typ);
@@ -2174,7 +2180,7 @@ function renderExplanation() {
       queueAhead.toLocaleString() + ' ÷ ' + mainPerYear.toLocaleString() + ' ≈ <b>' + yearsEst + ' 年</b>。</p>' +
     (anchor && VB_MON !== 9
       ? '<p><span class="step">④ 年底校准</span><br>' +
-        '10 月号表B <b>' + formatDate(anchor.y) + '</b> 往往就是当年 9 月表A 的落点（近三年偏差 −16 ~ +92 天）。' +
+        '10 月号表B <b>' + formatDate(anchor.y) + '</b> 往往就是当年 9 月表A 的落点（近三年偏差 ' + (FY_ANCHOR_ERR[profile.category + '|' + profile.country] || '−16 ~ +92') + ' 天）。' +
         anchor.fy + ' 财年末按模型与它各半取值。</p>'
       : '') +
     '<p><span class="step">' + (anchor && VB_MON !== 9 ? '⑤' : '④') + ' 蒙特卡洛</span><br>' +
@@ -2528,7 +2534,7 @@ function renderBulletinPanel() {
     return null;
   }
   var band = cellCurrent ? null : modelBandFor(ny, nm);
-  // 模型只推表A；表B 用 projectBPath(先原地不动，至多停 B_HOLD_MAX_MONTHS 个月，再跟随表A)
+  // 模型只推表A；表B 用 projectBPath(先原地不动，至多停该格历史最长停留月数，再跟随表A)
   function ymd(ts) { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   // 区间：低端=可能停滞(不前进)，高端=按 2 倍近期月推进的较快情形
   function range(now, adv) { return ymd(now) + ' ~ ' + ymd(now + adv * 2); }
