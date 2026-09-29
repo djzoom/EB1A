@@ -127,9 +127,9 @@
   .supply-title { font-size: 13px; font-weight: 700; color: var(--text); }
   .supply-total { font-size: 15px; font-weight: 700; color: #15734F; font-variant-numeric: tabular-nums; }
   .supply-scenarios { display: flex; gap: 6px; }
-  .sc-btn { flex: 1; padding: 8px 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg, #fff); color: var(--text2); font-size: 13px; cursor: pointer; transition: all .15s; -webkit-tap-highlight-color: transparent; }
-  .sc-btn:hover { border-color: #15734F; }
-  .sc-btn.active { background: #15734F; color: #fff; border-color: #15734F; font-weight: 700; }
+  .sc-btn, .pace-btn { flex: 1; padding: 8px 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg, #fff); color: var(--text2); font-size: 13px; cursor: pointer; transition: all .15s; -webkit-tap-highlight-color: transparent; }
+  .sc-btn:hover, .pace-btn:hover { border-color: #15734F; }
+  .sc-btn.active, .pace-btn.active { background: #15734F; color: #fff; border-color: #15734F; font-weight: 700; }
   .supply-breakdown { font-size: 11.5px; color: var(--text3); margin-top: 8px; line-height: 1.6; }
   .supply-breakdown b { color: var(--text2); font-variant-numeric: tabular-nums; }
 
@@ -461,6 +461,14 @@
             <button class="sc-btn" data-sc="surge">FB大转移</button>
           </div>
           <div class="supply-breakdown" id="supply-breakdown"></div>
+        </div>
+        <div class="supply-panel">
+          <div class="supply-head"><span class="supply-title">远期推进速度</span></div>
+          <div class="supply-scenarios">
+            <button class="pace-btn active" data-pace="model">按排队人数推演</button>
+            <button class="pace-btn" data-pace="recent">延续近两年速度</button>
+          </div>
+          <div class="supply-breakdown" id="pace-note"></div>
         </div>
         <div class="params" id="params-container"></div>
         <button class="reset-btn" id="param-reset">↺ 重置为默认</button>
@@ -998,6 +1006,11 @@ function gaussian(mu, sigma) {
   return mu + Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * sigma;
 }
 
+// 远期推进速度口径：'model'=按 I-140 待签/库存推出的排队人数(越往后越厚、越慢)；
+// 'recent'=密度保持在 cutoff 附近的值，即大致按近两年实测速度外推。记忆到 localStorage。
+var PACE_KEY = 'gc_pace_mode';
+var paceMode = 'model';
+try { var _pm = localStorage.getItem(PACE_KEY); if (_pm === 'model' || _pm === 'recent') paceMode = _pm; } catch (e) {}
 function getPDDensity(pdDate, params, wall) {
   // 密度曲线 = 当前 cell 的分段线性「结点」表 [ts, 值]：值为数字，或 'H'(densityHigh) / 'P'(densityPeak) / 'W'(P×需求墙)。
   // 首结点之前取首值、末结点之后取末值。EB-1A 中国的结点复刻了原先硬编码的 5 段曲线(见 DENSITY_EB1CN)。
@@ -1009,6 +1022,8 @@ function getPDDensity(pdDate, params, wall) {
   // 原始 待签/库存 ≈ 2.45，阻尼到 demandWall(默认 1.7；2026 待签池见顶退潮后由 1.8 下调)。cutoff 进入 2024 PD 后变慢。
   var K = activeModel().density;
   var d_high = params.densityHigh || 23, d_peak = params.densityPeak || 29;
+  // 「延续近两年速度」：整条曲线取近端密度，不再按 I-140 待签人数爬升/加需求墙
+  if (paceMode === 'recent') return d_high;
   var d_wall = d_peak * (wall || params.demandWall || 1.7);
   function val(v) { return v === 'H' ? d_high : v === 'P' ? d_peak : v === 'W' ? d_wall : v; }
   if (pdDate < K[0][0]) return val(K[0][1]);
@@ -2709,6 +2724,25 @@ document.querySelectorAll('.stat').forEach(function(cell) {
 document.querySelectorAll('.sc-btn').forEach(function(btn) {
   btn.addEventListener('click', function() { applySupplyScenario(btn.dataset.sc); });
 });
+function syncPaceUI() {
+  document.querySelectorAll('.pace-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.pace === paceMode); });
+  var n = document.getElementById('pace-note');
+  if (n) n.innerHTML = paceMode === 'recent'
+    ? '按 cutoff 附近的排队密度一直外推，约等于延续近两年表A 的实际推进速度。<b>偏乐观</b>：忽略了后面 I-140 待签人数更多。'
+    : '按 USCIS I-140 待签与 I-485 库存推出的排队人数：越往后的 PD 人越多，推进会逐渐放慢。<b>默认</b>。';
+}
+window.setPaceMode = function(m) {
+  if (m !== 'model' && m !== 'recent') return;
+  paceMode = m;
+  try { localStorage.setItem(PACE_KEY, m); } catch (e) {}
+  window._panelPct = null;
+  syncPaceUI();
+  if (profile.pd) render();
+};
+document.querySelectorAll('.pace-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() { if (btn.dataset.pace !== paceMode) setPaceMode(btn.dataset.pace); });
+});
+syncPaceUI();
 
 document.getElementById('replay-btn').addEventListener('click', replayDeduction);
 document.getElementById('refresh-btn').addEventListener('click', function () {
