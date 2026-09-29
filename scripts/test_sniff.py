@@ -194,7 +194,7 @@ check("cron 加密档期与 CORE_DAY_LO/HI 一致",
 import json as _json  # noqa: E402
 _days = [r["day"] for r in _json.load(open(_os.path.join(
     _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "data", "release_log.json"),
-    encoding="utf-8"))]
+    encoding="utf-8")) if r.get("day") is not None]   # 发布日未知的补录期不是观测值，不参与
 check(f"历史发布日 {sorted(_days)} 全在密探窗 {S.CORE_DAY_LO}-{S.CORE_DAY_HI} 内",
       all(S.CORE_DAY_LO <= d <= S.CORE_DAY_HI for d in _days), True)
 

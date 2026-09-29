@@ -596,32 +596,45 @@ def manual(args):
             return "error", (f"{lbl} 值 {new} 未过理智门禁：{why}。"
                              "若确认官方就是此值(如政策性巨变)，请手动改 index.html。")
 
-    rel = (args.released or "").strip() or now_et().strftime("%Y-%m-%d")
-    try:
-        rd = datetime.strptime(rel, "%Y-%m-%d")
-    except ValueError:
-        return "error", f"--released 非法日期(应形如 2026-07-20)：{rel!r}"
-    # 发布"日"确定、"时刻"未知 → 取 12:00 ET，默认 est=True(前端加「约」)；--exact 表精确
-    detected = (datetime(rd.year, rd.month, rd.day, 12, 0, tzinfo=ET) if ET
-                else datetime(rd.year, rd.month, rd.day, 12, 0))
+    # 留空 = 发布日未知。旧行为是拿「今天 12:00 ET」顶替——从截图补录时那既不是发布日、
+    # 也不是任何人观测到的时刻，写进去就是伪造。只有明确给出日期才记录。
+    rel = (args.released or "").strip()
+    detected = None
+    if rel and rel.lower() != "unknown":
+        try:
+            rd = datetime.strptime(rel, "%Y-%m-%d")
+        except ValueError:
+            return "error", f"--released 非法日期(应形如 2026-07-20，或留空表示未知)：{rel!r}"
+        # 发布"日"确定、"时刻"未知 → 取 12:00 ET 仅作排序锚点；来源标 inferred，前端只显示到日
+        detected = (datetime(rd.year, rd.month, rd.day, 12, 0, tzinfo=ET) if ET
+                    else datetime(rd.year, rd.month, rd.day, 12, 0))
     chart = args.chart if args.chart in ('A', 'B', '?') else '?'
 
     tag = f"{ty}-{tm:02d}"
-    print(f"[manual] 录入 {tag}：表A={fad} 表B={dff} 发布={rel} 用表={chart} exact={args.exact}")
+    print(f"[manual] 录入 {tag}：表A={fad} 表B={dff} 发布={rel or '未知'} 用表={chart} exact={args.exact}")
     if args.dry_run:
         return "hit", f"{tag} 人工录入(dry-run，未写文件)：表A={fad} 表B={dff}"
 
     try:
-        update_index(ty, tm, fad, dff, detected, est=not args.exact, chart_override=chart)
+        update_index(ty, tm, fad, dff, detected, est=not args.exact, chart_override=chart,
+                     manual_entry=True)
     except Exception as e:
         return "error", f"{tag} update_index 写入失败：{type(e).__name__}: {e}"
 
     # release_log 追加(via=manual,hour=None 不进自学习窗口)；已存在则不重复
     log = load_log()
     if not any(r.get("bulletin") == tag for r in log):
-        log.append({"bulletin": tag, "detected_et": detected.strftime("%Y-%m-%d %H:%M"),
-                    "day": rd.day, "hour": None, "weekday": rd.weekday(),
-                    "fad": fad, "dff": dff, "via": "manual"})
+        if detected is None:
+            # 发布日未知：只记数值，不写日期字段——release_log 的日期列会进发布窗学习，
+            # 伪造的日期会反过来污染"下次什么时候发"的预测。
+            log.append({"bulletin": tag, "detected_et": None, "day": None, "hour": None,
+                        "weekday": None, "fad": fad, "dff": dff, "via": "manual",
+                        "release_date_source": "unknown"})
+        else:
+            log.append({"bulletin": tag, "detected_et": detected.strftime("%Y-%m-%d %H:%M"),
+                        "day": detected.day, "hour": None, "weekday": detected.weekday(),
+                        "fad": fad, "dff": dff, "via": "manual",
+                        "release_date_source": "inferred"})
         save_log(log)
 
     label = {'A': '表A(Final Action)', 'B': '表B(Dates for Filing)'}.get(chart, '待 USCIS 确认')
@@ -1041,7 +1054,7 @@ def main():
     write_run_summary(status, detail)
 
 
-def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None):
+def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None, manual_entry=False):
     """把新一期表A/表B 写回 index.html：更新 CUTOFF_DATA、VB_* 公告元信息，并追加 HISTORY/HISTORY_B。
     detected: 本期探测到的时刻(aware datetime, ET)；既写显示用日期 VB_RELEASED，也写精确时刻 VB_RELEASED_TS。
     est=True(经 Wayback 兜底)时 VB_RELEASED_EST 置 true → 前端显示加「约」。
@@ -1049,11 +1062,17 @@ def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None):
     with open(INDEX, encoding="utf-8") as f:
         s = f.read()
     bull = f"{ty}-{tm:02d}-15"  # 该期对应的 bulletin 月（用 15 号作 x）
-    released = detected.strftime("%Y-%m-%d")
-    if detected.tzinfo is not None:
-        released_ms = int(detected.astimezone(timezone.utc).timestamp() * 1000)
+    # detected=None：发布时刻未知（如从截图人工补录、抓取器当时处于故障）。
+    # 此时一律写 unknown，绝不拿"今天"或任何估算值顶替——那正是 2026-09 期的伪造来源。
+    unknown_release = detected is None
+    if unknown_release:
+        released, released_ms = None, 0
     else:
-        released_ms = int(detected.timestamp() * 1000)
+        released = detected.strftime("%Y-%m-%d")
+        if detected.tzinfo is not None:
+            released_ms = int(detected.astimezone(timezone.utc).timestamp() * 1000)
+        else:
+            released_ms = int(detected.timestamp() * 1000)
 
     # 1) 更新 EB-1A CN 的 A/B
     s = re.sub(r"('EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*')[0-9-]+(',\s*B:\s*')[0-9-]+(')",
@@ -1064,16 +1083,20 @@ def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None):
     s = re.sub(r"(var VB_YEAR = )\d+(, VB_MON = )\d+(;)",
                lambda m: m.group(1) + str(ty) + m.group(2) + str(tm) + m.group(3), s, count=1)
     s = re.sub(r"(var VB_RELEASED = )(?:'[^']*'|null)",
-               lambda m: m.group(1) + f"'{released}'", s, count=1)
+               lambda m: m.group(1) + ("null" if unknown_release else f"'{released}'"), s, count=1)
     s = re.sub(r"(var VB_RELEASED_TS = )\d+", lambda m: m.group(1) + str(released_ms), s, count=1)
     # 在线真实命中=精确时刻(去「约」)；Wayback 兜底命中=快照近似时刻(加「约」)
     s = re.sub(r"(var VB_RELEASED_EST = )(?:true|false)",
                lambda m: m.group(1) + ("true" if est else "false"), s, count=1)
     # B1/B4) 来源必须与数值一起落盘。直连命中 = 本系统首见时间戳 → observed(精确到分);
-    # Wayback 兜底 = 外部快照推得 → inferred(只到日,前端不显示时刻)。
+    # Wayback 兜底 = 外部快照推得 → inferred(只到日,前端不显示时刻);无从得知 → unknown。
     # 决不允许再出现「按历史规律回填一个整点时刻」那种把估算渲染成观测的情况。
-    src = "inferred" if est else "observed"
-    note = "Wayback 快照" if est else ""
+    if unknown_release:
+        src, note = "unknown", ""
+    elif est:
+        src, note = "inferred", ("人工录入" if manual_entry else "Wayback 快照")
+    else:
+        src, note = "observed", ""
     s = re.sub(r"(var VB_RELEASED_SOURCE = ')[^']*(')", lambda m: m.group(1) + src + m.group(2), s, count=1)
     s = re.sub(r"(var VB_RELEASED_NOTE = ')[^']*(')", lambda m: m.group(1) + note + m.group(2), s, count=1)
     # A2) 本月递交用哪张表是 USCIS 另发的决定：手动传入则直接用；否则从 USCIS AOS 页自动判定；判不准则 '?' 待确认
@@ -1100,12 +1123,14 @@ def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None):
     # B4) 首见时间一经写入不得覆写：已存在该期且不是 unknown 占位，就原样保留。
     # 否则后续运行会用当次探测时刻覆盖真正的首见时刻，把"首见"退化成"最近一次见到"。
     rel_tag = f"{ty}-{tm:02d}"
+    rel_val = "null" if unknown_release else f"'{released}'"
+    entry = f"['{rel_tag}', {rel_val}, '{src}']"
     placeholder = re.compile(r"\n\s*\['" + re.escape(rel_tag) + r"',\s*null\s*,\s*'unknown'\]")
     if placeholder.search(s):
-        s = placeholder.sub(f"\n  ['{rel_tag}','{released}','{src}']", s, count=1)
+        if not unknown_release:           # 占位只能被真实日期替换，unknown 覆盖 unknown 无意义
+            s = placeholder.sub(f"\n  {entry}", s, count=1)
     elif f"['{rel_tag}'," not in s:
-        s = re.sub(r"(\n)(\]; // RELEASE_HISTORY_END)",
-                   f",\n  ['{rel_tag}','{released}','{src}']\\1\\2", s, count=1)
+        s = re.sub(r"(\n)(\]; // RELEASE_HISTORY_END)", f",\n  {entry}\\1\\2", s, count=1)
     else:
         print(f"[index] {rel_tag} 发布日已存在，保留首见记录不覆写")
 
