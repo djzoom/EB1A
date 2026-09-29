@@ -1150,14 +1150,40 @@ function typicalLead() {
 // 表B 推演：先原地不动，等表A 追到历史中位领先距离后再跟着走。
 // 旧版按"表A + 当前领先量"平移，默认两表同步推进；实际表B 是跳一下、然后等表A 追上
 // (2026-04~09 停在 2023-12-01，领先量 244→153 天；10 月号再跳到 2024-07-01，领先 366 天)。
-function projectB(aY) {
-  var bNow = histB().length ? histB()[histB().length - 1].y : aY;
-  return Math.max(bNow, aY + typicalLead());
+// 停留上限：表B 原地不动最多 B_HOLD_MAX_MONTHS 个月(从它跳到现值那期算起)。
+// 否则当前领先远超历史中位时(如 2026-10 EB-3 中国领先 814 天 vs 中位 200 天)，表A 追得慢，
+// 表B 会被推成一条拉平三年的直线——历史上从未有过。取值=2016 起各(类别×CN/IN/ROW)格
+// 表B 最长停留月数的 75 分位(16 个月；中位 13.5，最长 EB-5 印度 27)。到期后表B 保留当时的
+// 领先量、随表A 平行推进；表A 追近到中位领先距离后仍按原规则跟随。
+var B_HOLD_MAX_MONTHS = 16;
+// 表B 跳到现值的那期(停留起点)
+function bHoldStart() {
+  var h = histB(); if (!h.length) return 0;
+  var bNow = h[h.length - 1].y, j = h.length - 1;
+  while (j > 0 && h[j - 1].y === bNow) j--;
+  return h[j].x;
 }
-// 按当前视图取路径：表A 原样；表B 经 projectB 推演。图表的面条线/等待图都走它，保证与中位线同口径。
+// 把一条表A 路径推成表B 路径：停留期内同 projectB；超过停留上限后随表A 平行推进。单调不降。
+function projectBPath(path) {
+  if (!path || !path.length) return path;
+  var h = histB(), bNow = h.length ? h[h.length - 1].y : path[0].y, typ = typicalLead();
+  var holdEnd = bHoldStart() + B_HOLD_MAX_MONTHS * 30.44 * MS_PER_DAY;
+  var out = [], prev = -Infinity, capB = null, capA = null;
+  for (var i = 0; i < path.length; i++) {
+    var p = path[i], b = Math.max(bNow, p.y + typ);
+    if (p.x > holdEnd) {
+      if (capB === null) { capB = Math.max(prev, bNow); capA = i > 0 ? path[i - 1].y : p.y; }
+      b = Math.max(b, capB + (p.y - capA));
+    }
+    b = Math.max(b, prev); prev = b;
+    out.push({ x: p.x, y: b });
+  }
+  return out;
+}
+// 按当前视图取路径：表A 原样；表B 经 projectBPath 推演。图表的面条线/等待图都走它，保证与中位线同口径。
 function viewPath(path) {
   if (abView !== 'B' || !path) return path;
-  return path.map(function(p) { return { x: p.x, y: projectB(p.y) }; });
+  return projectBPath(path);
 }
 // 表B 穿越你 PD 的时间分布：已 current 则为"现在"，否则等表A 穿越(PD − 中位领先)
 function crossingsForB(paths) {
@@ -1167,7 +1193,7 @@ function crossingsForB(paths) {
     var now = new Date(VB_YEAR, VB_MON - 1, 15).getTime();
     return { p10: now, p25: now, p50: now, p75: now, p90: now };
   }
-  return findCrossingsDistribution(paths, pd - typicalLead());
+  return findCrossingsDistribution(paths.map(projectBPath), pd);
 }
 
 function monteCarlo(params, n) {
@@ -1612,7 +1638,7 @@ function drawForecastChart(percentiles) {
     if (lead !== 0) {
       var _shift = {};
       ['p10', 'p25', 'p50', 'p75', 'p90'].forEach(function(k) {
-        _shift[k] = (percentiles[k] || []).map(function(pt) { return { x: pt.x, y: projectB(pt.y) }; });
+        _shift[k] = projectBPath(percentiles[k] || []);
       });
       percentiles = _shift;                   // 后续预测带/穿越点自动走表B版
     }
@@ -2083,11 +2109,12 @@ function renderMonthlyTable(percentiles) {
   var isB = abView === 'B';                         // 表B 视图：按 projectB 推演，命中=可递交
   var hitWord = isB ? '可递交' : '排到';
   var html = '', found = false;
+  var p50B = isB ? projectBPath(percentiles.p50) : null;
   for (var i = 0; i < months; i++) {
     var pt = percentiles.p50[i];
     var d = new Date(pt.x);
     var label = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0');
-    var y = isB ? projectB(pt.y) : pt.y;
+    var y = isB ? p50B[i].y : pt.y;
     var isHit = !found && y >= yourPD;
     if (isHit) found = true;
     html += '<tr' + (isHit ? ' class="highlight"' : '') + '><td>' + label + '</td><td>' + formatDate(y) + '</td><td>' + (isHit ? hitWord : '') + '</td></tr>';
@@ -2493,13 +2520,15 @@ function renderBulletinPanel() {
     for (var i = 0; i < P.p50.length; i++) {
       var d = new Date(P.p50[i].x);
       if (d.getFullYear() === y && d.getMonth() + 1 === m) {
-        return { lo: P.p10[i].y, mid: P.p50[i].y, hi: P.p90[i].y };
+        var b10 = projectBPath(P.p10), b50 = projectBPath(P.p50), b90 = projectBPath(P.p90);
+        return { lo: P.p10[i].y, mid: P.p50[i].y, hi: P.p90[i].y,
+                 B: { lo: b10[i].y, mid: b50[i].y, hi: b90[i].y } };
       }
     }
     return null;
   }
   var band = cellCurrent ? null : modelBandFor(ny, nm);
-  // 模型只推表A；表B 用 projectB(先原地不动，等表A 追到中位领先距离再跟随)
+  // 模型只推表A；表B 用 projectBPath(先原地不动，至多停 B_HOLD_MAX_MONTHS 个月，再跟随表A)
   function ymd(ts) { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   // 区间：低端=可能停滞(不前进)，高端=按 2 倍近期月推进的较快情形
   function range(now, adv) { return ymd(now) + ' ~ ' + ymd(now + adv * 2); }
@@ -2584,12 +2613,11 @@ function renderBulletinPanel() {
     ? '<br>发布：<b>' + releasedDisplay() + '</b> <span style="color:var(--text3)">· '
       + relReleaseText() + '</span>'
     : '';
-  function bandTxt(fn) {
-    var lo = fn(Math.min(band.lo, band.hi)), hi = fn(Math.max(band.lo, band.hi)), mid = fn(band.mid);
+  function bandTxt(bd) {
+    var lo = Math.min(bd.lo, bd.hi), hi = Math.max(bd.lo, bd.hi), mid = bd.mid;
     return '<b>' + ymd(mid) + '</b>' + (lo === hi ? '' : ' <span style="color:var(--text3)">（'
          + ymd(lo) + ' ~ ' + ymd(hi) + '）</span>');
   }
-  function idA(y) { return y; }
   el.innerHTML =
     '<div class="vb-latest' + (isNew ? ' is-new' : '') + '">' +
     '<p style="margin:0"><span class="step">最新公告 · ' + VB_MONTH + '</span>' + deltaHtml +
@@ -2602,7 +2630,7 @@ function renderBulletinPanel() {
        : band
         // 区间按日期升序。此处「靠后的 cutoff」= 推进更快，与顶部大数字的快/慢方向相反，
         // 故不套用快/慢标签，只写区间，避免读反。
-        ? '表A：' + bandTxt(idA) + '<br>表B：' + bandTxt(projectB)
+        ? '表A：' + bandTxt(band) + '<br>表B：' + bandTxt(band.B)
         : '表A：<b>' + range(aNow, advA) + '</b><br>表B：<b>' + range(bNow, advB) + '</b>') +
       '</p>' +
     '<p class="explain-note">括号内为 10–90 分位区间，以官方公告为准。所选：' + cellScope() + '。</p>';
