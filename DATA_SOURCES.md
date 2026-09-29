@@ -30,6 +30,20 @@
 
 ---
 
+## 多类别历史（EB-1A..EB-5 × ROW/CN/IN/MX/PH）来源与核验
+
+沙箱无法直连 state.gov 与律所站点（egress 403），一手 HTML 未能直接抓取。`data/visa_bulletin_history.json` 由两份 DOS 表格的机器可读转录合并：
+
+1. vyakunin/visa_bulletin `visa_bulletin.db`（2001-12 ~ 2025-12，解析自 DOS HTML 存档）
+2. yuchenlin/pd-tracker `src/data/visa-bulletins.json`（2021-09 ~ 2026-10，含 2026 年 1–10 月与 2026-10 期）
+
+二者在 2021-09~2025-12 的 2,520 个重叠格子逐格一致。2026-10 期抽查（律所摘要，经 WebSearch）：EB-2 中国 A 2021-10-01、印度 A 2013-11-01；EB-5 中国 A 2016-12-01 / B 2021-03-01，印度 A 2023-12-01 / B 2024-05-01；三个 EB-5 预留类 Current；EB-3 中国 B 2024-04-01 —— 均吻合。**仍非一手来源，请以官方公告为准。**
+未收录：EW、EB-4 宗教工作者、ESGH 列（2023-03 后取消）。EB-5 预留类的 2026 年月份来自律所摘要。已发现的既有数据差异：index.html `HISTORY` 里 2026-03 EB-1A 中国表A 为 2023-03-15，转录与律所均为 2023-03-01（未改动以保持 EB-1A 输出不变）。
+
+标定用 USCIS 数据：`data/raw/uscis/I140_I360_I526_Approved_FY2026_Q1.xlsx`（as of 2025-12，按国别×类别的已批准 I-140 待签主申）与 `I485_Pending_Inventory_april_2026.xlsx`，见 `scripts/calibrate_categories.py`。
+
+---
+
 ## 🎯 一级数据源 (官方 + 直接结构化)
 
 ### 1. USCIS I-485 Pending Inventory (含 PD bucket)

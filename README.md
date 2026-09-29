@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-EB-1A 中国大陆排期预测工具。基于公开政府数据（USCIS / DOS），用供给 + 队列密度的第一性原理方法估算 Priority Date 何时到期。
+EB-1 ~ EB-5 排期预测工具（EB-1A / EB-2 / EB-3 / EB-4 / EB-5 及三类 EB-5 预留；中国大陆、印度、其他国家 ROW、墨西哥、菲律宾）。EB-1A 中国大陆为最初的、参数经手工标定并回测的主场景。基于公开政府数据（USCIS / DOS），用供给 + 队列密度的第一性原理方法估算 Priority Date 何时到期。
 
 ## 在线 Demo
 
@@ -16,6 +16,15 @@ EB-1A 中国大陆排期预测工具。基于公开政府数据（USCIS / DOS）
 2. **供给（supply）**：每财年法定配额 + 单国 7% 上限 + 其他国家用不完的溢出。
 3. **密度**：估算目标 PD 之前还有多少人，决定需要消耗多少签证号才能轮到。
 4. **不确定性**：用蒙特卡洛模拟给出 P10 / P50 / P90 区间，而非单点预测。
+
+## 多类别 / 多国家
+
+首次打开时可选类别与出生国（随时可在编辑面板修改，保存在 localStorage `eb1a_user_profile`）。每个 类别×国家 有独立的表A/表B 当期值、历史序列与模型参数：
+
+- 数据：`data/visa_bulletin_history.json`（2016-10 → 2026-10，脚本 `scripts/build_bulletin_history.py`）
+- 参数：`scripts/calibrate_categories.py` 由「表A 近 24 月推进速度 + I-140 已批准待签（cutoff 之后排队总量）+ I-485 库存」标定，写入 `index.html` 的 `CELL_MODELS`
+- 表A 为 Current 的格子（如 EB-1 ROW、EB-5 ROW、EB-5 三个预留类）直接显示「已 current，无需等待」
+- EW（其他工人）与 EB-4 宗教工作者行暂未收录；EB-2..5 及非中国格子的参数含较多假设（溢入、家庭系数），置信度低于 EB-1A 中国
 
 ## 已知局限与改进方向
 

@@ -160,6 +160,111 @@ TRUNCATED = ("Final Action Dates for Employment-Based Preference Cases "
 expect_raises("表被裁剪至 3 行 → 抛异常（不返回半张表）",
               lambda: S.parse_eb1_china(TRUNCATED))
 
+print("\n## 4b. 多类别解析（EB-1A..EB-5 × ROW/CN/IN/MX/PH，表A+表B）")
+# 夹具 = 2026-10 期(FY2027 首期)的数值，按 DOS 页面文字形态重建（含真实的括号说明与 6 行标签）。
+# 数值来自 DOS 公告转录（yuchenlin/pd-tracker，与 vyakunin 库逐格一致），非直接抓取的 HTML。
+OCT26 = (
+    "Visa Bulletin For October 2026 "
+    "A. FINAL ACTION DATES FOR EMPLOYMENT-BASED PREFERENCE CASES "
+    "Employment-Based All Chargeability Areas Except Those Listed CHINA-mainland born INDIA MEXICO PHILIPPINES "
+    "1st C 01JUL23 01FEB23 C C "
+    "2nd 01JAN25 01OCT21 01NOV13 01JAN25 01JAN25 "
+    "3rd 15MAY24 08JAN22 01JAN14 15MAY24 15AUG23 "
+    "Other Workers 01JAN22 01OCT19 01JAN14 01JAN22 01JAN22 "
+    "4th 15DEC22 15DEC22 15DEC22 15DEC22 15DEC22 "
+    "Certain Religious Workers 15DEC22 15DEC22 15DEC22 15DEC22 15DEC22 "
+    "5th Unreserved (including C5, T5, I5, R5, NU, RU) C 01DEC16 01DEC23 C C "
+    "5th Set Aside: Rural (20%, including NR, RR) C C C C C "
+    "5th Set Aside: High Unemployment (10%, including NH, RH) C C C C C "
+    "5th Set Aside: Infrastructure (2%, including RI) C C C C C "
+    "B. DATES FOR FILING OF EMPLOYMENT-BASED VISA APPLICATIONS "
+    "Employment-Based All Chargeability Areas Except Those Listed CHINA-mainland born INDIA MEXICO PHILIPPINES "
+    "1st C 01JUL24 01JUL24 C C "
+    "2nd 15MAR26 01JAN23 15JAN15 15MAR26 15MAR26 "
+    "3rd 01AUG24 01APR24 15JAN15 01AUG24 01JAN24 "
+    "Other Workers 01MAR26 01JUL19 01JUL14 01MAR26 01JAN24 "
+    "4th 01JAN25 01JAN25 01JAN25 01JAN25 01JAN25 "
+    "Certain Religious Workers 01JAN25 01JAN25 01JAN25 01JAN25 01JAN25 "
+    "5th Unreserved (including C5, T5, I5, R5) C 01MAR21 01MAY24 C C "
+    "5th Set Aside: Rural (20%, including NR, RR) C C C C C "
+    "5th Set Aside: High Unemployment (10%, including NH, RH) C C C C C "
+    "5th Set Aside: Infrastructure (2%, including RI) C C C C C")
+# 夹具里 A 表标题借用 "Final Action Dates ... Employment" 的锚点写法
+OCT26 = OCT26.replace("A. FINAL ACTION DATES FOR EMPLOYMENT-BASED PREFERENCE CASES",
+                      "Final Action Dates for Employment-Based Preference Cases").replace(
+                      "B. DATES FOR FILING OF EMPLOYMENT-BASED VISA APPLICATIONS",
+                      "Dates for Filing of Employment-Based Visa Applications")
+cells = S.parse_eb_cells(OCT26)
+check("共解析 8 类 × 5 国 = 40 格", len(cells), 40)
+check("EB-1A 中国 A/B", cells[("EB-1A", "CN")], ("2023-07-01", "2024-07-01"))
+check("EB-1A 印度 A/B", cells[("EB-1A", "IN")], ("2023-02-01", "2024-07-01"))
+check("EB-1A ROW = Current", cells[("EB-1A", "ROW")], ("current", "current"))
+check("EB-2 中国", cells[("EB-2", "CN")], ("2021-10-01", "2023-01-01"))
+check("EB-2 印度", cells[("EB-2", "IN")], ("2013-11-01", "2015-01-15"))
+check("EB-2 ROW / 墨西哥 / 菲律宾同日", {cells[("EB-2", c)] for c in ("ROW", "MX", "PH")}, {("2025-01-01", "2026-03-15")})
+check("EB-3 中国", cells[("EB-3", "CN")], ("2022-01-08", "2024-04-01"))
+check("EB-3 菲律宾落后于 ROW", cells[("EB-3", "PH")], ("2023-08-15", "2024-01-01"))
+check("EB-4 各国同日", {cells[("EB-4", c)] for c in S.CELL_COLS}, {("2022-12-15", "2025-01-01")})
+check("EB-5 非预留 中国", cells[("EB-5", "CN")], ("2016-12-01", "2021-03-01"))
+check("EB-5 非预留 印度", cells[("EB-5", "IN")], ("2023-12-01", "2024-05-01"))
+check("EB-5 括号说明里的 C5/NU 不被当成 Current", cells[("EB-5", "ROW")], ("current", "current"))
+check("EB-5 三个预留类全 Current", {cells[(k, c)] for k in ("EB-5-Rural", "EB-5-HighUnemp", "EB-5-Infra") for c in S.CELL_COLS},
+      {("current", "current")})
+check("EW / 宗教工作者行被跳过、不串位", ("EW", "CN") in cells or (None, "CN") in cells, False)
+# 与 EB-1 中国旧解析器一致（EB-1A 中国的更新路径不得受影响）
+fadx, dffx, fbx = parse_strict(OCT26)
+check("旧解析器 parse_eb1_china 在同一夹具上不变", (fadx, dffx, fbx), ("2023-07-01", "2024-07-01", False))
+# 含 El Salvador/Guatemala/Honduras 第 6 列的旧版式
+OLD6 = ("Final Action Dates for Employment-Based Preference Cases "
+        "1st C 01JUL23 C 01FEB23 C C 2nd C 01SEP21 C U C C 3rd 01SEP24 01JAN22 01JAN22 01JAN14 01SEP24 01AUG23 "
+        "Other Workers 01APR22 01MAY19 01APR22 01JAN14 01APR22 01DEC21 4th 15DEC22 15DEC22 15DEC22 15DEC22 15DEC22 15DEC22 "
+        "5th Unreserved C 01DEC16 C U C C "
+        "Dates for Filing for Employment-Based Preference Cases "
+        "1st C 01DEC23 C 01APR23 C C 2nd C 01OCT21 C U C C 3rd 01FEB25 01JUN22 01JUN22 01JUL14 01FEB25 01JAN24 "
+        "Other Workers 01JUN22 01JUL19 01JUN22 01JUL14 01JUN22 01MAY22 4th 15JAN23 15JAN23 15JAN23 15JAN23 15JAN23 15JAN23 "
+        "5th Unreserved C 01JAN17 C U C C")
+c6 = S.parse_eb_cells(OLD6)
+check("6 列版式：丢掉 ESGH 后列不串位（印度 EB-2 = Unavailable）", c6[("EB-2", "IN")], ("unavailable", "unavailable"))
+check("6 列版式：中国 EB-3", c6[("EB-3", "CN")], ("2022-01-01", "2022-06-01"))
+# 失败模式：多类别解析失败必须只告警、返回 None，不能抛（否则会拖垮 EB-1A 中国更新）
+buf2 = io.StringIO()
+with contextlib.redirect_stdout(buf2):
+    bad = S.parse_cells_safe(TRUNCATED)
+check("表被裁剪 → parse_cells_safe 返回 None 并告警", (bad is None, "多类别解析失败" in buf2.getvalue()), (True, True))
+
+# 写回：CUTOFF_DATA 整块重写 + HIST_DATA 追加，且 EB-1A/CN 的旧正则仍可匹配
+MINI = ("var CUTOFF_DATA = {\n"
+        "  'EB-1A': { 'CN': { A: '2023-07-01', B: '2024-07-01' }, 'IN': { A: '2023-01-01', B: '2024-01-01' } },\n"
+        "  'EB-2': { 'CN': { A: '2021-06-01', B: '2022-01-01' } }\n"
+        "}; // CUTOFF_DATA_END\n"
+        "var HIST_DATA = /*HIST_DATA_BEGIN*/{\n"
+        "  \"EB-2|CN|A\":[[\"2021-06-15\",\"2021-06-01\"],[\"2026-09-15\",\"2021-06-01\"]],\n"
+        "  \"EB-2|IN|A\":[[\"2026-08-15\",\"2013-04-01\"]]\n"
+        "}/*HIST_DATA_END*/;\n")
+new = S.apply_cells_to_index(MINI, {("EB-2", "CN"): ("2021-10-01", "2023-01-01"),
+                                    ("EB-2", "IN"): ("unavailable", "2015-01-15"),
+                                    ("EB-1A", "CN"): ("2099-01-01", "2099-01-01")}, "2026-10-15")
+cut = S.read_cutoff_block(new)
+check("CUTOFF_DATA 更新 EB-2 中国", cut["EB-2"]["CN"], {"A": "2021-10-01", "B": "2023-01-01"})
+check("CUTOFF_DATA 新增 EB-2 印度(unavailable)", cut["EB-2"]["IN"], {"A": "unavailable", "B": "2015-01-15"})
+check("EB-1A 中国不被多类别写回改动", cut["EB-1A"]["CN"], {"A": "2023-07-01", "B": "2024-07-01"})
+check("EB-1A 行仍以 CN 打头(read_current_ab 正则依赖)",
+      bool(__import__("re").search(r"'EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*'([0-9-]+)',\s*B:\s*'([0-9-]+)'", new)), True)
+import json as _json2  # noqa: E402
+_h = _json2.loads(new.split("/*HIST_DATA_BEGIN*/")[1].split("/*HIST_DATA_END*/")[0])
+check("HIST_DATA 变化 → 追加新点", _h["EB-2|CN|A"][-1], ["2026-10-15", "2021-10-01"])
+check("HIST_DATA 新序列按 U 记入", _h["EB-2|IN|A"][-1], ["2026-10-15", "U"])
+_h2 = _json2.loads(S.apply_cells_to_index(MINI, {("EB-2", "CN"): ("2021-06-01", "2022-01-01")}, "2026-10-15")
+                   .split("/*HIST_DATA_BEGIN*/")[1].split("/*HIST_DATA_END*/")[0])
+check("HIST_DATA 平台期 → 只挪末点，不膨胀", _h2["EB-2|CN|A"], [["2021-06-15", "2021-06-01"], ["2026-10-15", "2021-06-01"]])
+# 真实 index.html：块可读且往返幂等（防止格式漂移让探测器下次写坏文件）
+_idx = open(S.INDEX, encoding="utf-8").read()
+check("index.html 的 CUTOFF_DATA 往返幂等", S.write_cutoff_block(_idx, S.read_cutoff_block(_idx)) == _idx, True)
+check("index.html 的 EB-1A/CN 仍可被 read_current_ab 读到", all(S.read_current_ab()), True)
+_ab = S.read_current_ab()
+check("index.html 的 HIST_DATA 是合法 JSON", isinstance(_json2.loads(
+    _idx.split("/*HIST_DATA_BEGIN*/")[1].split("/*HIST_DATA_END*/")[0]), dict), True)
+
 print("\n## 5. shell 脚本:变量后紧跟中文必须加花括号")
 # 2026-09-18 真实事故:uscis_chart_watch.sh 里的 "...递交用 $label。已自动上线。"
 # 在 macOS 自带的 bash 3.2 上,全角句号被吞进变量名 → 查 `label。` 这个不存在的
