@@ -98,3 +98,39 @@ test('Current queues hide the whole chart widget and restore it after switching'
   await page.locator('#pe-save').click()
   await expect(page.locator('.chart-widget')).toBeVisible()
 })
+
+test('desktop prioritizes the forecast and keeps the trend in the first viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await openSaved(page)
+  // 该检查需要两张表都仍在等待；默认 2024-01 的表B已经可递交。
+  await page.locator('#pe-pd-m').fill('10')
+  await page.locator('#pe-save').click()
+  await expect(page.locator('.ab-pred em')).toHaveCount(2)
+  const chart = await page.locator('#chart').boundingBox()
+  expect(chart.y).toBeLessThan(610)
+  expect(chart.y + chart.height).toBeLessThan(960)
+  await expect(page.locator('.forecast-sheet .widget')).toHaveCount(2)
+  for (const chip of await page.locator('.ab-chip').all()) {
+    await expect(chip.locator('.ab-cutoff')).toContainText('当前排期')
+    const sizes = await chip.evaluate(el => ({
+      predicted: parseFloat(getComputedStyle(el.querySelector('.ab-pred em')).fontSize),
+      current: parseFloat(getComputedStyle(el.querySelector('.ab-cutoff b')).fontSize),
+      range: parseFloat(getComputedStyle(el.querySelector('.ab-range')).fontSize)
+    }))
+    expect(sizes.predicted).toBeGreaterThan(sizes.current)
+    expect(sizes.range).toBeGreaterThanOrEqual(11)
+  }
+})
+
+test('reduced motion disables result feedback while preserving scenario changes', async ({ page }) => {
+  await openSaved(page)
+  await page.evaluate(() => {
+    window.feedbackCalls = 0
+    window.gsap = { fromTo: () => { window.feedbackCalls++ } }
+    animateHero()
+  })
+  expect(await page.evaluate(() => window.feedbackCalls)).toBe(0)
+  await page.getByRole('button', { name: '保守情景' }).click()
+  await expect(page.locator('[data-pct="p90"]')).toHaveClass(/selected/)
+  expect(await page.evaluate(() => window.feedbackCalls)).toBe(0)
+})
