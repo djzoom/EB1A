@@ -1,64 +1,60 @@
 name: Deploy to Cloudflare Pages
 
-# 与 deploy-pages.yml 同一份站点内容，另发一份到 Cloudflare Pages，自定义域名 gc.bracketboss2026.com（在 Cloudflare 后台 Pages → gctime → Custom domains 绑定一次）。
-# 需要仓库 Secrets：CLOUDFLARE_API_TOKEN（权限 Account → Cloudflare Pages → Edit）、CLOUDFLARE_ACCOUNT_ID。
-# 未配置时本 workflow 直接跳过，不会让 main 变红。
-
+# CI 验证通过后发布同一份产物。凭据配好后设置 CLOUDFLARE_ENABLED=true。
+# 自定义域名：gc.bracketboss2026.com；配置步骤见 README。
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_call:
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
 
 permissions:
   contents: read
 
-concurrency:
-  group: cloudflare-pages
-  cancel-in-progress: false
-
-env:
-  CF_PAGES_PROJECT: gctime
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Check secrets
-        id: secrets
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Require deployment credentials
         run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::未配置 CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID，跳过 Cloudflare 部署"
-          fi
-
-      - uses: actions/checkout@v4
-        if: steps.secrets.outputs.ok == 'true'
-
-      - name: Prepare site
-        if: steps.secrets.outputs.ok == 'true'
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo '::error::Missing CLOUDFLARE_API_TOKEN'; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo '::error::Missing CLOUDFLARE_ACCOUNT_ID'; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: _site
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Ensure gctime Pages project exists
         run: |
-          mkdir -p _site/vendor
-          cp index.html manifest.json sw.js icon.svg icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png _site/
-          cp vendor/gsap.min.js _site/vendor/
-
-      - name: Ensure Pages project exists
-        if: steps.secrets.outputs.ok == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          npx --yes wrangler@3 pages project list | grep -qw "$CF_PAGES_PROJECT" \
-            || npx --yes wrangler@3 pages project create "$CF_PAGES_PROJECT" --production-branch main
-
-      - name: Deploy
-        if: steps.secrets.outputs.ok == 'true'
+          python3 - <<'PY'
+          import json, os, urllib.error, urllib.request
+          base = 'https://api.cloudflare.com/client/v4/accounts/' + os.environ['CLOUDFLARE_ACCOUNT_ID'] + '/pages/projects'
+          headers = {'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN'], 'Content-Type': 'application/json'}
+          try:
+              with urllib.request.urlopen(urllib.request.Request(base + '/gctime', headers=headers), timeout=30) as response:
+                  result = json.load(response)
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+              body = json.dumps({'name': 'gctime', 'production_branch': 'main'}).encode()
+              with urllib.request.urlopen(urllib.request.Request(base, data=body, headers=headers), timeout=30) as response:
+                  result = json.load(response)
+          if not result.get('success'):
+              raise SystemExit('Cloudflare project setup failed')
+          print('Pages project ready:', result['result']['name'])
+          PY
+      - name: Deploy verified artifact
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy _site --project-name=${{ env.CF_PAGES_PROJECT }} --branch=main --commit-dirty=true
+          wranglerVersion: '4.146.0'
+          command: pages deploy _site --project-name=gctime --branch=main --commit-hash=${{ github.sha }}

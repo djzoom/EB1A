@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# main 的整条检查和发布串行，防止旧快照在新快照之后发布。
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: false
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Syntax, assets and data regression
+        run: |
+          python scripts/check_project.py
+          python scripts/test_sniff.py
+      - name: Build site and offline release
+        run: python scripts/build_site.py
+      - name: Install browser test dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Browser regression
+        run: npm test
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-diagnostics
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: dist/site/
+          include-hidden-files: true
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline
+          path: dist/EB1A-offline.zip
+          if-no-files-found: error
+
+  github-pages:
+    needs: [workflow-lint, validate]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy-pages.yml
+
+  cloudflare-pages:
+    needs: [workflow-lint, validate]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.CLOUDFLARE_ENABLED == 'true'
+    uses: ./.github/workflows/deploy-cloudflare.yml
+    secrets: inherit
+
+  offline-release:
+    needs: [workflow-lint, validate]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/package-offline.yml

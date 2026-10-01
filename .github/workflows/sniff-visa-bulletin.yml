@@ -58,10 +58,16 @@ on:
     # 以及"上月期错过后的跨月补探"（run() 对缺失的当月期绕过门控直接补）。
     - cron: '0 14,20 1-6,27-31 * *'
 
-# 命中后不再直接写 main，而是开 PR 待人工复核，避免误报数据自动上线/打包。
+# 命中后通过 PR 留存审计记录，回归校验通过后合并并显式触发 CI。
 permissions:
   contents: write
   pull-requests: write
+  actions: write
+
+# 与 data-update 共用写入锁，避免两个抓取工作流同时修改 main。
+concurrency:
+  group: data-updates-main
+  cancel-in-progress: false
 
 # 让 checkout/setup-python 用 Node 24 运行，消除 Node 20 弃用警告
 env:
@@ -69,6 +75,7 @@ env:
 
 jobs:
   sniff:
+    if: github.ref == 'refs/heads/main'
     # 抓取需绕开 DOS 对 Azure 机房 IP 的 403 封锁 → 可切到住宅 IP 的自建 runner。
     # 设仓库变量 RUNNER_LABEL=eb1a-fetch 即切换；删掉变量立刻回退托管 runner(逃生口)。
     # 注意:本工作流在发布窗内每 10 分钟一次,自建 runner 若长期离线会堆积排队任务
@@ -77,6 +84,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-python@v5
         with:
@@ -84,26 +93,48 @@ jobs:
 
       # 模式：drill(演习推送) / backfill(回填历史) / selftest+force(调试) / 默认(定时探测)。
       - name: Sniff / selftest / backfill / drill
+        id: sniff
         env:
           BARK_KEY: ${{ secrets.BARK_KEY }}
+          FORCE: ${{ inputs.force || false }}
+          SELFTEST: ${{ inputs.selftest || false }}
+          REHEARSE: ${{ inputs.rehearse }}
+          DRILL: ${{ inputs.drill || false }}
+          ANNOUNCE: ${{ inputs.announce || false }}
+          BACKFILL: ${{ inputs.backfill || false }}
+          MANUAL_BULLETIN: ${{ inputs.manual_bulletin }}
+          MANUAL_FAD: ${{ inputs.manual_fad }}
+          MANUAL_DFF: ${{ inputs.manual_dff }}
+          MANUAL_RELEASED: ${{ inputs.manual_released }}
+          MANUAL_CHART: ${{ inputs.manual_chart || '?' }}
+        shell: bash
         run: |
-          if [ -n "${{ github.event_name == 'workflow_dispatch' && inputs.manual_fad || '' }}" ]; then
-            python scripts/sniff_visa_bulletin.py --manual \
-              --bulletin "${{ inputs.manual_bulletin }}" \
-              --fad "${{ inputs.manual_fad }}" \
-              --dff "${{ inputs.manual_dff }}" \
-              --released "${{ inputs.manual_released }}" \
-              --chart "${{ inputs.manual_chart }}"
-          elif [ -n "${{ github.event_name == 'workflow_dispatch' && inputs.rehearse || '' }}" ]; then
-            python scripts/sniff_visa_bulletin.py --rehearse "${{ inputs.rehearse }}"
-          elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
+          echo "write=false" >> "$GITHUB_OUTPUT"
+          # 诊断模式优先，即使同时填写人工数据也不会提交文件或创建 PR。
+          if [ "$SELFTEST" = "true" ]; then
+            python scripts/sniff_visa_bulletin.py --selftest
+          elif [ -n "$REHEARSE" ]; then
+            python scripts/sniff_visa_bulletin.py --rehearse "$REHEARSE"
+          elif [ "$DRILL" = "true" ]; then
             python scripts/sniff_visa_bulletin.py --drill
-          elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.announce }}" = "true" ]; then
+          elif [ "$ANNOUNCE" = "true" ]; then
             python scripts/sniff_visa_bulletin.py --announce
-          elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.backfill }}" = "true" ]; then
+          elif [ "$BACKFILL" = "true" ]; then
             python scripts/backfill_release_dates.py
           else
-            python scripts/sniff_visa_bulletin.py ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '--force' || '' }} ${{ (github.event_name == 'workflow_dispatch' && inputs.selftest) && '--selftest' || '' }}
+            if [ -n "$MANUAL_BULLETIN" ] || [ -n "$MANUAL_FAD" ]; then
+              python scripts/sniff_visa_bulletin.py --manual \
+                --bulletin "$MANUAL_BULLETIN" \
+                --fad "$MANUAL_FAD" \
+                --dff "$MANUAL_DFF" \
+                --released "$MANUAL_RELEASED" \
+                --chart "$MANUAL_CHART"
+            else
+              args=(scripts/sniff_visa_bulletin.py)
+              if [ "$FORCE" = "true" ]; then args+=(--force); fi
+              python "${args[@]}"
+            fi
+            echo "write=true" >> "$GITHUB_OUTPUT"
           fi
 
       # 补判本月递交用表：FILING_CHART 仍为 '?' 时从 USCIS AOS 页确认(USCIS 常滞后公告 1-2 天)。
@@ -111,15 +142,20 @@ jobs:
       # 「获取失败」→ index.html 变了 → 自动开 PR → Bark 误报「探测到新签证公告」。
       # 2026-08-22 真实发生过一次。日常由本机 cron scripts/uscis_chart_watch.sh 值守。
       - name: Resolve filing chart if pending (residential IP only; USCIS 403s hosted runners)
-        if: ${{ runner.environment == 'self-hosted' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.drill && !inputs.backfill && !inputs.selftest && !inputs.announce && !inputs.rehearse)) }}
+        if: runner.environment == 'self-hosted' && steps.sniff.outputs.write == 'true'
         run: python scripts/sniff_visa_bulletin.py --filing-chart
 
+      - name: Validate updated bulletin data
+        if: steps.sniff.outputs.write == 'true'
+        run: python scripts/test_sniff.py
+
       # 数据若改动则开 PR；无改动时静默跳过（不建 PR）。
-      # 合并 PR → push 到 main → 由 deploy-pages.yml 自动部署、package-offline.yml 自动重打包。
       - name: Open review PR if changed
         id: cpr
+        if: steps.sniff.outputs.write == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
+          base: main
           add-paths: |
             data/release_log.json
             index.html
@@ -146,12 +182,25 @@ jobs:
           BARK_KEY: ${{ secrets.BARK_KEY }}
         run: python scripts/sniff_visa_bulletin.py --send-bark
 
-      # 自动合并刚创建的 PR → push 到 main → 触发 deploy-pages 部署 + package-offline 重打包。
+      # 只合并本次校验过的 head；已有 PR 更新后也可重试合并。
       # 数据已过理智门禁；如有误可在 commit 历史回滚。合并失败则保留 PR 供手动合并。
       - name: Auto-merge the update PR
-        if: steps.cpr.outputs.pull-request-operation == 'created'
+        id: merge
+        if: steps.cpr.outputs.pull-request-number != '' && steps.cpr.outputs.pull-request-head-sha != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+          PR_HEAD: ${{ steps.cpr.outputs.pull-request-head-sha }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
         run: |
-          gh pr merge ${{ steps.cpr.outputs.pull-request-number }} --merge --delete-branch \
-            || { echo "::error::自动合并失败，PR 已保留，请手动合并 ${{ steps.cpr.outputs.pull-request-url }}"; exit 1; }
+          test -n "$PR_HEAD"
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --merge --delete-branch --match-head-commit "$PR_HEAD" \
+            || { echo "::error::自动合并失败，PR 已保留，请手动合并 ${PR_URL}"; exit 1; }
+          echo "merged=true" >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN 的 push 不会触发其他 push 工作流，显式启动完整校验和发布。
+      - name: Run CI and publish updated main
+        if: steps.merge.outputs.merged == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main

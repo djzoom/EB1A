@@ -6,7 +6,11 @@ EB-1 ~ EB-5 排期预测工具（EB-1A / EB-2 / EB-3 / EB-4 / EB-5 及三类 EB-
 
 ## 在线 Demo
 
-打开 `index.html`，或部署到 GitHub Pages 后访问。
+主站：https://gc.bracketboss2026.com/
+
+备用站：https://s546126.github.io/gctime/
+
+也可直接打开 `index.html`。离线包：https://github.com/s546126/gctime/releases/download/offline-latest/EB1A-offline.zip
 
 ## 方法
 
@@ -93,17 +97,39 @@ bash scripts/uscis_chart_watch.sh --install   # 每小时问一次 USCIS，直�
 - vyakunin/visa_bulletin: Django + Bazel (https://visa-bulletin.us/)
 - visabulletin.ai: timeline + cohort comparison
 
-## 部署 GitHub Pages
+## CI 与部署
 
-1. Settings → Pages → Build and deployment → Source: "Deploy from a branch"
-2. Branch: `main`，folder: `/ (root)` → Save
-3. 1–2 分钟后访问（路径区分大小写，须与仓库名一致）: https://djzoom.github.io/EB1A/
+`CI` 在 push、PR 和手动运行时检查工作流语法、Python/Shell/JavaScript、JSON、页面资源及公告解析器，再运行 Chromium 回归测试。浏览器覆盖 40 个类别×国家组合的两种远期速度、表A/B 并列预测、设置持久化、停留上限与财年锚点，以及离线产物。测试不依赖实时政府网站。
+
+只有 `main` 验证通过后才发布 GitHub Pages、Cloudflare Pages 和离线 Release；三个发布任务消费同一次构建产物。`version.json` 记录构建 commit，便于核对线上版本。数据机器人写入 `main` 后会显式派发 `CI`，因为 `GITHUB_TOKEN` 产生的 push 不会触发其他工作流。
+
+一次性配置：
+
+1. GitHub Settings → Pages → Source 选择 **GitHub Actions**。初次启用需要仓库管理员，工作流 token 无权创建 Pages 站点。
+2. Cloudflare 创建 Pages 项目 `gctime`，生产分支 `main`。仓库 Secrets 配置 `CLOUDFLARE_API_TOKEN`（目标账户的 Cloudflare Pages:Edit）与 `CLOUDFLARE_ACCOUNT_ID`，然后设置仓库变量 `CLOUDFLARE_ENABLED=true`。启用后缺少凭据会明确失败；未启用时该发布 job 显示 skipped。
+3. Cloudflare Pages → gctime → Custom domains 绑定 `gc.bracketboss2026.com`。
+4. 重新发布可运行 `gh workflow run ci.yml --repo s546126/gctime --ref main`；子工作流不能绕过 CI 独立发布。
+
+本地验证：
+
+```bash
+npm ci
+npx playwright install chromium
+python3 scripts/check_project.py
+python3 scripts/test_sniff.py
+npm test
+go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+```
+
+`npm test` 自动构建 `dist/site/`、`dist/EB1A.html` 和 `dist/EB1A-offline.zip`，在真实子路径运行浏览器测试。当前页面未自动注册 service worker；相关测试主动注册以验证分发的 worker，单 HTML 离线版无需注册。
+
+可选：`BARK_KEY` 用于通知；`RUNNER_LABEL` 用于住宅出口自建 runner。没有住宅出口时 USCIS 抓取可能返回 403，定时任务成功不等于数据已刷新。
 
 ## 开发 (Claude Code)
 
 ```bash
-git clone https://github.com/djzoom/EB1A.git
-cd EB1A
+git clone https://github.com/s546126/gctime.git
+cd gctime
 claude  # 启动 Claude Code
 
 # 第一条 message:
