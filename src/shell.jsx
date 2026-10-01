@@ -37,14 +37,14 @@ function Dashboard({ nodes }) {
         <span className="brand-name">GC<span>TIME</span></span>
         <span className="brand-caption">绿卡排期工作台</span>
       </a>
-      <div className="header-tools"><span className="data-badge"><i />公开数据 · 本地计算</span><ThemeToggle /></div>
+      <div className="header-tools"><span className="data-badge">公开数据 · 本地计算</span><ThemeToggle /></div>
     </header>
     <div className="app workspace">
       <div className="page-heading"><LegacySlot node={nodes.topbar} /></div>
       <div className="workspace-grid">
         <aside className="profile-rail" aria-label="预测条件">
           <Widget className="profile-widget">
-            <Widget.Header><div><Widget.Title>我的档案</Widget.Title><Widget.Description>选择你的排期队列</Widget.Description></div><span className="section-index">01</span></Widget.Header>
+            <Widget.Header><div><Widget.Title>我的档案</Widget.Title><Widget.Description>选择你的排期队列</Widget.Description></div></Widget.Header>
             <Widget.Content><LegacySlot node={nodes.profile} /></Widget.Content>
             <Widget.Footer><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>仅保存在你的浏览器</Widget.Footer>
           </Widget>
@@ -56,14 +56,16 @@ function Dashboard({ nodes }) {
           </div>
         </aside>
         <main id="forecast-workspace" className="forecast-workspace" tabIndex="-1">
+          <div className="forecast-sheet">
           <Widget className="forecast-widget">
-            <Widget.Header><Widget.Title>你的排期预测</Widget.Title><span className="model-label">蒙特卡洛 · 500 次模拟</span></Widget.Header>
+            <Widget.Header className="sr-only"><Widget.Title>你的排期预测</Widget.Title></Widget.Header>
             <Widget.Content><LegacySlot node={nodes.result} /></Widget.Content>
           </Widget>
           <Widget className="chart-widget">
-            <Widget.Header><div><Widget.Title>排期走势</Widget.Title><Widget.Description>历史走到哪里，未来可能怎样</Widget.Description></div><span className="section-index">02</span></Widget.Header>
+            <Widget.Header><div><Widget.Title>排期走势</Widget.Title><Widget.Description>历史走到哪里，未来可能怎样</Widget.Description></div><span className="model-label">500 次模拟</span></Widget.Header>
             <Widget.Content><LegacySlot node={nodes.chart} /></Widget.Content>
           </Widget>
+          </div>
           <Widget className="details-widget">
             <Widget.Header><Widget.Title>数据与假设</Widget.Title><span id="bulletin-version" className="model-label">签证公告</span></Widget.Header>
             <Widget.Content><LegacySlot node={nodes.tabs} /></Widget.Content>
