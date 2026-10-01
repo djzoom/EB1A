@@ -34,13 +34,26 @@ def main(skip_ui=False):
         target = site / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, target)
+    # 发布文件使用内容寻址，避免新 HTML 搭配浏览器缓存中的同名旧 UI。
+    # 源页面仍用固定入口，供开发和单 HTML 离线构建内联；worker 预缓存与发布页一致。
+    html = (site / "index.html").read_text(encoding="utf-8")
+    worker_text = (site / "sw.js").read_text(encoding="utf-8")
+    for name in ("assets/ui.js", "assets/ui.css"):
+        source = site / name
+        fingerprint = hashlib.sha256(source.read_bytes()).hexdigest()[:16]
+        versioned = source.with_name(f"{source.stem}.{fingerprint}{source.suffix}")
+        shutil.copyfile(source, versioned)
+        asset_url = versioned.relative_to(site).as_posix()
+        html = html.replace(f'"{name}"', f'"{asset_url}"')
+        worker_text = worker_text.replace(f"'./{name}'", f"'./{asset_url}'")
+    (site / "index.html").write_text(html, encoding="utf-8")
     # 内容变动就更新 worker，HTML、CSS 和 JS 作为同一份快照预缓存。
     digest = hashlib.sha256()
     for name in ASSETS:
         digest.update(name.encode("utf-8"))
         digest.update((ROOT / name).read_bytes())
     worker = site / "sw.js"
-    worker.write_text(worker.read_text(encoding="utf-8").replace(
+    worker.write_text(worker_text.replace(
         "__BUILD_VERSION__", digest.hexdigest()[:16]), encoding="utf-8")
     (site / ".nojekyll").touch()
     # 让线上可核对版本；本地构建不依赖 git 或外网。
