@@ -18,7 +18,9 @@ module.exports = defineConfig({
     screenshot: 'only-on-failure'
   },
   webServer: {
-    command: 'npm run build && python3 -m http.server 4173 --bind 127.0.0.1 --directory dist',
+    // CI 已构建并检查同一份产物；本地 npm test 仍自动完整构建。
+    command: (process.env.GCTIME_PREBUILT === '1' ? '' : 'npm run build && ') +
+      'python3 -m http.server 4173 --bind 127.0.0.1 --directory dist',
     url: 'http://127.0.0.1:4173/site/',
     reuseExistingServer: !process.env.CI,
     timeout: 120000

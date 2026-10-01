@@ -25,11 +25,14 @@ jobs:
           cache: false
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
 
-  validate:
+  # 外部 PR 只运行无凭据的源码检查；授权组件不会分发给 PR runner。
+  source-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -37,17 +40,50 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Syntax, assets and data regression
+      - name: Install public dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Source syntax and data regression
         run: |
-          python scripts/check_project.py
+          python scripts/check_project.py --source-only
           python scripts/test_sniff.py
-      - name: Build site and offline release
-        run: python scripts/build_site.py
-      - name: Install browser test dependencies
+      - name: Explain PR validation scope
+        if: github.event_name == 'pull_request'
+        run: echo '源码和公告回归已验证。HeroUI Pro 授权构建及浏览器测试在可信仓库分支 push 时运行；PR 不接收授权令牌。' >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    needs: source-checks
+    # 仓库分支 push 由有写入权限的成员产生；不在 PR 上运行带授权令牌的步骤。
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Download licensed HeroUI Pro components
+        env:
+          HEROUI_AUTH_TOKEN: ${{ secrets.HEROUI_AUTH_TOKEN }}
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
+          test -n "$HEROUI_AUTH_TOKEN" || { echo '::error::Configure the HEROUI_AUTH_TOKEN repository secret to build HeroUI Pro'; exit 1; }
+          npm rebuild @heroui-pro/react
+      - name: Build site and offline release
+        run: npm run build
+      - name: Validate generated assets
+        run: python scripts/check_project.py
+      - name: Install browser test dependencies
+        run: npx playwright install --with-deps chromium
       - name: Browser regression
+        env:
+          GCTIME_PREBUILT: '1'
         run: npm test
       - name: Upload browser diagnostics
         if: failure()

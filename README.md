@@ -99,7 +99,11 @@ bash scripts/uscis_chart_watch.sh --install   # 每小时问一次 USCIS，直�
 
 ## CI 与部署
 
-`CI` 在 push、PR 和手动运行时检查工作流语法、Python/Shell/JavaScript、JSON、页面资源及公告解析器，再运行 Chromium 回归测试。浏览器覆盖 40 个类别×国家组合的两种远期速度、表A/B 并列预测、设置持久化、停留上限与财年锚点，以及离线产物。测试不依赖实时政府网站。
+界面使用 React 19、HeroUI Pro 和 Tailwind CSS 4；预测模型与公告数据仍保留在 `index.html`，数据机器人继续按原有格式更新。
+
+自有源码沿用项目 MIT 协议；HeroUI Pro 是独立商业依赖，不受本仓库 MIT 协议覆盖。仓库不包含授权包源文件，只有合法授权的构建环境才能下载该依赖；发布的是应用编译产物。
+
+`CI` 在 push、PR 和手动运行时检查工作流语法、Python/Shell/JavaScript/JSX、JSON 和公告解析器。仓库分支 push 与 main 手动运行还会下载授权组件、构建站点并执行 Chromium 回归测试。PR 只执行不需要凭据的源码检查，不运行 HeroUI 授权安装；维护者应在受信分支验证 UI 后合并。浏览器覆盖 40 个类别×国家组合的两种远期速度、表A/B 并列预测、设置持久化、停留上限与财年锚点，以及离线产物。测试不依赖实时政府网站。
 
 只有 `main` 验证通过后才发布 GitHub Pages、Cloudflare Pages 和离线 Release；三个发布任务消费同一次构建产物。`version.json` 记录构建 commit，便于核对线上版本。数据机器人写入 `main` 后会显式派发 `CI`，因为 `GITHUB_TOKEN` 产生的 push 不会触发其他工作流。
 
@@ -109,11 +113,15 @@ bash scripts/uscis_chart_watch.sh --install   # 每小时问一次 USCIS，直�
 2. Cloudflare 创建 Pages 项目 `gctime`，生产分支 `main`。仓库 Secrets 配置 `CLOUDFLARE_API_TOKEN`（目标账户的 Cloudflare Pages:Edit）与 `CLOUDFLARE_ACCOUNT_ID`，然后设置仓库变量 `CLOUDFLARE_ENABLED=true`。启用后缺少凭据会明确失败；未启用时该发布 job 显示 skipped。
 3. Cloudflare Pages → gctime → Custom domains 绑定 `gc.bracketboss2026.com`。
 4. 重新发布可运行 `gh workflow run ci.yml --repo s546126/gctime --ref main`；子工作流不能绕过 CI 独立发布。
+5. 从 HeroUI Pro Dashboard 获取 CI/CD token，设置仓库 Secret `HEROUI_AUTH_TOKEN`。该令牌仅传给 `npm rebuild @heroui-pro/react` 的授权下载步骤；其它依赖安装使用 `npm ci --ignore-scripts`。不要把令牌放入源码、前端环境变量或生成产物。
 
 本地验证：
 
 ```bash
-npm ci
+npm ci --ignore-scripts
+# 已完成 heroui-pro login，或已通过环境提供 HEROUI_AUTH_TOKEN 后：
+npm rebuild @heroui-pro/react
+npm run build
 npx playwright install chromium
 python3 scripts/check_project.py
 python3 scripts/test_sniff.py
@@ -121,7 +129,11 @@ npm test
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 ```
 
-`npm test` 自动构建 `dist/site/`、`dist/EB1A.html` 和 `dist/EB1A-offline.zip`，在真实子路径运行浏览器测试。当前页面未自动注册 service worker；相关测试主动注册以验证分发的 worker，单 HTML 离线版无需注册。
+`npm run build:ui` 把 `src/shell.jsx` 和 `src/styles.css` 编译为忽略提交的 `assets/ui.js`、`assets/ui.css`，不拆分 chunk、不生成 source map。`npm run build` 继续生成 `dist/site/`、`dist/EB1A.html` 和 `dist/EB1A-offline.zip`；直接运行 `python3 scripts/build_site.py` 也会先编译 UI。
+
+`npm test` 自动完整构建，在真实子路径运行浏览器测试；CI 用 `GCTIME_PREBUILT=1` 复用刚验证的产物。离线 HTML 内联 React/HeroUI 的 JS 和 CSS，不需要 CDN 或本地服务器。站点 service worker 预缓存这些资源，并以构建内容指纹更新缓存。当前页面未自动注册 service worker；相关测试主动注册以验证分发的 worker，单 HTML 离线版无需注册。
+
+没有 HeroUI Pro 授权的贡献者可运行 `npm ci --ignore-scripts`、`python3 scripts/check_project.py --source-only` 和 `python3 scripts/test_sniff.py` 完成源码检查；该结果不代表 UI 已通过构建或浏览器测试。
 
 可选：`BARK_KEY` 用于通知；`RUNNER_LABEL` 用于住宅出口自建 runner。没有住宅出口时 USCIS 抓取可能返回 403，定时任务成功不等于数据已刷新。
 

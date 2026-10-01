@@ -12,276 +12,12 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <title>绿卡排期推演 · EB-1~5</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  :root {
-    --bg: #f6f8f7; --card: #fff; --border: #e3ebe6;
-    --text: #0f1f19; --text2: #475a51; --text3: #6b7d73;
-    --blue: #15734f; --blue-light: #bfe0d0; --blue-bg: #e7f4ee;
-    --orange: #dd8324; --orange-light: #fdf0dc;
-    --green: #10b981; --green-light: #d6f3e6;
-    --red: #e0463a; --red-light: #fdecea;
-    --shadow: 0 1px 2px rgba(16,40,30,0.05), 0 10px 28px -16px rgba(16,40,30,0.16);
-    --shadow-lg: 0 12px 34px -12px rgba(16,40,30,0.20);
-    --radius: 16px;
-    --input-bg: #f9fafb; --chart-grid: #f0f0f0; --chart-box: #e5e7eb;
-  }
-  /* 暗色模式：跟随系统或夜间(由 <head> 脚本设 data-theme) */
-  :root[data-theme="dark"] {
-    --bg: #0e1512; --card: #16201c; --border: #2a3b34;
-    --text: #e8efeb; --text2: #aebcb4; --text3: #8a9a91;
-    --blue: #2ea579; --blue-light: #2a5544; --blue-bg: #173a2b;
-    --orange: #e0992f; --orange-light: #3a2c16;
-    --green: #14c98c; --green-light: #16382a;
-    --red: #f0635a; --red-light: #3a1c1a;
-    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 28px -16px rgba(0,0,0,0.6);
-    --shadow-lg: 0 12px 34px -12px rgba(0,0,0,0.7);
-    --input-bg: #1d2a25; --chart-grid: #27332e; --chart-box: #33453d;
-  }
-  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; font-size: 15px; line-height: 1.55; }
-  body { padding: 12px; padding-top: calc(12px + env(safe-area-inset-top)); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
-  .app { max-width: 600px; margin: 0 auto; }
-
-  .topbar { display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 6px; margin-bottom: 8px; }
-  .topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; color: var(--text); line-height: 1.2; }
-  .topbar-sub { font-size: 12px; color: var(--text3); margin-top: -2px; font-weight: 600; letter-spacing: 0.2px; }
-  .topbar-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
-  .topbar-info { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .topbar-info .dist { color: var(--orange); font-weight: 600; margin-left: 6px; font-size: 12px; }
-  .text-btn { background: none; border: 1px solid var(--border); color: var(--blue); font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 6px 12px; border-radius: 999px; min-height: 34px; transition: background 0.15s, border-color 0.15s; }
-  .text-btn:hover { background: var(--blue-bg); border-color: var(--blue-light); }
-  .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; background: none; border: 1px solid var(--border); border-radius: 999px; color: var(--blue); cursor: pointer; transition: background 0.15s, border-color 0.15s; -webkit-tap-highlight-color: transparent; flex: none; }
-  .icon-btn:hover { background: var(--blue-bg); border-color: var(--blue-light); }
-  .icon-btn svg { width: 18px; height: 18px; display: block; }
-  .icon-btn.editing { background: var(--blue); border-color: var(--blue); color: #fff; }
-  #share-btn { background: var(--blue-bg); border-color: var(--blue-light); }
-
-  .profile-edit { display: none; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 4px; box-shadow: var(--shadow); }
-  .profile-edit.active { display: block; }
-  .pe-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
-  .pe-label { font-size: 10px; color: var(--text3); font-weight: 500; margin-bottom: 2px; display: block; }
-  .pe-input { padding: 6px 8px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text); font-family: inherit; -webkit-appearance: none; appearance: none; }
-  .pe-input:focus { outline: none; border-color: var(--blue); }
-  select.pe-input { padding-right: 24px; }
-  .date-group { display: flex; gap: 4px; align-items: center; }
-  .date-group input { text-align: center; font-variant-numeric: tabular-nums; padding: 6px 2px; font-size: 13px; font-family: inherit; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--input-bg); -webkit-appearance: none; appearance: none; }
-  .date-group input:focus { outline: none; border-color: var(--blue); }
-  .date-group .dg-year { width: 56px; }
-  .date-group .dg-month, .date-group .dg-day { width: 38px; }
-  .date-group .dg-sep { color: var(--text3); font-size: 14px; user-select: none; }
-  .pe-actions { display: flex; gap: 4px; }
-  .pe-err { color: var(--red); font-size: 11px; margin-top: 6px; }
-  .pe-err[hidden] { display: none; }
-  .date-group.invalid input { border-color: var(--red); }
-  .pe-btn { padding: 6px 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
-  .pe-btn-primary { background: var(--blue); color: #fff; }
-  .pe-btn-secondary { background: var(--input-bg); color: var(--text2); border: 1px solid var(--border); }
-  .hidden { display: none !important; }
-
-  .result { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 20px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
-  .congrats { display: flex; gap: 10px; align-items: center; background: linear-gradient(135deg, var(--green-light), var(--blue-bg)); border: 1px solid var(--blue-light); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
-  .congrats[hidden] { display: none; }
-  .congrats .confetti { font-size: 28px; line-height: 1; flex-shrink: 0; animation: congrats-pop 1.2s ease-in-out infinite; }
-  .congrats-title { font-size: 15px; font-weight: 800; color: var(--blue); margin-bottom: 2px; }
-  .congrats-sub { font-size: 11.5px; color: var(--text2); line-height: 1.5; }
-  .congrats-sub b { color: var(--text); }
-  @keyframes congrats-pop { 0%,100% { transform: scale(1) rotate(-6deg); } 50% { transform: scale(1.18) rotate(8deg); } }
-  .result-main { text-align: center; margin-bottom: 14px; }
-  .result-lead { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 6px; letter-spacing: 0.2px; }
-  .result-date { display: block; font-size: 42px; line-height: 1.04; font-weight: 800; color: var(--blue); font-variant-numeric: tabular-nums; letter-spacing: -1.2px; }
-  .result-sub { display: block; font-size: 13px; color: var(--text2); margin-top: 6px; }
-  .result-note { display: block; font-size: 11px; color: var(--text3); margin-top: 8px; line-height: 1.4; }
-  /* 快/中/慢 分段控件 */
-  .result-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--blue-bg); padding: 4px; border-radius: 12px; margin-bottom: 12px; }
-  .stat { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 4px; border-radius: 9px; cursor: pointer; border: none; background: transparent; transition: background 0.15s, box-shadow 0.15s; }
-  .stat.selected { background: var(--card); box-shadow: var(--shadow); }
-  .stat small { color: var(--text3); font-size: 11px; }
-  .stat b { font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
-  .stat.green b { color: var(--green); }
-  .stat.blue b { color: var(--blue); }
-  .stat.orange b { color: var(--orange); }
-  .result-bar { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text3); }
-  .bar-track { flex: 1; height: 6px; background: var(--blue-bg); border-radius: 999px; overflow: hidden; }
-  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--blue)); border-radius: 999px; transition: width 0.6s; }
-  .bar-note { font-size: 11px; color: var(--text3); text-align: center; margin-top: 4px; }
-  /* 表A/表B 视图切换：与"快中慢"同款分段控件，单独成行、突出可点选 */
-  .ab-status { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-  .ab-chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; background: var(--blue-bg); padding: 4px; border-radius: 12px; }
-  .ab-chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 9px; cursor: pointer; border: none; background: transparent; transition: background 0.15s, box-shadow 0.15s; -webkit-tap-highlight-color: transparent; }
-  .ab-chip small { color: var(--text3); font-size: 11px; }
-  .ab-chip b { font-weight: 700; font-size: 15px; color: var(--text2); font-variant-numeric: tabular-nums; }
-  .ab-chip.selected { background: var(--card); box-shadow: var(--shadow); }
-  .ab-chip.selected small { color: var(--blue); }
-  .ab-chip.selected b { color: var(--blue); }
-  .ab-chip.open b { text-decoration: underline; text-decoration-color: var(--blue-light); text-underline-offset: 2px; }
-  .ab-hint { font-size: 11px; color: var(--text3); margin-top: 8px; text-align: center; line-height: 1.5; }
-  .ab-pred { font-size: 11.5px; color: var(--text2); margin-top: 3px; font-variant-numeric: tabular-nums; }
-  .ab-pred em { font-style: normal; font-weight: 700; color: var(--text); }
-  .ab-pred.done { color: var(--green); font-weight: 700; }
-  .ab-range { font-size: 10.5px; color: var(--text3); font-variant-numeric: tabular-nums; }
-  .ab-chip.selected .ab-pred em { color: var(--blue); }
-  .ab-hint .open { color: var(--blue); font-weight: 700; }
-  .ab-hint .ab-warn { color: #b45309; }
-  .supply-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; background: var(--bg2, rgba(0,0,0,.02)); }
-  .supply-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-  .supply-title { font-size: 13px; font-weight: 700; color: var(--text); }
-  .supply-total { font-size: 15px; font-weight: 700; color: #15734F; font-variant-numeric: tabular-nums; }
-  .supply-scenarios { display: flex; gap: 6px; }
-  .sc-btn, .pace-btn { flex: 1; padding: 8px 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg, #fff); color: var(--text2); font-size: 13px; cursor: pointer; transition: all .15s; -webkit-tap-highlight-color: transparent; }
-  .sc-btn:hover, .pace-btn:hover { border-color: #15734F; }
-  .sc-btn.active, .pace-btn.active { background: #15734F; color: #fff; border-color: #15734F; font-weight: 700; }
-  .supply-breakdown { font-size: 11.5px; color: var(--text3); margin-top: 8px; line-height: 1.6; }
-  .supply-breakdown b { color: var(--text2); font-variant-numeric: tabular-nums; }
-
-  .chart-panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
-  .chart-head { display: flex; align-items: center; padding: 14px 14px 0; gap: 4px; }
-  .chart-modes { display: inline-flex; gap: 3px; background: var(--blue-bg); padding: 3px; border-radius: 10px; }
-  .replay-btn { margin-left: auto; background: var(--blue-bg); color: var(--blue); border: none; border-radius: 8px; padding: 6px 11px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; min-height: 32px; transition: filter 0.15s; }
-  .replay-btn:hover { filter: brightness(0.96); }
-  .replay-btn:active { transform: scale(0.96); }
-  .mode-btn { padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: transparent; color: var(--text2); font-family: inherit; transition: background 0.15s, box-shadow 0.15s, color 0.15s; }
-  .mode-btn.active { background: var(--card); color: var(--blue); box-shadow: var(--shadow); }
-  .chart-box { position: relative; }
-  .chart-svg { display: block; width: 100%; height: auto; cursor: crosshair; }
-  .zoom-hint { position: absolute; top: 4px; right: 6px; background: rgba(255,255,255,0.92); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-size: 10px; color: var(--blue); display: flex; align-items: center; gap: 4px; }
-  .zoom-hint button { background: var(--blue); border: none; border-radius: 4px; color: #fff; font-size: 10px; padding: 1px 6px; cursor: pointer; }
-  .zoom-rect { fill: rgba(59,130,246,0.08); stroke: var(--blue); stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
-  .chart-tooltip { position: absolute; pointer-events: none; z-index: 10; background: rgba(255,255,255,0.95); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; box-shadow: var(--shadow); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; display: none; }
-  .chart-tooltip .tt-row { display: flex; gap: 6px; align-items: center; }
-  .chart-tooltip .tt-label { color: var(--text3); font-size: 10px; }
-  .chart-tooltip .tt-val { font-weight: 600; }
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center; padding: 8px 12px 4px; font-size: 11.5px; color: var(--text2); }
-  .leg { display: flex; align-items: center; gap: 3px; }
-  .leg i { display: inline-block; width: 12px; height: 2px; border-radius: 1px; }
-  .leg i.band { height: 6px; opacity: 0.5; }
-  .leg i.dash { border-top: 1.5px dashed; height: 0; }
-  .zoom-ctrls { display: flex; gap: 2px; }
-  .zoom-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text2); font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: system-ui; line-height: 1; transition: all 0.12s; user-select: none; }
-  .zoom-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
-  .zoom-btn:active { transform: scale(0.92); }
-  .chart-tooltip { backdrop-filter: blur(8px); background: rgba(255,255,255,0.96) !important; border-radius: 8px !important; padding: 6px 10px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important; }
-  .chart-tooltip .tt-hdr { font-size: 10px; color: var(--text3); margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
-  .chart-tooltip .tt-series { display: flex; align-items: center; gap: 5px; padding: 1px 0; }
-  .chart-tooltip .tt-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .chart-tooltip .tt-sname { color: var(--text3); font-size: 10px; min-width: 14px; }
-  .chart-tooltip .tt-sval { font-weight: 600; font-size: 11px; font-variant-numeric: tabular-nums; }
-
-  /* 并列标签卡 */
-  .tabs { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
-  .tab-strip { display: flex; gap: 3px; background: var(--blue-bg); padding: 3px; border-radius: 10px; margin: 12px 12px 0; }
-  .tab-btn { flex: 1; padding: 9px 8px; font-size: 13.5px; font-weight: 600; color: var(--text2); background: none; border: none; border-radius: 8px; cursor: pointer; font-family: inherit; position: relative; transition: background 0.15s, color 0.15s, box-shadow 0.15s; }
-  .tab-btn:hover { color: var(--text); }
-  .tab-btn.active { background: var(--card); color: var(--blue); box-shadow: var(--shadow); }
-  /* 新公告提示：tab 红点角标 + 面板徽标 + 高亮 */
-  .tab-btn .tab-dot { position: absolute; top: 7px; right: 9px; width: 7px; height: 7px; background: #ef4444; border-radius: 50%; animation: vbpulse 1.8s infinite; }
-  @keyframes vbpulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
-  .vb-latest { padding: 10px 12px; background: var(--blue-bg); border-left: 3px solid var(--blue); border-radius: 8px; margin-bottom: 10px; }
-  .vb-latest.is-new { border-left-color: #f97316; background: rgba(249,115,22,0.10); }
-  .vb-warn { color: #b45309; }
-  /* 变动摘要：纯文字。本项目「胶囊圆角+实心填充」专用于可点按钮，此处不得使用，
-     故无背景/无边框/无 hover/无点击态，字号小于标题。 */
-  .vb-delta { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 600;
-              vertical-align: middle; }
-  .vb-delta.flat { color: var(--text3); }
-  .vb-delta.up   { color: var(--green); }
-  .vb-delta.down { color: #dc2626; }
-  .vb-delta.na   { color: #ea580c; }
-  .vb-stale { display: block; margin-top: 6px; padding: 6px 8px; font-size: 11px; line-height: 1.5;
-              color: #b45309; background: rgba(180,83,9,0.08); border-radius: 6px; }
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
-  .tab-panel .explain-content { padding-top: 14px; }
-  .tab-panel .explain-static { border-top: 1px solid var(--border); margin-top: 4px; }
-  .explain-content { padding: 4px 16px 16px; font-size: 13.5px; color: var(--text2); line-height: 1.7; }
-  .explain-content p { margin: 0 0 7px; }
-  .explain-content p:last-child { margin-bottom: 0; }
-  .explain-content .step { font-weight: 700; color: var(--blue); }
-  .explain-content .explain-note { font-size: 11px; color: var(--text3); border-top: 1px solid var(--border); padding-top: 6px; margin-top: 2px; }
-  .settings-content { padding: 4px 16px 16px; }
-  .settings-hint { font-size: 11px; color: var(--text3); margin-bottom: 10px; line-height: 1.5; }
-  .params { display: flex; flex-direction: column; gap: 10px; }
-  .reset-btn { margin-top: 16px; background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 12.5px; font-weight: 600; padding: 8px 16px; border-radius: 999px; cursor: pointer; font-family: inherit; min-height: 34px; transition: background 0.15s; }
-  .reset-btn:hover { background: var(--input-bg); }
-  .param-row { position: relative; }
-  .param-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
-  .param-name { font-size: 12px; color: var(--text2); cursor: pointer; }
-  .param-name:hover { color: var(--blue); }
-  .param-value { font-size: 13px; font-weight: 600; color: var(--blue); font-variant-numeric: tabular-nums; }
-  input[type="range"] { width: 100%; -webkit-appearance: none; appearance: none; background: transparent; height: 24px; cursor: pointer; }
-  input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: var(--chart-box); border-radius: 2px; }
-  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--blue); border-radius: 50%; margin-top: -6.5px; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-  input[type="range"]::-moz-range-track { height: 3px; background: var(--chart-box); border-radius: 2px; }
-  input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; background: var(--blue); border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-  .param-meta { display: flex; justify-content: space-between; font-size: 9px; color: var(--text3); margin-top: 1px; }
-  .source-popup { display: none; position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-top: 3px; z-index: 20; box-shadow: var(--shadow-lg); }
-  .source-popup.visible { display: block; }
-  .source-popup .sp-title { font-size: 12px; color: var(--blue); font-weight: 600; margin-bottom: 4px; padding-right: 16px; }
-  .source-popup .sp-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
-  .source-popup .sp-row .sp-lbl { color: var(--text3); }
-  .source-popup .sp-row .sp-val { color: var(--text); font-weight: 500; }
-  .source-popup .sp-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
-  .source-popup .sp-section-title { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
-  .source-popup .sp-text { font-size: 11px; color: var(--text2); line-height: 1.4; }
-  .source-popup .sp-close { position: absolute; top: 8px; right: 10px; color: var(--text3); cursor: pointer; font-size: 14px; }
-  .source-chip { background: var(--blue-bg); color: var(--blue); padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 500; display: inline-block; margin: 1px; }
-
-  .footer { font-size: 12px; color: var(--text3); text-align: center; padding: 12px 8px 4px; line-height: 1.6; }
-  .footer-legal { display: inline-block; max-width: 560px; margin: 4px auto; font-size: 11px; opacity: 0.9; text-align: left; }
-  .footer a, .explain-content a { color: var(--blue); text-decoration: none; font-weight: 600; }
-  .touch-hint { display: none; font-size: 11.5px; color: var(--text3); text-align: center; padding: 2px 0 8px; }
-
-  .modal-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.4); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; opacity: 1; transition: opacity 0.3s; }
-  .modal-overlay.out { opacity: 0; pointer-events: none; }
-  .modal-box { background: #fff; border-radius: 20px; padding: 28px 20px; max-width: 360px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
-  .modal-box h2 { font-size: 20px; text-align: center; margin-bottom: 4px; }
-  .modal-box .modal-sub { color: var(--text2); font-size: 12px; text-align: center; margin-bottom: 16px; line-height: 1.5; }
-  .modal-box .field { margin-bottom: 12px; }
-  .modal-box label { display: block; font-size: 11px; color: var(--text3); margin-bottom: 3px; font-weight: 500; }
-  .modal-box input, .modal-box select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; color: var(--text); background: var(--input-bg); -webkit-appearance: none; }
-  .modal-box .date-group { width: 100%; }
-  .modal-box .date-group input { flex: 1 1 0; width: auto; min-width: 0; }
-  .modal-box .date-group .dg-year { flex: 1.4 1 0; }
-  .modal-box input:focus, .modal-box select:focus { outline: none; border-color: var(--blue); }
-  .modal-box .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .modal-box .start-btn { width: 100%; margin-top: 6px; padding: 11px; background: var(--blue); color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
-  .modal-box .start-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .modal-box .start-btn:not(:disabled):hover { filter: brightness(1.08); }
-  .modal-box .hint { font-size: 10px; color: var(--text3); text-align: center; margin-top: 8px; }
-
-  /* ---- Mobile / touch simplification ---- */
-  /* 16px inputs prevent iOS auto-zoom on focus */
-  .pe-input, select.pe-input, .date-group input,
-  .modal-box input, .modal-box select { font-size: 16px; }
-  .date-group .dg-year { width: 64px; }
-  .date-group .dg-month, .date-group .dg-day { width: 46px; }
-
-  @media (pointer: coarse) {
-    html, body { font-size: 15px; }
-    /* comfortable tap targets */
-    .mode-btn, .pe-btn, .text-btn {
-      min-height: 40px; display: inline-flex; align-items: center; justify-content: center;
-    }
-    .stat { min-height: 48px; padding: 8px 4px; }
-    .tab-btn { min-height: 44px; }
-    .modal-box .start-btn { padding: 14px; }
-    /* declutter chart toolbar: presets (聚焦/全图) replace manual zoom buttons */
-    .zoom-ctrls { display: none; }
-    /* 移动端紧凑：AB 分段控件保持大点击区、提示文字缩小 */
-    .ab-chip { padding: 7px 4px; }
-    .ab-chip b { font-size: 14px; }
-    .ab-hint { font-size: 10.5px; }
-    .chart-legend .leg { font-size: 10px; }
-    /* single-finger scrubbing reads values; disable native pan/zoom on the chart */
-    .chart-svg { cursor: default; touch-action: pan-y; }
-    .touch-hint { display: block; }
-  }
-</style>
+<link rel="stylesheet" href="assets/ui.css">
 <script>
 (function(){
   function compute(){
-    var sysDark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
-    var h = new Date().getHours();
-    return (sysDark || h >= 19 || h < 7) ? 'dark' : 'light';
+    try { var saved = localStorage.getItem('gc_theme'); if (saved === 'dark' || saved === 'light') return saved; } catch(e){}
+    return 'light';
   }
   function apply(){
     var t = compute();
@@ -298,7 +34,7 @@
 <body>
 
 <!-- Welcome Modal -->
-<div class="modal-overlay" id="welcome-modal">
+<div class="modal-overlay" id="welcome-modal" role="dialog" aria-modal="true" aria-labelledby="wf-title" aria-describedby="wf-sub">
   <div class="modal-box">
     <h2 id="wf-title">绿卡排期推演</h2>
     <div class="modal-sub" id="wf-sub">选择你的类别与出生国，输入优先日，估算绿卡大约何时轮到你（EB-1 ~ EB-5）。</div>
@@ -315,11 +51,11 @@
     <div class="field">
       <label>Priority Date (优先日) *</label>
       <div class="date-group" id="wf-pd-group">
-        <input type="text" class="dg-year" id="wf-pd-y" maxlength="4" placeholder="年" inputmode="numeric">
+        <input type="text" class="dg-year" id="wf-pd-y" maxlength="4" placeholder="年" inputmode="numeric" aria-label="优先日年份">
         <span class="dg-sep">-</span>
-        <input type="text" class="dg-month" id="wf-pd-m" maxlength="2" placeholder="月" inputmode="numeric">
+        <input type="text" class="dg-month" id="wf-pd-m" maxlength="2" placeholder="月" inputmode="numeric" aria-label="优先日月份">
         <span class="dg-sep">-</span>
-        <input type="text" class="dg-day" id="wf-pd-d" maxlength="2" placeholder="日" inputmode="numeric">
+        <input type="text" class="dg-day" id="wf-pd-d" maxlength="2" placeholder="日" inputmode="numeric" aria-label="优先日日期">
       </div>
     </div>
     <button class="start-btn" id="wf-start" disabled>开始预测</button>
@@ -358,16 +94,16 @@
       <div>
         <label class="pe-label">Priority Date</label>
         <div class="date-group" id="pe-pd-group">
-          <input type="text" class="dg-year" id="pe-pd-y" maxlength="4" placeholder="年" inputmode="numeric">
+          <input type="text" class="dg-year" id="pe-pd-y" maxlength="4" placeholder="年" inputmode="numeric" aria-label="修改优先日年份">
           <span class="dg-sep">-</span>
-          <input type="text" class="dg-month" id="pe-pd-m" maxlength="2" placeholder="月" inputmode="numeric">
+          <input type="text" class="dg-month" id="pe-pd-m" maxlength="2" placeholder="月" inputmode="numeric" aria-label="修改优先日月份">
           <span class="dg-sep">-</span>
-          <input type="text" class="dg-day" id="pe-pd-d" maxlength="2" placeholder="日" inputmode="numeric">
+          <input type="text" class="dg-day" id="pe-pd-d" maxlength="2" placeholder="日" inputmode="numeric" aria-label="修改优先日日期">
         </div>
       </div>
       <div class="pe-actions">
         <button class="pe-btn pe-btn-secondary" id="pe-cancel">取消</button>
-        <button class="pe-btn pe-btn-primary" id="pe-save">保存</button>
+        <button class="pe-btn pe-btn-primary" id="pe-save">更新预测</button>
       </div>
     </div>
     <div class="pe-err" id="pe-err" hidden>请填写完整、有效的优先日期（年-月-日）</div>
@@ -388,9 +124,9 @@
       <span class="result-note">统计估算 · 非官方 · 以官方公告为准</span>
     </div>
     <div class="result-chips">
-      <span class="stat green" data-pct="p10"><small>快</small> <b id="stat-p10">--</b></span>
-      <span class="stat blue selected" data-pct="p50"><small>中</small> <b id="stat-p50">--</b></span>
-      <span class="stat orange" data-pct="p90"><small>慢</small> <b id="stat-p90">--</b></span>
+      <button class="stat green" data-pct="p10" aria-label="乐观情景"><small>乐观</small> <b id="stat-p10">--</b></button>
+      <button class="stat blue selected" data-pct="p50" aria-label="中位情景"><small>中位</small> <b id="stat-p50">--</b></button>
+      <button class="stat orange" data-pct="p90" aria-label="保守情景"><small>保守</small> <b id="stat-p90">--</b></button>
     </div>
     <div class="result-bar">
       <span id="progress-left">--</span>
@@ -423,10 +159,10 @@
       <span class="leg"><i style="background:#15734F;opacity:.3"></i>模拟轨迹</span>
       <span class="leg"><i class="dash" style="border-color:#F59E0B"></i>你的号</span>
     </div>
-    <div class="touch-hint">按住图表横向滑动，查看每个时间点的数值</div>
+    <div class="touch-hint">移动指针或按住图表滑动，查看各时间点的数值</div>
   </div>
 
-  <div class="tabs">
+  <div class="gc-tabs">
     <div class="tab-strip" role="tablist">
       <button class="tab-btn active" data-tab="bulletin" role="tab">签证公告</button>
       <button class="tab-btn" data-tab="explain" role="tab">原理说明</button>
@@ -478,7 +214,7 @@
 
   <div class="footer">
     <span id="footer-scope">EB-1A 中国大陆</span>排期预测 · 自动同步最新签证公告 · 数据源 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a><br>
-    本项目开源，采用 <a href="https://github.com/djzoom/EB1A/blob/main/LICENSE" target="_blank" rel="noopener">MIT 协议</a> · 源码 <a href="https://github.com/djzoom/EB1A" target="_blank" rel="noopener">github.com/djzoom/EB1A</a><br>
+    项目代码采用 <a href="https://github.com/s546126/gctime/blob/main/LICENSE" target="_blank" rel="noopener">MIT 协议</a> · 源码 <a href="https://github.com/s546126/gctime" target="_blank" rel="noopener">s546126/gctime</a> · HeroUI Pro 依赖另受商业授权约束<br>
     <span class="footer-legal">本工具为统计估算，<b>不构成法律或移民建议</b>，不保证准确。以官方签证公告为准，并咨询持牌移民律师。你填的信息只存在本地浏览器。</span><br>
     © 2026 djzoom
   </div>
@@ -486,6 +222,7 @@
 
 </div>
 
+<script src="assets/ui.js"></script>
 <script src="vendor/gsap.min.js"></script>
 <script>
 "use strict";
@@ -2275,6 +2012,7 @@ function updateTitles() {
   var sub = document.getElementById('app-sub'); if (sub) sub.textContent = countryInfo().label + ' · 基于蒙特卡洛模拟';
   var f = document.getElementById('footer-scope'); if (f) f.textContent = sc;
   document.title = sc + ' 排期推演 · 绿卡排期';
+  var badge = document.getElementById('bulletin-version'); if (badge) badge.textContent = VB_MONTH + ' 公告';
 }
 // 下拉框：填充 + 选中
 function fillSelect(el, list, val) {
@@ -2708,6 +2446,8 @@ document.getElementById('pe-save').addEventListener('click', function() {
   else render();
 });
 document.getElementById('pe-cancel').addEventListener('click', function() {
+  writeDateGroup('pe-pd', profile.pd);
+  syncSelectors();
   document.getElementById('profile-edit').classList.remove('active');
   var pt = document.getElementById('profile-toggle'); pt.classList.remove('editing'); pt.title = '编辑优先日';
 });
@@ -2794,6 +2534,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     var pd = readDateGroup('wf-pd');
     if (!pd) return;
     profile.pd = pd;
+    writeDateGroup('pe-pd', pd);
     persistProfile();
     modal.classList.add('out');
     setTimeout(function() { modal.style.display = 'none'; }, 300);
@@ -2805,6 +2546,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 
 activateModel();
 syncSelectors();
+writeDateGroup('pe-pd', profile.pd);
 updateTitles();
 renderParams();
 

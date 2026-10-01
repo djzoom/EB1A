@@ -4,7 +4,8 @@
 打包离线单文件版 EB1A.html。
 
 把仓库的 index.html 加工成一个完全自包含、双击即用、离线可跑的单文件：
-  - 去掉 GSAP 动画外链（离线更纯净；现有 gsapReady() 守卫会让动画自动跳过）
+  - 内联 React / HeroUI Pro 的 CSS 与单文件 JS
+  - 去掉 GSAP 动画外链（现有 gsapReady() 守卫会让动画自动跳过）
   - 去掉 PWA 的 manifest / icon 外链（本地无服务器，会 404）
   - 注入 base64 秒表 favicon
   - 加一行「离线版 · 数据截至 {VB_MONTH} · 不自动更新」提示
@@ -18,6 +19,7 @@
 
 import base64
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -27,12 +29,31 @@ ICON = ROOT / "icon-192.png"
 DIST = ROOT / "dist"
 
 
-def main() -> int:
+def ensure_ui_assets():
+    subprocess.run(["node", str(ROOT / "scripts" / "build_ui.mjs")], cwd=ROOT, check=True)
+
+
+def main(skip_ui=False) -> int:
     if not SRC.exists():
         print(f"找不到 {SRC}", file=sys.stderr)
         return 1
 
+    if not skip_ui:
+        ensure_ui_assets()
     html = SRC.read_text(encoding="utf-8")
+
+    # 先验证两个入口都存在，避免打出无界面或仍需 HTTP 的假离线包。
+    css = (ROOT / "assets" / "ui.css").read_text(encoding="utf-8")
+    js = (ROOT / "assets" / "ui.js").read_text(encoding="utf-8")
+    css = re.sub(r"</style", r"<\\/style", css, flags=re.I)
+    js = re.sub(r"</script", r"<\\/script", js, flags=re.I)
+    html, n_css = re.subn(r'<link\b[^>]*\bhref=["\'](?:\./)?assets/ui\.css["\'][^>]*>',
+                          lambda _: "<style>\n" + css + "\n</style>", html)
+    html, n_js = re.subn(r'<script\b[^>]*\bsrc=["\'](?:\./)?assets/ui\.js["\'][^>]*>\s*</script>',
+                         lambda _: "<script>\n" + js + "\n</script>", html)
+    if n_css != 1 or n_js != 1:
+        print("离线构建失败：index.html 必须且只能引用一次 assets/ui.css 和 assets/ui.js", file=sys.stderr)
+        return 1
 
     # 1) 去动画：移除 GSAP 外链脚本
     html, n_gsap = re.subn(r'[ \t]*<script src="vendor/gsap\.min\.js"></script>\n?', "", html)
