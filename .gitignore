@@ -21,7 +21,8 @@ venv/
 
 # Node (in case)
 node_modules/
-package-lock.json
+playwright-report/
+test-results/
 
 # Data (processed/derived are regenerated)
 *.parquet

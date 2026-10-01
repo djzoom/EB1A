@@ -7,9 +7,16 @@ on:
 
 permissions:
   contents: write
+  actions: write
+
+# 与签证公告工作流共用写入锁，避免同时修改 main。
+concurrency:
+  group: data-updates-main
+  cancel-in-progress: false
 
 jobs:
   check-and-download:
+    if: github.ref == 'refs/heads/main'
     # 抓取需绕开 USCIS/DOS 对 Azure 机房 IP 的 403 封锁 → 可切到住宅 IP 的自建 runner。
     # 设仓库变量 RUNNER_LABEL=eb1a-fetch 即切换；删掉变量立刻回退托管 runner(逃生口)。
     # 配置见 docs/self-hosted-runner.md。
@@ -19,6 +26,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-python@v5
         with:
@@ -39,18 +48,28 @@ jobs:
         run: python scripts/sniff_visa_bulletin.py --filing-chart || true
 
       - name: Commit and push if new files
+        id: commit
         run: |
-          git config user.name "djzoom"
-          git config user.email "djwangzhong@gmail.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # index.html 也要暂存：上一步的 AOS 用表补判会写回 FILING_CHART/
           # FILING_CHART_STATE，只 add data/raw/ 会让该结果每天被丢弃、永远停在待确认。
           git add data/raw/ index.html
           if git diff --cached --quiet; then
             echo "No new data files"
           else
+            python scripts/test_sniff.py
             git commit -m "Auto-update: new USCIS/DOS data $(date +%Y-%m-%d)"
-            git push
+            git push origin HEAD:main
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # GITHUB_TOKEN 的 push 不会触发 CI，数据更新后必须显式派发。
+      - name: Run CI and publish updated main
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main
 
       # 把 I-140 趋势 + f 估计写进运行摘要，便于每次复看"申请潮"走势与 f/排到区间
       - name: I-140 trend + f estimate (to run summary)
