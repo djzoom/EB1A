@@ -30,6 +30,8 @@ data/processed/
 data/derived/
 
 # Build
+assets/ui.js
+assets/ui.css
 dist/
 build/
 *.log

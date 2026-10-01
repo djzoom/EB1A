@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """不访问外网的语法、JSON 和静态资源检查。"""
 
+import argparse
 import ast
 import json
 import subprocess
@@ -40,11 +41,14 @@ class PageChecks(HTMLParser):
             self.inline = False
 
 
-def main():
+def main(source_only=False):
     for path in sorted((ROOT / "scripts").glob("*.py")):
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     for path in sorted((ROOT / "scripts").glob("*.sh")):
         subprocess.run(["bash", "-n", str(path)], check=True)
+    for path in [*sorted((ROOT / "scripts").glob("*.mjs")), *sorted(ROOT.glob("*.js"))]:
+        subprocess.run(["node", "--check", str(path)], check=True)
+    subprocess.run(["node", str(ROOT / "scripts" / "build_ui.mjs"), "--check"], cwd=ROOT, check=True)
     for path in [ROOT / "manifest.json", *sorted((ROOT / "data").glob("*.json"))]:
         json.loads(path.read_text(encoding="utf-8"))
     subprocess.run(["node", "--check", str(ROOT / "sw.js")], check=True)
@@ -56,10 +60,16 @@ def main():
         subprocess.run(["node", "--check"], input=script, text=True, check=True)
     for asset in page.assets:
         url = urlsplit(asset)
+        if source_only and url.path.removeprefix("./") in ("assets/ui.js", "assets/ui.css"):
+            continue
         if not url.scheme and not url.netloc and not (ROOT / unquote(url.path)).is_file():
             raise SystemExit(f"缺少页面资源：{asset}")
+    if not source_only:
+        subprocess.run(["node", "--check", str(ROOT / "assets" / "ui.js")], check=True)
     print("✓ Python / Shell / JavaScript 语法、JSON 和页面资源检查通过")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-only", action="store_true", help="不要求生成的 UI 产物；供无授权令牌的 PR 检查")
+    main(source_only=parser.parse_args().source_only)
