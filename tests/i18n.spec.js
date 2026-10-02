@@ -317,7 +317,7 @@ test('copy feedback and fallback are translated while shared conditions and lang
   await expect(page.locator('#action-status')).toHaveText((await catalog('fr'))['action.sharedCopied'])
   const snapshot = new URLSearchParams(new URL(await page.evaluate(() => localeCopies.at(-1))).hash.slice(1))
   expect(Object.fromEntries(['category', 'country', 'pd', 'lang'].map(key => [key, snapshot.get(key)])))
-    .toEqual({ category: 'EB-1A', country: 'CN', pd: '2026-01-15', lang: 'fr' })
+    .toEqual({ category: 'EB-1', country: 'CN', pd: '2026-01-15', lang: 'fr' })
   await selectLocale(page, 'ar')
   await expect(page.locator('#action-status')).toHaveText((await catalog('ar'))['action.sharedCopied'])
   await page.evaluate(() => { rejectLocaleCopy = true })

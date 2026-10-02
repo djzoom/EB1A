@@ -1,8 +1,8 @@
-# EB1A Priority Date Predictor
+# GC Time · EB-1–EB-5 Priority Date Predictor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-EB-1 ~ EB-5 排期预测工具（EB-1A / EB-2 / EB-3 / EB-4 / EB-5 及三类 EB-5 预留；中国大陆、印度、其他国家 ROW、墨西哥、菲律宾）。EB-1A 中国大陆为最初的、参数经手工标定并回测的主场景。基于公开政府数据（USCIS / DOS），用供给 + 队列密度的第一性原理方法估算 Priority Date 何时到期。
+EB-1 ~ EB-5 排期预测工具（EB-1 杰出人才 / EB-2 / EB-3 / EB-4 / EB-5 及三类 EB-5 预留；中国大陆、印度、其他国家 ROW、墨西哥、菲律宾）。EB-1 中国大陆为最初的、参数经手工标定并回测的主场景。基于公开政府数据（USCIS / DOS），用供给 + 队列密度的第一性原理方法估算 Priority Date 何时到期。
 
 ## 在线 Demo
 
@@ -37,10 +37,12 @@ EB-1 ~ EB-5 排期预测工具（EB-1A / EB-2 / EB-3 / EB-4 / EB-5 及三类 EB-
 
 首次打开时可选类别与出生国（随时可在编辑面板修改，保存在 localStorage `eb1a_user_profile`）。每个 类别×国家 有独立的表A/表B 当期值、历史序列与模型参数：
 
+EB-1 统一定义为「杰出人才」，使用第一优先类别的排期，不细分类别。旧档案和分享链接中的 `EB-1A` 自动兼容为 `EB-1`，只在内存转换，不自动覆盖已保存档案；主动更新条件后的保存值和新分享链接统一使用 `EB-1`。历史数据键、公告机器人和离线产物文件名保持不变，预测公式及模型参数不变。
+
 - 数据：`data/visa_bulletin_history.json`（2016-10 → 2026-10，脚本 `scripts/build_bulletin_history.py`）
 - 参数：`scripts/calibrate_categories.py` 由「表A 近 24 月推进速度 + I-140 已批准待签（cutoff 之后排队总量）+ I-485 库存」标定，写入 `index.html` 的 `CELL_MODELS`
 - 表A 为 Current 的格子（如 EB-1 ROW、EB-5 ROW、EB-5 三个预留类）直接显示「已 current，无需等待」
-- EW（其他工人）与 EB-4 宗教工作者行暂未收录；EB-2..5 及非中国格子的参数含较多假设（溢入、家庭系数），置信度低于 EB-1A 中国
+- EW（其他工人）与 EB-4 宗教工作者行暂未收录；EB-2..5 及非中国格子的参数含较多假设（溢入、家庭系数），置信度低于 EB-1 中国
 
 ## 已知局限与改进方向
 
@@ -54,7 +56,7 @@ EB-1 ~ EB-5 排期预测工具（EB-1A / EB-2 / EB-3 / EB-4 / EB-5 及三类 EB-
 ## 项目结构
 
 ```
-EB1A/
+gctime/
 ├── index.html               # 预测工具主页面
 ├── README.md
 ├── CLAUDE_CODE_BOOTSTRAP.md  # 架构 / 开发接手指南

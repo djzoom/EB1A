@@ -191,7 +191,7 @@ test('same-document share navigation applies incoming conditions and language wh
   await expect(page.locator('#shared-notice')).toBeHidden()
   expect(new URL(page.url()).hash).toBe('')
   expect(await page.evaluate(() => ({ active: profile, pace: paceMode })))
-    .toEqual({ active: savedProfile, pace: 'model' })
+    .toEqual({ active: { ...savedProfile, category: 'EB-1' }, pace: 'model' })
   expect(await page.evaluate(key => ({
     profile: localStorage.getItem(key), view: localStorage.getItem('eb1a_ab_view'),
     pace: localStorage.getItem('gc_pace_mode'), language: localStorage.getItem('gc_language')
@@ -234,7 +234,7 @@ for (const [name, overrides] of [
     await expect(page.locator('#shared-notice')).toContainText('无效')
     await expect(page.locator('#pv-pd')).toHaveText('2026-01-15')
     expect(await page.evaluate(key => ({ active: profile, stored: JSON.parse(localStorage.getItem(key)), injected: Boolean(window.sharingInjected) }), profileKey))
-      .toEqual({ active: savedProfile, stored: savedProfile, injected: false })
+      .toEqual({ active: { ...savedProfile, category: 'EB-1' }, stored: savedProfile, injected: false })
     await expect(page.locator('[data-sharing-injected]')).toHaveCount(0)
   })
 }
@@ -311,7 +311,7 @@ test('repeated copying keeps the current site subpath, removes unrelated URL dat
     expect(copied.pathname).toContain('/site/')
     expect(copied.search).toBe('')
     expect(copied.href).not.toContain('unrelated')
-    expect(new URLSearchParams(copied.hash.slice(1)).get('category')).toBe('EB-1A')
+    expect(new URLSearchParams(copied.hash.slice(1)).get('category')).toBe('EB-1')
     await expect(page.locator('#action-status')).toContainText('已复制')
     await expect(page.locator('#share-url')).toBeHidden()
     await expect(page.locator('#share-btn svg')).toHaveCount(1)
@@ -371,7 +371,7 @@ for (const width of [375, 1440]) {
     await page.locator('#pe-cat').selectOption('EB-2')
     await page.locator('#pe-pd-y').fill('2025')
     await page.locator('#pe-cancel').click()
-    await expect(page.locator('#pe-cat')).toHaveValue('EB-1A')
+    await expect(page.locator('#pe-cat')).toHaveValue('EB-1')
     await expect(page.locator('#pe-pd-y')).toHaveValue('2026')
     await expect(button).toHaveAttribute('aria-expanded', String(width >= 768))
     if (width < 768) {
