@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -63,12 +64,19 @@ def main(skip_ui=False):
     )
     if build_offline(skip_ui=True) != 0:
         raise SystemExit("离线构建失败")
+    # 与界面共用受验证词典，避免离线说明形成第二套翻译。
+    readmes = json.loads(subprocess.check_output([
+        "node", "--input-type=module", "-e",
+        "import { catalogs, languages } from './src/i18n.js'; "
+        "console.log(JSON.stringify(languages.map(({id,name}) => "
+        "({id,name,text:catalogs[id]['offline.readme']}))))"
+    ], cwd=ROOT, text=True))
     with zipfile.ZipFile(ROOT / "dist" / "EB1A-offline.zip", "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(ROOT / "dist" / "EB1A.html", "EB1A.html")
-        archive.writestr("使用说明.txt", "绿卡排期推演（EB-1～EB-5，多国家）\n\n"
-                         "用浏览器打开 EB1A.html 即可，完全离线运行。\n"
-                         "本文件为数据快照，不会自动同步未来公告；请下载新版本获取更新。\n"
-                         "预测仅供参考，不构成法律或移民建议。实际排期以官方签证公告为准。\n")
+        archive.writestr("使用说明.txt", readmes[0]["text"] + "\n")
+        archive.writestr("README-languages.txt", "\n\n".join(
+            item["name"] + " (" + item["id"] + ")\n" + item["text"] for item in readmes
+        ) + "\n")
     print(f"✓ 站点：{site}；离线包：dist/EB1A-offline.zip")
 
 
