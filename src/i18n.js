@@ -171,6 +171,12 @@ if (isBrowser) {
   if (!selected) {
     try { selected = normalizeLocale(localStorage.getItem(storageKey)) } catch {}
   }
+  if (!selected) {
+    try {
+      const preferences = [...(window.navigator.languages || []), window.navigator.language]
+      selected = preferences.map(normalizeLocale).find(Boolean)
+    } catch {}
+  }
   setLocale(selected || 'zh-CN', { persist: false, notify: false })
   window.GCI18n = {
     t, text, getLocale, setLocale, subscribe, availableLanguages, normalizeLocale,
