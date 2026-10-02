@@ -36,7 +36,10 @@ for (const offline of [false, true]) {
       await expect(page.locator('#chart [data-series="forecast-A-p50"]')).toBeAttached()
       await expect(page.locator('#chart [data-series="forecast-B-p50"]')).toBeAttached()
     }
-    await expect(page.locator('[data-i18n-html="footer.license"] a').last())
+    const attribution = page.locator('.footer [data-i18n-html="footer.attribution"]')
+    await expect(attribution).toHaveText('Fork 自 djzoom/EB1A')
+    await expect(attribution.locator('a')).toHaveCount(1)
+    await expect(attribution.locator('a'))
       .toHaveAttribute('href', 'https://github.com/djzoom/EB1A')
     await expect(page.locator('iframe, #sponsor-link, [data-sponsor]')).toHaveCount(0)
     expect(await page.evaluate(() => typeof window.GCSponsor)).toBe('undefined')

@@ -211,8 +211,7 @@
   </div>
 
   <div class="footer">
-    <span id="footer-summary"><span id="footer-scope">EB-1 中国大陆</span>排期预测 · 自动同步最新签证公告 · 数据源 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a></span><br>
-    <span data-i18n-html="footer.license">项目代码采用 <a href="https://github.com/djzoom/EB1A/blob/main/LICENSE" target="_blank" rel="noopener">MIT 协议</a> · 源码 <a href="https://github.com/djzoom/EB1A" target="_blank" rel="noopener">djzoom/EB1A</a> · HeroUI Pro 依赖另受商业授权约束</span><br>
+    <span data-i18n-html="footer.attribution">Fork 自 <a href="https://github.com/djzoom/EB1A" target="_blank" rel="noopener" dir="ltr">djzoom/EB1A</a></span><br>
     <span class="footer-legal" data-i18n-html="footer.legal">本工具为统计估算，<b>不构成法律或移民建议</b>，不保证准确。以官方签证公告为准，并咨询持牌移民律师。你填的信息只存在本地浏览器。</span><br>
     © 2026 djzoom
   </div>
@@ -1869,7 +1868,6 @@ function updateTitles() {
   var sc = cellScope(), ci = catInfo();
   var h = document.getElementById('app-title'); if (h) h.textContent = tx('app.heading', { category: ci.short });
   var sub = document.getElementById('app-sub'); if (sub) sub.textContent = tx('app.subtitle', { country: countryInfo().label });
-  var f = document.getElementById('footer-summary'); if (f) f.innerHTML = t('footer.summary', { scope: sc });
   document.title = tx('app.title', { scope: sc });
   var badge = document.getElementById('bulletin-version'); if (badge) badge.textContent = tx('app.bulletin', { month: bulletinMonth() });
   var offline = document.getElementById('offline-notice'); if (offline) offline.textContent = tx('offline.notice', { month: bulletinMonth() });
