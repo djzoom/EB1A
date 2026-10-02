@@ -67,7 +67,7 @@
 <div class="app">
 
   <div class="topbar">
-    <h1 id="app-title">EB-1A 排期推演</h1>
+    <h1 id="app-title">EB-1 排期推演</h1>
     <div class="topbar-sub" id="app-sub">中国大陆 · 基于蒙特卡洛模拟</div>
     <div class="topbar-row">
       <div class="topbar-info" id="profile-view">
@@ -118,7 +118,7 @@
       <span class="confetti">🎉</span>
       <div>
         <div class="congrats-title" data-i18n="result.congrats">恭喜！排期已到 🎊</div>
-        <div class="congrats-sub" id="congrats-description">你的优先日 <b id="congrats-pd">--</b> 已被表A（最终裁定）追上，<span id="congrats-scope">EB-1A 中国大陆</span>排期已 <b>current</b>——可进入最终裁定 / 准备拿绿卡了。一切以官方签证公告为准。</div>
+        <div class="congrats-sub" id="congrats-description">你的优先日 <b id="congrats-pd">--</b> 已被表A（最终裁定）追上，<span id="congrats-scope">EB-1 中国大陆</span>排期已 <b>current</b>——可进入最终裁定 / 准备拿绿卡了。一切以官方签证公告为准。</div>
       </div>
     </div>
     <div class="result-chips">
@@ -211,7 +211,7 @@
   </div>
 
   <div class="footer">
-    <span id="footer-summary"><span id="footer-scope">EB-1A 中国大陆</span>排期预测 · 自动同步最新签证公告 · 数据源 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a></span><br>
+    <span id="footer-summary"><span id="footer-scope">EB-1 中国大陆</span>排期预测 · 自动同步最新签证公告 · 数据源 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a></span><br>
     <span data-i18n-html="footer.license">项目代码采用 <a href="https://github.com/djzoom/EB1A/blob/main/LICENSE" target="_blank" rel="noopener">MIT 协议</a> · 源码 <a href="https://github.com/djzoom/EB1A" target="_blank" rel="noopener">djzoom/EB1A</a> · HeroUI Pro 依赖另受商业授权约束</span><br>
     <span class="footer-legal" data-i18n-html="footer.legal">本工具为统计估算，<b>不构成法律或移民建议</b>，不保证准确。以官方签证公告为准，并咨询持牌移民律师。你填的信息只存在本地浏览器。</span><br>
     © 2026 djzoom
@@ -240,7 +240,7 @@ var TODAY = new Date().getTime();
 var MS_PER_DAY = 86400000;
 
 var PROFILE_KEY = 'eb1a_user_profile';
-var DEFAULT_PROFILE = { pd: null, category: 'EB-1A', country: 'CN', path: 'AOS', family: 0, chartType: 'A' };
+var DEFAULT_PROFILE = { pd: null, category: 'EB-1', country: 'CN', path: 'AOS', family: 0, chartType: 'A' };
 
 function loadProfile() {
   try { var s = localStorage.getItem(PROFILE_KEY); if (s) { var p = JSON.parse(s); if (p.pd) return p; } } catch(e) {}
@@ -254,9 +254,9 @@ var savedProfile = loadProfile();
 var profile = savedProfile || JSON.parse(JSON.stringify(DEFAULT_PROFILE));
 
 // ---- 支持的类别 / 出生国(chargeability) ----
-// id 与 CUTOFF_DATA / HIST_DATA / CELL_MODELS 的键一致。EW(其他工人) 与 EB-4 宗教工作者行暂未收录(无可核验的 2026 数据)。
+// EB-1 的旧数据键 EB-1A 由 dataCategory 兼容，避免改动公告机器人及历史模型。EW 与 EB-4 宗教工作者行暂未收录。
 var CATEGORIES = [
-  { id: 'EB-1A', label: 'EB-1 杰出人才 / 教授 / 高管 (EB-1A)', short: 'EB-1A' },
+  { id: 'EB-1', label: 'EB-1 杰出人才', short: 'EB-1' },
   { id: 'EB-2', label: 'EB-2 高学历 / 杰出能力 / NIW', short: 'EB-2' },
   { id: 'EB-3', label: 'EB-3 专业人才 / 技术工人', short: 'EB-3' },
   { id: 'EB-4', label: 'EB-4 特殊移民 (SIJ 等)', short: 'EB-4' },
@@ -273,8 +273,10 @@ var COUNTRIES = [
   { id: 'PH', label: '菲律宾' }
 ];
 function findById(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
+function dataCategory(id) { return id === 'EB-1' ? 'EB-1A' : id; }
+function cellDataKey(cat, co) { return dataCategory(cat) + '|' + co; }
 function catInfo(id) {
-  var c = findById(CATEGORIES, id || profile.category) || CATEGORIES[0];
+  var c = findById(CATEGORIES, window.GCShare.normalizeCategory(id || profile.category)) || CATEGORIES[0];
   return { id: c.id, label: tx('category.' + c.id), short: c.id.indexOf('EB-5-') === 0 ? tx('category.short.' + c.id) : c.short };
 }
 function countryInfo(id) {
@@ -282,8 +284,9 @@ function countryInfo(id) {
   return { id: c.id, label: tx('country.' + c.id) };
 }
 function countryShort(id) { var c = countryInfo(id); return c.id === 'ROW' ? tx('country.short.ROW') : c.label; }
-// 旧版保存值一律按白名单校验：合法则沿用(向后兼容 'EB-1A'/'CN')，非法回落默认
-if (!findById(CATEGORIES, profile.category)) profile.category = 'EB-1A';
+// 只在内存兼容旧类别，不自动覆盖已保存档案；下一次主动保存使用 EB-1。
+profile.category = window.GCShare.normalizeCategory(profile.category);
+if (!findById(CATEGORIES, profile.category)) profile.category = 'EB-1';
 if (!findById(COUNTRIES, profile.country)) profile.country = 'CN';
 
 var sharedState = window.GCShare.parse(location.hash, CATEGORIES.map(function(c) { return c.id; }), COUNTRIES.map(function(c) { return c.id; }));
@@ -316,7 +319,7 @@ var CUTOFF_DATA = {
 
 // 原始值：'YYYY-MM-DD' | 'current' | 'unavailable' | undefined(未收录)
 function cutoffRaw(category, country, chartType) {
-  var c = CUTOFF_DATA[category]; var cc = c && c[country];
+  var c = CUTOFF_DATA[dataCategory(category)]; var cc = c && c[country];
   return cc ? cc[chartType] : undefined;
 }
 function getCutoffData(category, country, chartType) {
@@ -559,6 +562,7 @@ function expandHist(raw) {
   return out;
 }
 function histFor(cat, co, t) {
+  cat = dataCategory(cat);
   if (cat === 'EB-1A' && co === 'CN') return t === 'A' ? HISTORY : HISTORY_B;
   var k = cat + '|' + co + '|' + t;
   if (!_histCache[k]) _histCache[k] = HIST_DATA[k] ? expandHist(HIST_DATA[k]) : [];
@@ -589,7 +593,7 @@ function fmtSrc(n) { return num(Math.round(n)); }
 function pctTxt(x) { return Math.round(x * 100) + '%'; }
 // 按标定结果生成本 cell 的 参数元数据 / 三档预设 / 供给情景
 function makeModel(key, c, borrowedFrom) {
-  var catName = c.cat;
+  var catName = catInfo(c.cat).short;
   var coName = c.co === 'CN' ? tx('country.short.CN') : countryShort(c.co);
   var capped = c.mode === 'flow' && c.co !== 'ROW' && c.cat !== 'EB-4';
   var eff = c.effSupply, base = c.base, H = c.H, P = c.P;
@@ -652,7 +656,7 @@ function makeModel(key, c, borrowedFrom) {
     },
     eb4eb5Spillover: {
       label: t('param.upstream'), default: c.up, min: 0, max: upMax, step: 50, unit: visas, format: fmtSrc,
-      source: { title: t('source.upstream.' + c.cat), rows: [row('source.defaultAssumption', unit('source.visasPerYear', fmtSrc(c.up))), row('source.range', '0 – ' + fmtSrc(upMax))],
+      source: { title: t('source.upstream.' + window.GCShare.normalizeCategory(c.cat)), rows: [row('source.defaultAssumption', unit('source.visasPerYear', fmtSrc(c.up))), row('source.range', '0 – ' + fmtSrc(upMax))],
         methodology: t('source.upstreamMethod') + (c.cat === 'EB-5' ? t('source.upstreamEb5') : ''), sources: ['INA 201(d)', 'DOS IV Issuance'] }
     },
     familyMultiplier: {
@@ -685,14 +689,18 @@ function makeModel(key, c, borrowedFrom) {
   else if (c.cat === 'EB-5') note = tx('model.note.eb5');
   else if (c.co === 'ROW') note = tx('model.note.row');
   else if (c.co === 'IN') note = tx('model.note.india');
-  if (borrowedFrom) note = tx('model.note.borrowed', { model: borrowedFrom }) + (note ? ' ' + note : '');
+  if (borrowedFrom) {
+    var borrowedCell = borrowedFrom.split('|');
+    note = tx('model.note.borrowed', { model: catInfo(borrowedCell[0]).short + '|' + borrowedCell[1] }) + (note ? ' ' + note : '');
+  }
   return { key: key, presets: { realistic: realistic, optimistic: optimistic, pessimistic: pessimistic }, meta: meta, scen: scen,
     density: density, pHold: c.hold, regimeSupplySigma: c.mode === 'flow' && c.co !== 'ROW' ? 0.3 : 0.25, anchor: !borrowedFrom && !!FY_ANCHOR_CELLS[key], note: note };
 }
 
 var _modelCache = {};
 function resolveModelKey(cat, co) {
-  var k = cat + '|' + co;
+  cat = dataCategory(cat);
+  var k = cellDataKey(cat, co);
   if (k === 'EB-1A|CN') return k;
   if (CELL_MODELS[k]) return k;
   if (MODEL_ALIAS[k]) return MODEL_ALIAS[k];
@@ -706,7 +714,7 @@ function activeModel() {
     m = { key: mk, presets: PRESETS_EB1CN, meta: makeCnParamMeta(), scen: SUPPLY_SCENARIOS_EB1CN, density: DENSITY_EB1CN,
           pHold: 0.4, regimeSupplySigma: 0.38, anchor: true, note: '' };
   } else {
-    var pk = profile.category + '|' + profile.country;
+    var pk = cellDataKey(profile.category, profile.country);
     var own = pk === mk || MODEL_ALIAS[pk] === mk;
     m = makeModel(mk, CELL_MODELS[mk], own ? null : mk);
   }
@@ -914,7 +922,7 @@ function typicalLead() {
 // 到期后表B 保留当时的领先量、随表A 平行推进；表A 追近到中位领先距离后仍按原规则跟随。
 var B_HOLD_MAX_BY_CELL = {"EB-1A|CN": 21, "EB-1A|IN": 12, "EB-1A|MX": 7, "EB-1A|PH": 7, "EB-1A|ROW": 7, "EB-2|CN": 12, "EB-2|IN": 12, "EB-2|MX": 10, "EB-2|PH": 10, "EB-2|ROW": 10, "EB-3|CN": 10, "EB-3|IN": 16, "EB-3|MX": 12, "EB-3|PH": 12, "EB-3|ROW": 12, "EB-4|CN": 15, "EB-4|IN": 15, "EB-4|MX": 15, "EB-4|PH": 15, "EB-4|ROW": 15, "EB-5|CN": 21, "EB-5|IN": 27};
 var B_HOLD_MAX_DEFAULT = 14;   // 无历史的格子：各格最长停留的中位
-function bHoldMaxMonths() { return B_HOLD_MAX_BY_CELL[profile.category + '|' + profile.country] || B_HOLD_MAX_DEFAULT; }
+function bHoldMaxMonths() { return B_HOLD_MAX_BY_CELL[cellDataKey(profile.category, profile.country)] || B_HOLD_MAX_DEFAULT; }
 // 表B 跳到现值的那期(停留起点)
 function bHoldStart() {
   var h = histB(); if (!h.length) return 0;
@@ -1786,7 +1794,7 @@ function renderExplanation() {
     '<p><span class="step">' + t('explain.centerTitle') + '</span><br>' + t('explain.center', {
       queue: num(queueAhead), annual: num(mainPerYear), years: num(+yearsEst, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) + '</p>' +
     (anchor && VB_MON !== 9 ? '<p><span class="step">' + t('explain.anchorTitle') + '</span><br>' + t('explain.anchor', {
-      date: formatDate(anchor.y), error: FY_ANCHOR_ERR[profile.category + '|' + profile.country] || '−16 ~ +92', year: anchor.fy }) + '</p>' : '') +
+      date: formatDate(anchor.y), error: FY_ANCHOR_ERR[cellDataKey(profile.category, profile.country)] || '−16 ~ +92', year: anchor.fy }) + '</p>' : '') +
     '<p><span class="step">' + t('explain.simulationTitle', { step: anchor && VB_MON !== 9 ? '⑤' : '④' }) + '</span><br>' +
       t('explain.simulation', { count: num(500) }) + '</p>';
 }
@@ -1881,6 +1889,7 @@ function syncSelectors() {
 }
 // 切换 类别/国家：换模型 → 重置参数 → 重画
 function applyCell(cat, co) {
+  cat = window.GCShare.normalizeCategory(cat);
   if (!findById(CATEGORIES, cat) || !findById(COUNTRIES, co)) return;
   profile.category = cat; profile.country = co;
   persistProfile();

@@ -12,7 +12,7 @@ const test = base.extend({
   }
 })
 
-const categories = ['EB-1A', 'EB-2', 'EB-3', 'EB-4', 'EB-5', 'EB-5-Rural', 'EB-5-HighUnemp', 'EB-5-Infra']
+const categories = ['EB-1', 'EB-2', 'EB-3', 'EB-4', 'EB-5', 'EB-5-Rural', 'EB-5-HighUnemp', 'EB-5-Infra']
 const countries = ['CN', 'IN', 'ROW', 'MX', 'PH']
 
 async function openProfile(page, category = 'EB-1A', country = 'CN', url = './') {
@@ -147,7 +147,7 @@ test('B resumes progress after its hold limit and never moves backwards', async 
   expect(result.monotonic).toBe(true)
 })
 
-for (const category of ['EB-1A', 'EB-2', 'EB-3']) {
+for (const category of ['EB-1', 'EB-2', 'EB-3']) {
   test(`${category} China uses the October B fiscal-year anchor`, async ({ page }) => {
     await openProfile(page, category, 'CN')
     const result = await page.evaluate(() => {

@@ -1,4 +1,4 @@
-# EB1A Predictor - 数据源清单
+# EB-1–EB-5 Predictor - 数据源清单
 
 完整可下载/可抓取的公开数据源,用于构建 cohort × country × subcategory × PD-bucket × stage 模型。
 
@@ -30,7 +30,7 @@
 
 ---
 
-## 多类别历史（EB-1A..EB-5 × ROW/CN/IN/MX/PH）来源与核验
+## 多类别历史（EB-1..EB-5 × ROW/CN/IN/MX/PH）来源与核验
 
 沙箱无法直连 state.gov 与律所站点（egress 403），一手 HTML 未能直接抓取。`data/visa_bulletin_history.json` 由两份 DOS 表格的机器可读转录合并：
 

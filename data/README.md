@@ -1,6 +1,6 @@
 # Data Directory
 
-Public government data for EB-1A priority date prediction.
+Public government data for EB-1 priority date prediction.
 
 All files are from official USCIS/DOS sources or community-curated public datasets.
 
@@ -61,7 +61,7 @@ Format: `iv_issuance_{month}_{year}.xlsx`
 
 | File | Description |
 |------|-------------|
-| visa_bulletin_history.json | Monthly Final Action (A) and Dates for Filing (B) series, Oct 2016 -> Oct 2026, for EB-1A / EB-2 / EB-3 / EB-4 / EB-5 (unreserved; pre-2022-05 = Non-Regional Center row) x ROW / CN / IN / MX / PH. `C` = current, `U` = unavailable. EB-5 set-asides (rural / high unemployment / infrastructure) have been Current for every country since 2022-05. Built by `scripts/build_bulletin_history.py`. |
+| visa_bulletin_history.json | Monthly Final Action (A) and Dates for Filing (B) series, Oct 2016 -> Oct 2026, for EB-1 / EB-2 / EB-3 / EB-4 / EB-5 (unreserved; pre-2022-05 = Non-Regional Center row) x ROW / CN / IN / MX / PH. `C` = current, `U` = unavailable. EB-5 set-asides (rural / high unemployment / infrastructure) have been Current for every country since 2022-05. Built by `scripts/build_bulletin_history.py`. The legacy EB-1 data key remains `EB-1A` for compatibility. |
 | category_calibration.json | Per (category, country) model calibration (advance rate, family multiplier, density knots, I-140 awaiting totals) written by `scripts/calibrate_categories.py --write`; the same block is embedded in `index.html` as `CELL_MODELS`. |
 
 **Provenance.** state.gov hosts (`travel`, `adoption`, `childabduction`) and law-firm sites are blocked in the sandbox this was built in, so the series are taken from two machine-readable transcriptions of the DOS tables, which agree cell-for-cell on all 2,520 overlapping cells (2021-09 -> 2025-12):

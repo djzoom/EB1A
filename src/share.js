@@ -1,4 +1,8 @@
 // 分享只传可验证的计算条件；片段不会随 HTTP 请求发送到服务器。
+function normalizeCategory(category) {
+  return category === 'EB-1A' ? 'EB-1' : category
+}
+
 function parseDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return null
   const [year, month, day] = value.split('-').map(Number)
@@ -11,7 +15,7 @@ function parse(hash, categories, countries) {
   const values = new URLSearchParams(hash.replace(/^#/, ''))
   if (values.get('share') !== '1') return null
   if (hash.length > 5000) return { invalid: true }
-  const category = values.get('category')
+  const category = normalizeCategory(values.get('category'))
   const country = values.get('country') || 'CN'
   const pd = parseDate(values.get('pd'))
   if (!categories.includes(category) || !countries.includes(country) || pd === null) return { invalid: true }
@@ -33,7 +37,7 @@ function parse(hash, categories, countries) {
 function build(locationHref, state) {
   const source = new URL(locationHref)
   const url = new URL(/^https?:$/.test(source.protocol) ? source.origin + source.pathname : 'https://djzoom.github.io/EB1A/')
-  const values = new URLSearchParams({ share: '1', category: state.category, country: state.country,
+  const values = new URLSearchParams({ share: '1', category: normalizeCategory(state.category), country: state.country,
     pd: state.pd, pace: state.pace, percentile: state.percentile })
   if (state.supply) values.set('supply', state.supply)
   if (state.params) values.set('params', JSON.stringify(state.params))
@@ -42,4 +46,4 @@ function build(locationHref, state) {
   return url.href
 }
 
-window.GCShare = { parse, build, parseDate }
+window.GCShare = { parse, build, parseDate, normalizeCategory }
