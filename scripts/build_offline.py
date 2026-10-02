@@ -76,7 +76,7 @@ def main(skip_ui=False) -> int:
 
     # 5) 在页脚加一行离线提示（找页脚版权行前插入）
     notice = (
-        f'    <span style="display:block;margin-top:6px;font-size:11px;opacity:0.85">'
+        f'    <span id="offline-notice" style="display:block;margin-top:6px;font-size:11px;opacity:0.85">'
         f'离线版 · 数据截至 {vb_month} · 不会自动同步未来公告</span>\n'
     )
     # 插到页脚的「© 2026 djzoom」前；找不到就插到 </body> 前兜底
