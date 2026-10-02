@@ -121,26 +121,20 @@
         <div class="congrats-sub" id="congrats-description">你的优先日 <b id="congrats-pd">--</b> 已被表A（最终裁定）追上，<span id="congrats-scope">EB-1A 中国大陆</span>排期已 <b>current</b>——可进入最终裁定 / 准备拿绿卡了。一切以官方签证公告为准。</div>
       </div>
     </div>
-    <div class="result-main">
-      <div class="result-lead" id="result-lead" data-i18n="result.expected">预计排到</div>
-      <span class="result-date" id="hero-value">--</span>
-      <span class="result-sub" id="hero-sub">距今约 --</span>
-      <span class="result-note" data-i18n="result.officialOnly">统计估算 · 非官方 · 以官方公告为准</span>
-    </div>
     <div class="result-chips">
-      <button class="stat green" data-pct="p10" aria-label="乐观情景" data-i18n-aria-label="result.optimisticLabel"><small data-i18n="result.optimistic">乐观</small> <b id="stat-p10">--</b></button>
-      <button class="stat blue selected" data-pct="p50" aria-label="中位情景" data-i18n-aria-label="result.medianLabel"><small data-i18n="result.median">中位</small> <b id="stat-p50">--</b></button>
-      <button class="stat orange" data-pct="p90" aria-label="保守情景" data-i18n-aria-label="result.conservativeLabel"><small data-i18n="result.conservative">保守</small> <b id="stat-p90">--</b></button>
+      <button class="stat" data-pct="p10" aria-label="乐观情景" data-i18n-aria-label="result.optimisticLabel"><small data-i18n="result.optimistic">乐观</small><b id="stat-p10" hidden>--</b></button>
+      <button class="stat selected" data-pct="p50" aria-label="中位情景" data-i18n-aria-label="result.medianLabel"><small data-i18n="result.median">中位</small><b id="stat-p50" hidden>--</b></button>
+      <button class="stat" data-pct="p90" aria-label="保守情景" data-i18n-aria-label="result.conservativeLabel"><small data-i18n="result.conservative">保守</small><b id="stat-p90" hidden>--</b></button>
     </div>
-    <div class="result-bar">
-      <span id="progress-left">--</span>
-      <div class="bar-track"><div class="bar-fill" id="progress-fill" style="width:0%"></div></div>
-      <span id="progress-right">--</span>
-    </div>
-    <div class="bar-note" id="progress-note"></div>
     <div class="ab-status" id="ab-status"></div>
-    <span id="hero-fast" style="display:none"></span>
-    <span id="hero-slow" style="display:none"></span>
+    <span class="result-note" data-i18n="result.officialOnly">统计估算 · 非官方 · 以官方公告为准</span>
+    <!-- 旧渲染契约保留为隐藏的表 A 辅助值；可见结果始终同时展示 A/B。 -->
+    <div class="result-legacy" hidden>
+      <span id="result-lead"></span><span id="hero-value">--</span><span id="hero-sub"></span>
+      <span id="progress-left"></span><span id="progress-right"></span>
+      <span id="progress-fill"></span><span id="progress-note"></span>
+      <span id="hero-fast"></span><span id="hero-slow"></span>
+    </div>
   </div>
 
   <div class="chart-panel">
@@ -945,11 +939,6 @@ function projectBPath(path) {
   }
   return out;
 }
-// 按当前视图取路径：表A 原样；表B 经 projectBPath 推演。图表的面条线/等待图都走它，保证与中位线同口径。
-function viewPath(path) {
-  if (abView !== 'B' || !path) return path;
-  return projectBPath(path);
-}
 // 表B 穿越你 PD 的时间分布：已 current 则为"现在"，否则等表A 穿越(PD − 中位领先)
 function crossingsForB(paths) {
   var bNow = histB().length ? histB()[histB().length - 1].y : 0, pd = getYourPD();
@@ -1003,7 +992,6 @@ var selectedPercentile = 'p50';
 var crossingsByPct = null;      // 表A(裁定/批准)穿越分布
 var crossingsByPctB = null;     // 表B(递交)穿越分布
 var heroRollTween = null;       // 首屏大日期"滚动"补间；切表A/B或重渲染时须先杀，避免旧目标覆盖新值
-function activeCrossings() { return abView === 'B' ? crossingsByPctB : crossingsByPct; }
 var lastPercentiles = null;
 var lastCloudPaths = null;   // 抽样的真实蒙卡路径,用于"轨迹面条"可视化
 function sampleCloud(paths, n) {
@@ -1016,11 +1004,8 @@ function sampleCloud(paths, n) {
 var chartBounds = null;
 var openSourceParam = null;
 var chartMode = 'trend';
-// 走势图当前主视图：'A'=表A裁定(默认) / 'B'=表B递交推演。像 PD 一样记忆到 localStorage。
-var AB_KEY = 'eb1a_ab_view';
-var abView = 'A';
-try { var _sv = localStorage.getItem(AB_KEY); if (_sv === 'A' || _sv === 'B') abView = _sv; } catch (e) {}
-if (sharedState) { abView = sharedState.view; selectedPercentile = sharedState.percentile; }
+// 旧分享链接的 view 参数仍可解析，但不再影响同屏 A/B 对照，也不改写旧本机偏好。
+if (sharedState) selectedPercentile = sharedState.percentile;
 var lastSnapData = null;
 
 // Helpers
@@ -1112,55 +1097,43 @@ function reduceMotion() { try { return window.matchMedia && matchMedia('(prefers
 
 function animateChart() {
   if (!gsapReady() || reduceMotion()) return;
-  // 两图的预测扇区(区间带+轨迹云+三线)都从「已知边界」向右"推演"生长：
+  // 双表的区间带和中位线从「已知边界」向右展开：
   // 走势图边界=今天(时间轴)；等待图边界=当前排到的 PD(PD 轴)。
   var rect = document.getElementById('reveal-rect');
   if (rect) {
     var full = parseFloat(rect.getAttribute('width')) || 0;
     window.gsap.fromTo(rect, { attr: { width: 0 } }, { attr: { width: full }, duration: 0.65, ease: 'power2.out', overwrite: true });
   }
-  var marker = document.querySelector('#chart .cross-dot');
-  if (marker) window.gsap.from(marker, { opacity: 0.6, duration: 0.2, delay: 0.45, ease: 'power2.out', overwrite: true });
+  var markers = document.querySelectorAll('#chart .cross-dot');
+  if (markers.length) window.gsap.from(markers, { opacity: 0.6, duration: 0.2, delay: 0.45, ease: 'power2.out', overwrite: true });
 }
 
 // 大日期随推演"滚动"到结果(从今天递增到命中日)
 function animateHeroRoll() {
   if (!gsapReady() || reduceMotion()) return;
-  var hv = document.getElementById('hero-value');
-  var _acT = activeCrossings(); var target = _acT && _acT[selectedPercentile];
-  if (!hv || !target) return;
-  if (heroRollTween) { heroRollTween.kill(); }
-  var o = { t: TODAY };
-  // 滚动结束落定用 formatDateFull(与 renderHero 同格式"2026年12月")，避免定格成短格式"2026-12"
-  heroRollTween = window.gsap.to(o, { t: target, duration: 2.4, ease: 'power2.out',
-    onUpdate: function () { hv.textContent = formatDate(o.t); },
-    onComplete: function () { hv.textContent = formatDateFull(target); heroRollTween = null; } });
-}
-
-// "下雨"推演:把蒙特卡洛轨迹逐条"落"下来(面条线随机次序描出),
-// 直观呈现"很多次随机模拟 → 收敛成区间"的过程。
-function animateRain() {
-  if (!gsapReady() || reduceMotion()) return;
-  var lines = document.querySelectorAll('#chart .mc-line');
-  if (!lines.length) return;
-  lines.forEach(function (ln) {
-    try { var L = ln.getTotalLength(); ln.style.strokeDasharray = L; ln.style.strokeDashoffset = L; } catch (e) {}
-  });
-  window.gsap.to('#chart .mc-line', {
-    strokeDashoffset: 0, duration: 1.1, ease: 'power1.out',
-    stagger: { each: 0.013, from: 'random' },
-    onComplete: function () { document.querySelectorAll('#chart .mc-line').forEach(function (ln) { ln.style.strokeDasharray = ''; }); }
+  if (heroRollTween) { heroRollTween.kill(); heroRollTween = null; }
+  var targets = ['A', 'B'].map(function(table) {
+    var element = document.querySelector('.ab-chip[data-table="' + table + '"] [data-forecast-date]');
+    var crossings = table === 'A' ? crossingsByPct : crossingsByPctB;
+    return { element: element, target: crossings && crossings[selectedPercentile] };
+  }).filter(function(item) { return item.element && item.target; });
+  if (!targets.length) return;
+  heroRollTween = window.gsap.timeline({ onComplete: function() { heroRollTween = null; } });
+  targets.forEach(function(item) {
+    var state = { t: TODAY };
+    heroRollTween.to(state, { t: item.target, duration: 2.4, ease: 'power2.out',
+      onUpdate: function() { item.element.textContent = formatDate(state.t); },
+      onComplete: function() { item.element.textContent = formatDateFull(item.target); } }, 0);
   });
 }
 
-// 手动重播"推演":下雨模拟 + 生长扇区 + 滚动日期
-function replayDeduction() { animateRain(); animateChart(); animateHeroRoll(); }
+// 手动重播双表预测区间与日期，不重跑模拟。
+function replayDeduction() { animateChart(); animateHeroRoll(); }
 
 function animateHero() {
   if (!gsapReady() || reduceMotion()) return;
-  var hv = document.getElementById('hero-value');
-  // 切换后立即给出真实结果，不重置进度条，也不等待长入场动效。
-  if (hv) window.gsap.fromTo(hv, { opacity: 0.8 }, { opacity: 1, duration: 0.18, ease: 'power2.out', overwrite: true });
+  // 共用情景切换后，两张表立即给出真实日期，反馈强度相同。
+  window.gsap.fromTo('.ab-pred em', { opacity: 0.8 }, { opacity: 1, duration: 0.18, ease: 'power2.out', overwrite: true });
 }
 
 function redrawChart(skipAnimation) {
@@ -1319,7 +1292,7 @@ function findNearestIdx(arr, targetX) {
 function setupChartTooltip() {
   var svg = document.getElementById('chart');
   var tooltip = document.getElementById('chart-tooltip');
-  var crosshairV = null, crosshairH = null, hoverDot = null;
+  var crosshairV = null, hoverDots = {};
 
   function ensure(el, tag, attrs) {
     if (el && el.isConnected) return el;
@@ -1349,8 +1322,8 @@ function setupChartTooltip() {
     return ltrDate(d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'));
   }
 
-  function tooltipRow(label, value, color, table) {
-    return '<div class="tt-series"' + (table ? ' data-table="' + table + '"' : '') + '><span class="tt-dot" style="background:' + color + '"></span>' +
+  function tooltipRow(label, value, color, table, percentile) {
+    return '<div class="tt-series"' + (table ? ' data-table="' + table + '"' : '') + (percentile ? ' data-percentile="' + percentile + '"' : '') + '><span class="tt-dot" style="background:' + color + '"></span>' +
       '<span class="tt-sname">' + label + '</span><span class="tt-sval" style="color:' + color + '">' + value + '</span></div>';
   }
 
@@ -1360,59 +1333,47 @@ function setupChartTooltip() {
     var b = chartBounds;
 
     crosshairV = ensure(crosshairV, 'line', { stroke: '#94A3B8', 'stroke-width': '1', 'stroke-dasharray': '2 2' });
-    crosshairH = ensure(crosshairH, 'line', { stroke: '#94A3B8', 'stroke-width': '1', 'stroke-dasharray': '2 2' });
-    hoverDot = ensure(hoverDot, 'circle', { r: '5', stroke: '#fff', 'stroke-width': '2' });
-    hoverDot.setAttribute('fill', chartTableColor(abView));
-
-    crosshairV.setAttribute('x1', c.svgX); crosshairV.setAttribute('x2', c.svgX);
     crosshairV.setAttribute('y1', b.PAD.top); crosshairV.setAttribute('y2', b.PAD.top + b.PH);
-    crosshairH.setAttribute('x1', b.PAD.left); crosshairH.setAttribute('x2', b.PAD.left + b.PW);
-    crosshairH.setAttribute('y1', c.svgY); crosshairH.setAttribute('y2', c.svgY);
     if (!crosshairV.parentNode) svg.appendChild(crosshairV);
-    if (!crosshairH.parentNode) svg.appendChild(crosshairH);
-
-    var html = '', showDot = false;
-    if (lastSnapData && lastSnapData.p50 && lastSnapData.p50.length) {
-      var idx = findNearestIdx(lastSnapData.p50, c.dataX);
-      if (idx >= 0) {
-        var snap = lastSnapData.p50[idx];
-        var predIdx = idx - (lastSnapData.predStart || 0);
-        var p10v = predIdx >= 0 && lastSnapData.p10 && lastSnapData.p10[predIdx] ? lastSnapData.p10[predIdx].y : null;
-        var p90v = predIdx >= 0 && lastSnapData.p90 && lastSnapData.p90[predIdx] ? lastSnapData.p90[predIdx].y : null;
-        var sp = dataToSvg(snap.x, snap.y);
-        hoverDot.setAttribute('cx', sp.x.toFixed(1));
-        hoverDot.setAttribute('cy', sp.y.toFixed(1));
-        if (!hoverDot.parentNode) svg.appendChild(hoverDot);
-        showDot = true;
-
-        var color = chartTableColor(abView), label = chartTableLabel(abView);
-        if (predIdx < 0 && chartMode === 'trend') {
-          html = '<div class="tt-hdr">' + fmtDate(snap.x) + ' · ' + t('chart.historyBulletin') + '</div>';
-          ['A', 'B'].forEach(function(table) {
-            var point = chartHistoryMonth(table === 'A' ? histA() : histB(), snap.x);
-            html += tooltipRow(chartTableLabel(table), point ? fmtDate(point.y) : t('chart.noMonthData'), chartTableColor(table), table);
-          });
-        } else if (predIdx < 0) {
-          html = '<div class="tt-hdr">PD: ' + fmtDate(snap.x) + ' · ' + label + '</div>';
-          html += tooltipRow(t('chart.historyWait'), i18n.formatUnit(snap.y, 'year'), color, abView);
-          html += '<div class="tt-label">' + t('chart.historyWaitHint') + '</div>';
-        } else {
-          var waitMode = chartMode === 'wait';
-          if (waitMode) { p10v = chartValueAtX(lastSnapData.p10, snap.x); p90v = chartValueAtX(lastSnapData.p90, snap.x); }
-          html = '<div class="tt-hdr">' + (waitMode ? 'PD: ' : '') + fmtDate(snap.x) + ' · ' + t(waitMode ? 'chart.waitPredictionHeading' : 'chart.predictionHeading', { table: label }) + '</div>';
-          function valueText(value) { return value === null ? t('chart.outsideRange') : (waitMode ? i18n.formatUnit(value, 'year') : fmtDate(value)); }
-          html += tooltipRow(t('result.optimistic'), valueText(p10v), color);
-          html += tooltipRow(t('result.median'), valueText(snap.y), color);
-          html += tooltipRow(t('result.conservative'), valueText(p90v), color);
-          html += '<div class="tt-label">' + t('chart.otherTableHint') + '</div>';
-        }
+    var timeline = lastSnapData ? lastSnapData.timeline.filter(function(p) { return p.x >= b.xMin && p.x <= b.xMax; }) : [];
+    var idx = findNearestIdx(timeline, c.dataX);
+    if (idx < 0) { hideTooltip(); return; }
+    var x = timeline[idx].x, waitMode = chartMode === 'wait';
+    crosshairV.setAttribute('x1', dataToSvg(x, 0).x); crosshairV.setAttribute('x2', dataToSvg(x, 0).x);
+    var anchor = lastPercentiles.p50[0].x;
+    function monthKey(ts) { var d = new Date(ts); return d.getUTCFullYear() * 12 + d.getUTCMonth(); }
+    var isHistory = !waitMode && monthKey(x) <= monthKey(anchor);
+    var html = '<div class="tt-hdr">' + (waitMode ? 'PD: ' : '') + fmtDate(x) + ' · ' +
+      t(waitMode ? 'chart.waitComparisonHeading' : isHistory ? 'chart.historyBulletin' : 'chart.comparisonHeading') + '</div>';
+    ['A', 'B'].forEach(function(table) {
+      var series = lastSnapData.tables[table], color = chartTableColor(table), value = null;
+      var tableHistory = waitMode ? x <= series.cutoff : isHistory;
+      if (tableHistory) {
+        if (waitMode) value = chartValueAtX(series.history, x);
+        else { var point = chartHistoryMonth(series.history, x); value = point ? point.y : null; }
+        var text = value === null ? t(waitMode ? 'chart.outsideRange' : 'chart.noMonthData')
+          : waitMode ? i18n.formatUnit(value, 'year') : fmtDate(value);
+        if (waitMode) html += '<section data-table="' + table + '"><div class="tt-label">' + chartTableLabel(table) + '</div>' +
+          tooltipRow(t('chart.historyWait'), text, color) + '</section>';
+        else html += tooltipRow(chartTableLabel(table), text, color, table);
+      } else {
+        html += '<section data-table="' + table + '"><div class="tt-label">' + chartTableLabel(table) + '</div>';
+        ['p10', 'p50', 'p90'].forEach(function(key, i) {
+          var point = waitMode ? null : chartHistoryMonth(series[key], x);
+          var v = waitMode ? chartValueAtX(series[key], x) : point ? point.y : null;
+          if (key === 'p50') value = v;
+          var text = v === null ? t('chart.outsideRange') : waitMode ? i18n.formatUnit(v, 'year') : fmtDate(v);
+          html += tooltipRow(t(['result.optimistic', 'result.median', 'result.conservative'][i]), text, color, null, key);
+        });
+        html += '</section>';
       }
-    }
-    if (!html) {
-      html = '<div class="tt-hdr">' + fmtDate(c.dataX) + '</div>';
-      html += '<div class="tt-series"><span class="tt-sval">' + (chartMode === 'wait' ? i18n.formatUnit(c.dataY, 'year') : fmtDate(c.dataY)) + '</span></div>';
-    }
-    if (!showDot && hoverDot && hoverDot.parentNode) hoverDot.parentNode.removeChild(hoverDot);
+      var dot = hoverDots[table] = ensure(hoverDots[table], 'circle', { r: '5', stroke: 'var(--card)', 'stroke-width': '2', 'data-hover-table': table });
+      if (value !== null && value >= b.yMin && value <= b.yMax) {
+        var sp = dataToSvg(x, value);
+        dot.setAttribute('cx', sp.x.toFixed(1)); dot.setAttribute('cy', sp.y.toFixed(1)); dot.setAttribute('fill', color);
+        if (!dot.parentNode) svg.appendChild(dot);
+      } else if (dot.parentNode) dot.parentNode.removeChild(dot);
+    });
     tooltip.innerHTML = html;
 
     var container = svg.parentElement;
@@ -1462,330 +1423,155 @@ function setupChartTooltip() {
   function hideTooltip() {
     tooltip.style.display = 'none';
     if (crosshairV && crosshairV.parentNode) crosshairV.parentNode.removeChild(crosshairV);
-    if (crosshairH && crosshairH.parentNode) crosshairH.parentNode.removeChild(crosshairH);
-    if (hoverDot && hoverDot.parentNode) hoverDot.parentNode.removeChild(hoverDot);
+    ['A', 'B'].forEach(function(table) {
+      var dot = hoverDots[table];
+      if (dot && dot.parentNode) dot.parentNode.removeChild(dot);
+    });
   }
   svg.addEventListener('mouseleave', hideTooltip);
 }
 
-// Chart: Trend Mode (cutoff vs bulletin date)
-function drawForecastChart(percentiles, skipAnimation) {
-  var layout = chartLayout(); if (!layout) return;
-  var W = layout.W, H = layout.H, PAD = layout.PAD;
-  var PW = W - PAD.left - PAD.right, PH = H - PAD.top - PAD.bottom;
-  var yourPD = getYourPD();
-  var seriesColor = chartTableColor(abView), otherTable = abView === 'A' ? 'B' : 'A';
-
-  // 表B(DFF)视图：表B 无独立配额驱动，诚实做法 = 表A 预测整体前移一个"领先量"
-  // lead(=当前表B − 当前表A)，形状跟随表A基本面，标注不确定性高于表A。abView='A' 保持原状。
-  var _hA = histA().length ? histA()[histA().length - 1].y : 0;
-  var _hB = histB().length ? histB()[histB().length - 1].y : _hA;
-  var lead = _hB - _hA;                       // 表B 领先表A 的 PD 距离(ms)
-  var primHist = histA(), secHist = histB();
-  if (abView === 'B') {
-    primHist = histB(); secHist = histA();
-    if (lead !== 0) {
-      var _shift = {};
-      ['p10', 'p25', 'p50', 'p75', 'p90'].forEach(function(k) {
-        _shift[k] = projectBPath(percentiles[k] || []);
-      });
-      percentiles = _shift;                   // 后续预测带/穿越点自动走表B版
+// 两表共用同一批模拟；B 仅复用既有 projectBPath 投影，不额外运行蒙特卡洛。
+function comparisonSeries(percentiles, waitMode) {
+  var tables = {};
+  ['A', 'B'].forEach(function(table) {
+    var history = table === 'A' ? histA() : histB();
+    var cutoff = history.length ? history[history.length - 1].y : getCutoffData(profile.category, profile.country, table);
+    function toWait(path, forecast) {
+      var points = path.filter(function(p) { return p.x >= p.y && (!forecast || p.y > cutoff); })
+        .map(function(p) { return { x: p.y, y: (p.x - p.y) / (365.25 * MS_PER_DAY) }; });
+      points.sort(function(a, b) { return a.x - b.x; });
+      return points;
     }
-  }
-
-  // 图表聚焦：从当前排期所在年份起（不回溯到 2016/2017 的远古历史）
-  var FOCUS_START = new Date('2023-01-01').getTime();
-  var allX = [], allY = [];
-  for (var i = 0; i < histA().length; i++) { if (histA()[i].x >= FOCUS_START) { allX.push(histA()[i].x); allY.push(histA()[i].y); } }
-  for (var j = 0; j < histB().length; j++) { if (histB()[j].x >= FOCUS_START) { allX.push(histB()[j].x); allY.push(histB()[j].y); } }
-  var pathArrs = [percentiles.p10, percentiles.p25, percentiles.p50, percentiles.p75, percentiles.p90];
-  for (var p = 0; p < pathArrs.length; p++) {
-    for (var k = 0; k < pathArrs[p].length; k++) { allX.push(pathArrs[p][k].x); allY.push(pathArrs[p][k].y); }
-  }
-  allY.push(yourPD);
-
-  var xMin = FOCUS_START;
-  var xMax = Math.max.apply(null, allX);
-  var yMin = Math.min.apply(null, allY);
-  var yMax = Math.max.apply(null, allY);
-  // 收紧显示范围：横轴到"最慢穿越你 PD"再留点缓冲（不拖到 12 年后）；纵轴到你的 PD 稍上方
-  var _acC = activeCrossings();
-  var capX = (_acC && _acC.p90) ? _acC.p90 + 1.2 * 365 * MS_PER_DAY
-            : (_acC && _acC.p50) ? _acC.p50 + 3 * 365 * MS_PER_DAY
-            : TODAY + 7 * 365 * MS_PER_DAY;
-  xMax = Math.min(xMax, capX);
-  // 纵轴上限取"你的 PD"与"当前 cutoff"的较大者 + 缓冲，避免 PD 已 current 时把整条预测线裁掉
-  var cutoffNow = abView === 'B' ? _hB : getCurrentCutoff();
-  yMax = Math.min(yMax, Math.max(yourPD, cutoffNow) + 240 * MS_PER_DAY);
-  var yPad = (yMax - yMin) * 0.05; yMin -= yPad; yMax += yPad;
-
-  chartBounds = { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax, PAD: PAD, W: W, H: H, PW: PW, PH: PH };
-
-  function sx(x) { return PAD.left + (x - xMin) / ((xMax - xMin) || 1) * PW; }
-  function sy(y) { return PAD.top + (1 - (y - yMin) / ((yMax - yMin) || 1)) * PH; }
-
-  function bandPath(upper, lower) {
-    if (!upper.length || !lower.length) return '';
-    var len = Math.min(upper.length, lower.length);
-    var d = 'M' + sx(upper[0].x).toFixed(1) + ',' + sy(upper[0].y).toFixed(1);
-    for (var i = 1; i < len; i++) d += 'L' + sx(upper[i].x).toFixed(1) + ',' + sy(upper[i].y).toFixed(1);
-    for (var j = len - 1; j >= 0; j--) d += 'L' + sx(lower[j].x).toFixed(1) + ',' + sy(lower[j].y).toFixed(1);
-    return d + 'Z';
-  }
-
-  // Defs: clip + gradients
-  var defs = '<defs>' +
-    '<clipPath id="plot-clip"><rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '"/></clipPath>' +
-    '<linearGradient id="band-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + seriesColor + '" stop-opacity="0.10"/><stop offset="100%" stop-color="' + seriesColor + '" stop-opacity="0.02"/></linearGradient>' +
-    '<linearGradient id="band-inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + seriesColor + '" stop-opacity="0.18"/><stop offset="100%" stop-color="' + seriesColor + '" stop-opacity="0.05"/></linearGradient>' +
-    '</defs>';
-  var bg = '<rect x="0" y="0" width="' + W + '" height="' + H + '" style="fill:var(--card)"/>';
-
-  // Adaptive grid
-  var grid = '';
-  var xTicks = getDateTicks(xMin, xMax, PW);
-  for (var i = 0; i < xTicks.length; i++) {
-    var px = sx(xTicks[i].ts);
-    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" style="stroke:var(--chart-grid)" stroke-width="1" stroke-dasharray="3 3"/>';
-    grid += '<text x="' + px + '" y="' + (PAD.top + PH + 16) + '" fill="#9ca3af" font-size="11" text-anchor="middle">' + xTicks[i].label + '</text>';
-  }
-  var yTicks = getDateTicks(yMin, yMax);
-  for (var i = 0; i < yTicks.length; i++) {
-    var py = sy(yTicks[i].ts);
-    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" style="stroke:var(--chart-grid)" stroke-width="1" stroke-dasharray="3 3"/>';
-    grid += '<text x="' + (PAD.left - 6) + '" y="' + (py + 4) + '" fill="#9ca3af" font-size="11" text-anchor="end">' + yTicks[i].label + '</text>';
-  }
-  grid += '<rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '" fill="none" style="stroke:var(--chart-box)" stroke-width="1"/>';
-
-  // Bands with gradient fills
-  var band90 = '<path d="' + bandPath(percentiles.p10, percentiles.p90) + '" fill="url(#band-outer)"/>';
-  var band50 = '<path d="' + bandPath(percentiles.p25, percentiles.p75) + '" fill="url(#band-inner)"/>';
-
-  // PD line
-  var pdY = sy(yourPD);
-  var pdDateStr = formatDate(yourPD);
-  var pdLine = '<line data-series="pd" x1="' + PAD.left + '" y1="' + pdY + '" x2="' + (PAD.left + PW) + '" y2="' + pdY + '" stroke="var(--text3)" stroke-width="1.5" stroke-dasharray="2 4" opacity="0.8"/>';
-  var pdLabel = '<text x="' + (PAD.left + PW - 4) + '" y="' + (pdY - 5) + '" fill="var(--text3)" font-size="11" text-anchor="end" font-weight="600">' + t('chart.yourNumber') + ' ' + pdDateStr + '</text>';
-
-  // Today
-  var todayX = sx(TODAY);
-  var todayLine = '<line x1="' + todayX + '" y1="' + PAD.top + '" x2="' + todayX + '" y2="' + (PAD.top + PH) + '" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3 3"/>';
-  var todayLabel = '<text x="' + todayX + '" y="' + (PAD.top - 5) + '" fill="#94A3B8" font-size="11" text-anchor="middle">' + t('chart.today') + '</text>';
-
-  // A/B 保持各自颜色，历史均为实线；当前选中表稍加粗。
-  var histVisible = primHist.filter(function(h) { return h.x >= xMin - 90 * MS_PER_DAY; });
-  var hist = '<path data-series="history-' + abView + '" d="' + linePathD(histVisible, sx, sy) + '" fill="none" stroke="' + seriesColor + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
-  for (var h = 0; h < histVisible.length; h++) {
-    if (histVisible[h].x < xMin || histVisible[h].y < yMin) continue;
-    hist += '<circle cx="' + sx(histVisible[h].x).toFixed(1) + '" cy="' + sy(histVisible[h].y).toFixed(1) + '" r="2.5" fill="' + seriesColor + '"/>';
-  }
-  var histBVisible = secHist.filter(function(h) { return h.x >= xMin - 90 * MS_PER_DAY; });
-  var histBPath = histBVisible.length ? '<path data-series="history-' + otherTable + '" d="' + linePathD(histBVisible, sx, sy) + '" fill="none" stroke="' + chartTableColor(otherTable) + '" stroke-width="1.5" opacity="0.75" stroke-linecap="round" stroke-linejoin="round"/>' : '';
-
-  // Prediction lines (smooth)
-  var lineP90 = '<path data-series="forecast-p90" d="' + smoothPathD(percentiles.p90, sx, sy) + '" fill="none" stroke="' + seriesColor + '" stroke-width="1" stroke-dasharray="4 3" opacity="0.45" stroke-linecap="round"/>';
-  var lineP10 = '<path data-series="forecast-p10" d="' + smoothPathD(percentiles.p10, sx, sy) + '" fill="none" stroke="' + seriesColor + '" stroke-width="1" stroke-dasharray="4 3" opacity="0.45" stroke-linecap="round"/>';
-  var lineP50 = '<path data-series="forecast-p50" d="' + smoothPathD(percentiles.p50, sx, sy) + '" fill="none" stroke="' + seriesColor + '" stroke-width="2.5" stroke-dasharray="6 4" stroke-linecap="round" stroke-linejoin="round"/>';
-
-  // Cross marker with glow
-  // 穿越标记：与 hero/快中慢/等待图统一用 activeCrossings(穿越时间分布)，避免大数字与图上绿点口径不一致
-  var crossMarker = '';
-  var _acX = activeCrossings();
-  var crossX = _acX ? _acX[selectedPercentile] : null;
-  if (crossX) {
-    var cx = sx(crossX), color = seriesColor;
-    if (cx >= PAD.left && cx <= PAD.left + PW) {
-      crossMarker += '<circle cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="10" fill="' + color + '" opacity="0.12"/>';
-      crossMarker += '<circle class="cross-dot" cx="' + cx.toFixed(1) + '" cy="' + pdY + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
-      crossMarker += '<text x="' + cx + '" y="' + (pdY - 14) + '" fill="' + color + '" font-size="12" text-anchor="middle" font-weight="700">' + formatDate(crossX) + '</text>';
-    }
-  }
-
-  // Store snap data for tooltip
-  lastSnapData = { mode: 'trend', p50: primHist.slice().concat(percentiles.p50), p10: percentiles.p10, p90: percentiles.p90, predStart: primHist.length };
-
-  var revX = Math.max(PAD.left, sx(TODAY));
-  var fcRight = PAD.left + PW;
-  // 蒙特卡洛"面条线":每条=一次随机模拟的排期轨迹(可见,清楚看出是多次模拟);随未来渐透
-  var cloud = '';
-  if (lastCloudPaths && lastCloudPaths.length) {
-    for (var ci = 0; ci < lastCloudPaths.length; ci++) {
-      var cd = linePathD(viewPath(lastCloudPaths[ci]), sx, sy);
-      if (cd) cloud += '<path class="mc-line" d="' + cd + '" fill="none" stroke="' + seriesColor + '" stroke-width="0.6" opacity="0.13" stroke-linejoin="round"/>';
-    }
-  }
-  var revDefs = '<clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '"/></clipPath>' +
-    '<linearGradient id="fade-grad" gradientUnits="userSpaceOnUse" x1="' + revX + '" y1="0" x2="' + fcRight + '" y2="0">' +
-      '<stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="0.4" stop-color="#fff" stop-opacity="0.82"/><stop offset="1" stop-color="#fff" stop-opacity="0.25"/></linearGradient>' +
-    '<mask id="future-fade" maskUnits="userSpaceOnUse"><rect x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '" fill="url(#fade-grad)"/></mask>';
-  document.getElementById('chart').innerHTML = defs + revDefs + bg + grid +
-    '<g clip-path="url(#plot-clip)">' + histBPath + hist + pdLine +
-      '<g mask="url(#future-fade)">' + cloud + '</g>' +
-      '<g clip-path="url(#reveal-clip)"><g mask="url(#future-fade)">' + band90 + band50 + lineP90 + lineP10 + lineP50 + '</g></g>' +
-      crossMarker + pdLabel + '</g>' +
-    todayLine + todayLabel;
-  if (!skipAnimation) animateChart();
+    var series = { history: waitMode ? toWait(history, false) : history, cutoff: cutoff };
+    ['p10', 'p25', 'p50', 'p75', 'p90'].forEach(function(key) {
+      var path = table === 'B' ? projectBPath(percentiles[key] || []) : (percentiles[key] || []);
+      series[key] = waitMode ? toWait(path, true) : path;
+    });
+    tables[table] = series;
+  });
+  return tables;
 }
 
-// Chart: Wait Time Mode (wait years vs PD)
-function drawWaitTimeChart(percentiles, skipAnimation) {
+function drawForecastChart(percentiles, skipAnimation) { drawComparisonChart(percentiles, false, skipAnimation); }
+function drawWaitTimeChart(percentiles, skipAnimation) { drawComparisonChart(percentiles, true, skipAnimation); }
+
+function drawComparisonChart(percentiles, waitMode, skipAnimation) {
   var layout = chartLayout(); if (!layout) return;
   var W = layout.W, H = layout.H, PAD = layout.PAD;
   var PW = W - PAD.left - PAD.right, PH = H - PAD.top - PAD.bottom;
-  var yourPD = getYourPD();
-  var seriesColor = chartTableColor(abView);
-  // 表B 视图：历史取 histB()、预测路径经 projectB 推演，与走势图同口径
-  var HV = abView === 'B' ? histB() : histA();
-  var _pv = {};
-  ['p10', 'p25', 'p50', 'p75', 'p90'].forEach(function(k) { _pv[k] = viewPath(percentiles[k] || []); });
-  percentiles = _pv;
-
-  var histWait = [];
-  for (var i = 0; i < HV.length; i++) {
-    var wait = (HV[i].x - HV[i].y) / (365.25 * MS_PER_DAY);
-    if (wait >= 0) histWait.push({ x: HV[i].y, y: wait });
+  var yourPD = getYourPD(), tables = comparisonSeries(percentiles, waitMode);
+  var allX = [], allY = [], focusStart = Date.UTC(2023, 0, 1);
+  ['A', 'B'].forEach(function(table) {
+    var series = tables[table];
+    [series.history, series.p10, series.p50, series.p90].forEach(function(path) {
+      path.forEach(function(p) { if (waitMode || p.x >= focusStart) { allX.push(p.x); allY.push(p.y); } });
+    });
+  });
+  var xMin, xMax, yMin, yMax;
+  if (waitMode) {
+    xMin = Math.min(tables.A.cutoff, tables.B.cutoff) - 365 * MS_PER_DAY;
+    xMax = TODAY + 365 * MS_PER_DAY;
+    var visibleY = [0];
+    ['A', 'B'].forEach(function(table) {
+      var s = tables[table];
+      [s.history, s.p10, s.p50, s.p90].forEach(function(path) {
+        path.forEach(function(p) { if (p.x >= xMin && p.x <= xMax) visibleY.push(p.y); });
+      });
+    });
+    yMin = 0; yMax = Math.max(1, Math.max.apply(null, visibleY) * 1.15);
+  } else {
+    xMin = focusStart;
+    // 两表都参与取景，不能因为 B 较早穿越而截掉 A 的预测。
+    var caps = [crossingsByPct, crossingsByPctB].map(function(c) {
+      return c && c.p90 ? c.p90 + 1.2 * 365 * MS_PER_DAY
+        : c && c.p50 ? c.p50 + 3 * 365 * MS_PER_DAY : TODAY + 7 * 365 * MS_PER_DAY;
+    });
+    xMax = Math.min(Math.max.apply(null, allX), Math.max.apply(null, caps));
+    allY.push(yourPD);
+    yMin = Math.min.apply(null, allY);
+    yMax = Math.min(Math.max.apply(null, allY), Math.max(yourPD, tables.A.cutoff, tables.B.cutoff) + 240 * MS_PER_DAY);
+    var padY = Math.max(MS_PER_DAY, (yMax - yMin) * 0.05);
+    yMin -= padY; yMax += padY;
   }
-  histWait.sort(function(a, b) { return a.x - b.x; });
-
-  function pathToWait(path) {
-    var result = [], lastPD = HV[HV.length - 1].y;
-    for (var i = 0; i < path.length; i++) {
-      var wait = (path[i].x - path[i].y) / (365.25 * MS_PER_DAY);
-      if (wait >= 0 && path[i].y > lastPD) result.push({ x: path[i].y, y: wait });
-    }
-    result.sort(function(a, b) { return a.x - b.x; });
-    return result;
-  }
-
-  var waitP10 = pathToWait(percentiles.p10);
-  var waitP25 = pathToWait(percentiles.p25);
-  var waitP50 = pathToWait(percentiles.p50);
-  var waitP75 = pathToWait(percentiles.p75);
-  var waitP90 = pathToWait(percentiles.p90);
-
-
-  // PD 轴范围固定：从"当前 cutoff 的前一年"到"今天的后一年"
-  // 例：cutoff 2023-04、今天 2026-06 → 2022-04 至 2027-06
-  var cutoffNow = getCurrentCutoff();
-  var xMin = cutoffNow - 365 * MS_PER_DAY;
-  var xMax = TODAY + 365 * MS_PER_DAY;
-  // 等待轴据可见区间内的等待值重算
-  var visY = [0];
-  histWait.forEach(function(d) { if (d.x >= xMin && d.x <= xMax) visY.push(d.y); });
-  [waitP10, waitP50, waitP90].forEach(function(a) { for (var vi = 0; vi < a.length; vi++) if (a[vi].x >= xMin && a[vi].x <= xMax) visY.push(a[vi].y); });
-  var yMin = 0, yMax = Math.max.apply(null, visY) * 1.15;
-  if (yMax < 1) yMax = 1;
-
   chartBounds = { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax, PAD: PAD, W: W, H: H, PW: PW, PH: PH };
-
   function sx(x) { return PAD.left + (x - xMin) / ((xMax - xMin) || 1) * PW; }
   function sy(y) { return PAD.top + (1 - (y - yMin) / ((yMax - yMin) || 1)) * PH; }
-
   function bandPath(upper, lower) {
     if (!upper.length || !lower.length) return '';
-    var len = Math.min(upper.length, lower.length);
-    var d = 'M' + sx(upper[0].x).toFixed(1) + ',' + sy(upper[0].y).toFixed(1);
-    for (var i = 1; i < len; i++) d += 'L' + sx(upper[i].x).toFixed(1) + ',' + sy(upper[i].y).toFixed(1);
-    for (var j = len - 1; j >= 0; j--) d += 'L' + sx(lower[j].x).toFixed(1) + ',' + sy(lower[j].y).toFixed(1);
-    return d + 'Z';
+    // 等待图的横坐标是 PD，不能把不同 PD 的数组下标误当成同一点。
+    if (waitMode) {
+      var left = Math.max(upper[0].x, lower[0].x), right = Math.min(upper[upper.length - 1].x, lower[lower.length - 1].x);
+      var xs = upper.concat(lower).map(function(p) { return p.x; })
+        .filter(function(x, i, arr) { return x >= left && x <= right && arr.indexOf(x) === i; }).sort(function(a, b) { return a - b; });
+      var top = [], bottom = [];
+      xs.forEach(function(x) { top.push({ x: x, y: chartValueAtX(upper, x) }); bottom.push({ x: x, y: chartValueAtX(lower, x) }); });
+      upper = top; lower = bottom;
+    }
+    if (!upper.length || !lower.length) return '';
+    return linePathD(upper, sx, sy) + lower.slice().reverse().map(function(p) { return 'L' + sx(p.x).toFixed(1) + ',' + sy(p.y).toFixed(1); }).join('') + 'Z';
   }
-
-  // Defs
-  var defs = '<defs>' +
-    '<clipPath id="plot-clip"><rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '"/></clipPath>' +
-    '<linearGradient id="band-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + seriesColor + '" stop-opacity="0.10"/><stop offset="100%" stop-color="' + seriesColor + '" stop-opacity="0.02"/></linearGradient>' +
-    '<linearGradient id="band-inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + seriesColor + '" stop-opacity="0.18"/><stop offset="100%" stop-color="' + seriesColor + '" stop-opacity="0.05"/></linearGradient>' +
-    '</defs>';
-  var bg = '<rect x="0" y="0" width="' + W + '" height="' + H + '" style="fill:var(--card)"/>';
-
-  // Adaptive grid
+  var defs = '<defs><clipPath id="plot-clip"><rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '"/></clipPath></defs>';
+  var bg = '<rect width="' + W + '" height="' + H + '" style="fill:var(--card)"/>';
   var grid = '';
-  var xTicks = getDateTicks(xMin, xMax, PW);
-  for (var i = 0; i < xTicks.length; i++) {
-    var px = sx(xTicks[i].ts);
-    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" style="stroke:var(--chart-grid)" stroke-width="1" stroke-dasharray="3 3"/>';
-    grid += '<text x="' + px + '" y="' + (PAD.top + PH + 16) + '" fill="#9ca3af" font-size="11" text-anchor="middle">' + xTicks[i].label + '</text>';
+  getDateTicks(xMin, xMax, PW).forEach(function(tick) {
+    var px = sx(tick.ts);
+    grid += '<line x1="' + px + '" y1="' + PAD.top + '" x2="' + px + '" y2="' + (PAD.top + PH) + '" style="stroke:var(--chart-grid)" stroke-dasharray="3 3"/>';
+    grid += '<text x="' + px + '" y="' + (PAD.top + PH + 16) + '" fill="#9ca3af" font-size="11" text-anchor="middle">' + tick.label + '</text>';
+  });
+  var yTicks = waitMode ? [] : getDateTicks(yMin, yMax);
+  if (waitMode) {
+    var step = Math.max(1, Math.ceil(yMax / 8));
+    for (var year = 0; year <= yMax; year += step) yTicks.push({ ts: year, label: i18n.formatUnit(year, 'year', { unitDisplay: 'narrow' }) });
   }
-  var yNTicks = [];
-  for (var yt = Math.ceil(yMin); yt <= yMax + 1e-9; yt += 1) yNTicks.push(yt); // 纵轴固定一年一格
-  for (var i = 0; i < yNTicks.length; i++) {
-    var py = sy(yNTicks[i]);
-    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" style="stroke:var(--chart-grid)" stroke-width="1" stroke-dasharray="3 3"/>';
-    var lbl = yNTicks[i] % 1 === 0 ? yNTicks[i].toFixed(0) : yNTicks[i].toFixed(1);
-    grid += '<text x="' + (PAD.left - 6) + '" y="' + (py + 4) + '" fill="#9ca3af" font-size="11" text-anchor="end">' + i18n.formatUnit(yNTicks[i], 'year', { unitDisplay: 'narrow' }) + '</text>';
-  }
-  grid += '<rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '" fill="none" style="stroke:var(--chart-box)" stroke-width="1"/>';
-
-  // Bands with gradient
-  var band90 = waitP10.length && waitP90.length ? '<path d="' + bandPath(waitP90, waitP10) + '" fill="url(#band-outer)"/>' : '';
-  var band50 = waitP25.length && waitP75.length ? '<path d="' + bandPath(waitP75, waitP25) + '" fill="url(#band-inner)"/>' : '';
-
-  // PD line
-  var pdX = sx(yourPD);
-  var pdLine = '<line data-series="pd" x1="' + pdX + '" y1="' + PAD.top + '" x2="' + pdX + '" y2="' + (PAD.top + PH) + '" stroke="var(--text3)" stroke-width="1.5" stroke-dasharray="2 4" opacity="0.8"/>';
-  var pdLabel = '<text x="' + (pdX + 4) + '" y="' + (PAD.top + 12) + '" fill="var(--text3)" font-size="11" font-weight="600">' + t('chart.yourPd') + '</text>';
-
-  // History (smooth)
-  var hist = '<path data-series="history-' + abView + '" d="' + linePathD(histWait, sx, sy) + '" fill="none" stroke="' + seriesColor + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
-  for (var h = 0; h < histWait.length; h++) {
-    if (histWait[h].x < xMin || histWait[h].x > xMax) continue;
-    hist += '<circle cx="' + sx(histWait[h].x).toFixed(1) + '" cy="' + sy(histWait[h].y).toFixed(1) + '" r="2.5" fill="' + seriesColor + '"/>';
-  }
-
-  // Prediction (smooth)
-  var lineP90 = waitP90.length ? '<path data-series="forecast-p90" d="' + linePathD(waitP90, sx, sy) + '" fill="none" stroke="' + seriesColor + '" stroke-width="1" stroke-dasharray="4 3" opacity="0.45" stroke-linecap="round"/>' : '';
-  var lineP10 = waitP10.length ? '<path data-series="forecast-p10" d="' + linePathD(waitP10, sx, sy) + '" fill="none" stroke="' + seriesColor + '" stroke-width="1" stroke-dasharray="4 3" opacity="0.45" stroke-linecap="round"/>' : '';
-  var lineP50 = waitP50.length ? '<path data-series="forecast-p50" d="' + linePathD(waitP50, sx, sy) + '" fill="none" stroke="' + seriesColor + '" stroke-width="2.5" stroke-dasharray="6 4" stroke-linecap="round" stroke-linejoin="round"/>' : '';
-
-  // Cross marker with glow
-  var crossMarker = '';
-  var _acW = activeCrossings();
-  if (_acW && yourPD) {
-    var selCross = _acW[selectedPercentile];
-    if (selCross) {
-      var selWait = (selCross - yourPD) / (365.25 * MS_PER_DAY);
-      if (selWait >= 0 && selWait < 20) {
-        var color = seriesColor;
-        crossMarker += '<circle cx="' + pdX.toFixed(1) + '" cy="' + sy(selWait).toFixed(1) + '" r="10" fill="' + color + '" opacity="0.12"/>';
-        crossMarker += '<circle class="cross-dot" cx="' + pdX.toFixed(1) + '" cy="' + sy(selWait).toFixed(1) + '" r="5" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
-        crossMarker += '<text x="' + pdX + '" y="' + (sy(selWait) - 14) + '" fill="' + color + '" font-size="12" text-anchor="middle" font-weight="700">' + i18n.formatUnit(selWait, 'year') + '</text>';
+  yTicks.forEach(function(tick) {
+    var py = sy(tick.ts);
+    grid += '<line x1="' + PAD.left + '" y1="' + py + '" x2="' + (PAD.left + PW) + '" y2="' + py + '" style="stroke:var(--chart-grid)" stroke-dasharray="3 3"/>';
+    grid += '<text x="' + (PAD.left - 6) + '" y="' + (py + 4) + '" fill="#9ca3af" font-size="11" text-anchor="end">' + tick.label + '</text>';
+  });
+  grid += '<rect x="' + PAD.left + '" y="' + PAD.top + '" width="' + PW + '" height="' + PH + '" fill="none" style="stroke:var(--chart-box)"/>';
+  var histories = '', bands = '', forecasts = '', markers = '';
+  ['A', 'B'].forEach(function(table) {
+    var series = tables[table], color = chartTableColor(table);
+    var history = waitMode ? series.history : series.history.filter(function(p) { return p.x >= xMin - 90 * MS_PER_DAY; });
+    histories += '<path data-series="history-' + table + '" d="' + linePathD(history, sx, sy) + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round"/>';
+    bands += '<path data-series="range-' + table + '" d="' + bandPath(series.p10, series.p90) + '" fill="' + color + '" opacity=".08"/>';
+    forecasts += '<path data-series="forecast-' + table + '-p50" d="' + linePathD(series.p50, sx, sy) + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-dasharray="6 4" stroke-linecap="round" stroke-linejoin="round"/>';
+    var crossings = table === 'A' ? crossingsByPct : crossingsByPctB;
+    var crossing = crossings && crossings[selectedPercentile];
+    if (crossing) {
+      var mx = sx(waitMode ? yourPD : crossing), my = sy(waitMode ? (crossing - yourPD) / (365.25 * MS_PER_DAY) : yourPD);
+      if (mx >= PAD.left && mx <= PAD.left + PW && my >= PAD.top && my <= PAD.top + PH) {
+        markers += '<circle class="cross-dot" data-table="' + table + '" cx="' + mx.toFixed(1) + '" cy="' + my.toFixed(1) + '" r="5" fill="' + color + '" stroke="var(--card)" stroke-width="2"/>';
       }
     }
+  });
+  var pdX = sx(yourPD), pdY = sy(yourPD);
+  var pdLine = '<line data-series="pd" x1="' + (waitMode ? pdX : PAD.left) + '" y1="' + (waitMode ? PAD.top : pdY) +
+    '" x2="' + (waitMode ? pdX : PAD.left + PW) + '" y2="' + (waitMode ? PAD.top + PH : pdY) + '" stroke="var(--text3)" stroke-width="1.5" stroke-dasharray="2 4" opacity=".8"/>';
+  var pdLabel = '<text x="' + (waitMode ? pdX + 4 : PAD.left + PW - 4) + '" y="' + (waitMode ? PAD.top + 12 : pdY - 5) +
+    '" fill="var(--text3)" font-size="11" text-anchor="' + (waitMode ? 'start' : 'end') + '">' + t('chart.yourPd') + '</text>';
+  var todayLine = '';
+  if (!waitMode) {
+    var todayX = sx(TODAY);
+    todayLine = '<line x1="' + todayX + '" x2="' + todayX + '" y1="' + PAD.top + '" y2="' + (PAD.top + PH) + '" stroke="#CBD5E1" stroke-dasharray="3 3"/>' +
+      '<text x="' + todayX + '" y="' + (PAD.top - 5) + '" fill="#94A3B8" font-size="11" text-anchor="middle">' + t('chart.today') + '</text>';
   }
-
-  // Store snap data for tooltip
-  lastSnapData = { mode: 'wait', p50: histWait.concat(waitP50), p10: waitP10, p90: waitP90, predStart: histWait.length };
-
-  // —— 不确定性-透明度 协调设计 ——
-  // 等待图的「已知/预测」边界在“当前排到的 PD”(非今天)：PD 小于它=已裁定(确定),大于它=预测。
-  // 故揭示与渐隐都从 sx(lastPD) 向右(PD 越大=越晚的申请人=预测越远+越深入需求墙)展开。
-  var lastPD = HV[HV.length - 1].y;
-  var revX = Math.max(PAD.left, Math.min(sx(lastPD), PAD.left + PW));
-  var fcRight = PAD.left + PW;
-  // 蒙特卡洛"面条线"(同一批 paths 转入等待空间);随 PD 渐透
-  var cloud = '';
-  if (lastCloudPaths && lastCloudPaths.length) {
-    for (var ci = 0; ci < lastCloudPaths.length; ci++) {
-      var cd = linePathD(pathToWait(viewPath(lastCloudPaths[ci])), sx, sy);
-      if (cd) cloud += '<path class="mc-line" d="' + cd + '" fill="none" stroke="' + seriesColor + '" stroke-width="0.6" opacity="0.13" stroke-linejoin="round"/>';
-    }
-  }
-  var revDefs = '<clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '"/></clipPath>' +
-    '<linearGradient id="fade-grad" gradientUnits="userSpaceOnUse" x1="' + revX + '" y1="0" x2="' + fcRight + '" y2="0">' +
-      '<stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="0.4" stop-color="#fff" stop-opacity="0.82"/><stop offset="1" stop-color="#fff" stop-opacity="0.25"/></linearGradient>' +
-    '<mask id="future-fade" maskUnits="userSpaceOnUse"><rect x="' + revX + '" y="' + PAD.top + '" width="' + (fcRight - revX) + '" height="' + PH + '" fill="url(#fade-grad)"/></mask>';
-  // 边界参考线(对应走势图的“今天”线):标出当前排到哪,即渐隐/揭示的起点
-  var bX = sx(lastPD);
-  var boundaryLine = (bX > PAD.left + 1 && bX < fcRight) ?
-    '<line x1="' + bX + '" y1="' + PAD.top + '" x2="' + bX + '" y2="' + (PAD.top + PH) + '" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3 3"/>' +
-    '<text x="' + bX + '" y="' + (PAD.top - 5) + '" fill="#94A3B8" font-size="11" text-anchor="middle">' + t('chart.currentlyAt') + '</text>' : '';
-
-  document.getElementById('chart').innerHTML = defs + revDefs + bg + grid +
-    '<g clip-path="url(#plot-clip)">' + hist + pdLine +
-      '<g mask="url(#future-fade)">' + cloud + '</g>' +
-      '<g clip-path="url(#reveal-clip)"><g mask="url(#future-fade)">' + band90 + band50 + lineP90 + lineP10 + lineP50 + '</g></g>' +
-      crossMarker + pdLabel + '</g>' +
-    boundaryLine;
+  var revX = Math.max(PAD.left, Math.min(sx(waitMode ? Math.min(tables.A.cutoff, tables.B.cutoff) : percentiles.p50[0].x), PAD.left + PW));
+  var reveal = '<defs><clipPath id="reveal-clip"><rect id="reveal-rect" x="' + revX + '" y="' + PAD.top + '" width="' + (PAD.left + PW - revX) + '" height="' + PH + '"/></clipPath></defs>';
+  // 同一月份/PD 为两个序列共同定位；历史月份优先，避免把本期已知数据当作预测。
+  var timeline = [], seen = {};
+  ['A', 'B'].forEach(function(table) {
+    tables[table].history.concat(tables[table].p50).forEach(function(p) {
+      var d = new Date(p.x), key = waitMode ? p.x : d.getUTCFullYear() + '-' + d.getUTCMonth();
+      if (!seen[key]) { timeline.push({ x: p.x }); seen[key] = true; }
+    });
+  });
+  timeline.sort(function(a, b) { return a.x - b.x; });
+  lastSnapData = { mode: waitMode ? 'wait' : 'trend', tables: tables, timeline: timeline };
+  document.getElementById('chart').innerHTML = defs + reveal + bg + grid +
+    '<g clip-path="url(#plot-clip)">' + histories + pdLine + '<g clip-path="url(#reveal-clip)">' +
+    bands + forecasts + '</g>' + markers + pdLabel + '</g>' + todayLine;
   if (!skipAnimation) animateChart();
 }
 
@@ -1799,21 +1585,19 @@ window.setChartMode = function(mode) {
 
 // UI Rendering
 function renderHero() {
-  var cx = activeCrossings();
-  if (!cx) return;
-  // 表B 视图：大数字/快中慢/进度切成"预计可递交"(表B 穿越)；表A 视图为"预计排到"(批准)
+  var cx = crossingsByPct || {};
+  // 隐藏的旧指标继续代表表 A；可见主结果在下方同时渲染两表。
   var pd0 = getYourPD();
-  var viewCut = abView === 'B' ? getCutoffData(profile.category, profile.country, 'B') : getCurrentCutoff();
-  var reached = !!(pd0 && viewCut && pd0 < viewCut);   // 本期公告已覆盖你的 PD：说"已"，不说"预计"
+  var viewCut = getCurrentCutoff();
+  var current = cellStatus() === 'current';
+  var reached = current || !!(pd0 && viewCut && pd0 < viewCut);
   var leadEl = document.getElementById('result-lead');
-  if (leadEl) leadEl.textContent = tx(abView === 'B' ? (reached ? 'result.filingReached' : 'result.expectedFiling')
-                                                  : (reached ? 'result.reached' : 'result.expected'));
+  if (leadEl) leadEl.textContent = tx(reached ? 'result.reached' : 'result.expected');
   var p50 = cx[selectedPercentile];
-  // 先杀掉可能仍在进行的首屏"滚动"补间：否则它会用旧视图(表A)的目标覆盖刚设好的表B大数字
   if (heroRollTween) { heroRollTween.kill(); heroRollTween = null; }
-  document.getElementById('hero-value').textContent = reached ? bulletinMonth() : formatDateFull(p50);
+  document.getElementById('hero-value').textContent = current ? tx('result.current') : (reached ? bulletinMonth() : formatDateFull(p50));
   document.getElementById('hero-sub').textContent = reached
-    ? (abView === 'B' ? tx('result.bPassed', { date: formatDate(viewCut) }) : tx('result.aPassed'))
+    ? tx(current ? 'result.noWait' : 'result.aPassed')
     : tx('result.fromNow', { wait: formatWait(p50) });
   document.getElementById('hero-fast').textContent = formatDate(cx.p10);
   document.getElementById('hero-slow').textContent = formatDate(cx.p90);
@@ -1824,7 +1608,7 @@ function renderHero() {
 
   // 排期已到（表A 已追上你的 PD）：显示祝贺。输入或监测到该情况时都会触发（每次 render 都检查）。
   var congratsEl = document.getElementById('congrats');
-  if (pd && cutoff && pd <= cutoff) {
+  if (pd && (current || (cutoff && pd <= cutoff))) {
     document.getElementById('congrats-description').innerHTML = t('result.congratsDescription', { date: formatDate(pd), scope: cellScope() });
     congratsEl.hidden = false;
   } else {
@@ -1850,59 +1634,51 @@ function renderHero() {
   }
   document.getElementById('progress-note').textContent = note;
 
-  // 表A / 表B 可点切换(切换图中推演) + 本月递交开放哪张表
-  var dateA = fmtCut('A');
-  var dateB = fmtCut('B');
-  var aOpen = FILING_CHART === 'A' ? ' open' : '';
-  var bOpen = FILING_CHART === 'B' ? ' open' : '';
-  // 两张表的预测并排常显：不必切换也能同时看到「何时可递交(表B)」与「何时批准(表A)」
-  function predLine(t) {
-    var c = t === 'B' ? crossingsByPctB : crossingsByPct;
-    var cut = getCutoffData(profile.category, profile.country, t);
-    if (pd0 && cut && pd0 < cut) return '<span class="ab-pred done">' + i18n.t(t === 'B' ? 'result.filingReached' : 'result.reached') + '</span>';
-    if (!c) return '';
-    return '<span class="ab-pred">' + i18n.t(t === 'B' ? 'result.expectedFiling' : 'result.expected') + ' <em>' + formatDate(c.p50) + '</em></span>' +
-           '<span class="ab-range">' + formatDate(c.p10) + ' ~ ' + formatDate(c.p90) + '</span>';
+  // 两表拥有同等结果层级；情景按钮同时改变两表，结果本身不可选择。
+  var scenarioKey = { p10: 'result.optimistic', p50: 'result.median', p90: 'result.conservative' }[selectedPercentile];
+  function resultFor(table) {
+    var crossings = table === 'A' ? crossingsByPct : crossingsByPctB;
+    var raw = cutoffRaw(profile.category, profile.country, table);
+    var cut = getCutoffData(profile.category, profile.country, table);
+    var isCurrent = raw === 'current';
+    var covered = isCurrent || !!(pd0 && cut && pd0 < cut);
+    var date = isCurrent ? tx('result.current') : (covered ? bulletinMonth() : crossings ? formatDateFull(crossings[selectedPercentile]) : '--');
+    var label = covered ? (table === 'B' ? 'result.filingReached' : 'result.reached') : (table === 'B' ? 'result.expectedFiling' : 'result.expected');
+    var sub = isCurrent ? tx('result.noWait') : covered
+      ? (table === 'B' ? tx('result.bPassed', { date: formatDate(cut) }) : tx('result.aPassed'))
+      : (crossings ? tx('result.fromNow', { wait: formatWait(crossings[selectedPercentile]) }) : tx('result.unavailable'));
+    var id = 'result-table-' + table.toLowerCase();
+    return '<section class="ab-chip" data-table="' + table + '" aria-labelledby="' + id + '">' +
+      '<h2 class="ab-table" id="' + id + '">' + t(table === 'B' ? 'result.tableB' : 'result.tableA') + '</h2>' +
+      '<span class="ab-pred' + (covered ? ' done' : '') + '"><span class="ab-pred-label">' + t(label) +
+        (covered ? '' : ' · ' + t(scenarioKey)) + '</span><em' + (!covered && crossings && crossings[selectedPercentile] ? ' data-forecast-date' : '') + '>' + date + '</em></span>' +
+      '<span class="ab-wait">' + sub + '</span>' +
+      (!covered && crossings ? '<span class="ab-range"><span>p10–p90</span> ' + formatDate(crossings.p10) + ' ~ ' + formatDate(crossings.p90) + '</span>' : '') +
+      '<span class="ab-cutoff">' + t('result.currentCutoff') + ' <b>' + fmtCut(table) + '</b></span></section>';
   }
   document.getElementById('ab-status').innerHTML =
-    '<div class="ab-chips" role="tablist">' +
-      '<button class="ab-chip' + (abView === 'A' ? ' selected' : '') + aOpen + '" role="tab" aria-selected="' + (abView === 'A') + '" onclick="setAbView(\'A\')">' +
-        '<small>' + t('result.tableA') + '</small>' + predLine('A') + '<span class="ab-cutoff">' + t('result.currentCutoff') + ' <b>' + dateA + '</b></span></button>' +
-      '<button class="ab-chip' + (abView === 'B' ? ' selected' : '') + bOpen + '" role="tab" aria-selected="' + (abView === 'B') + '" onclick="setAbView(\'B\')">' +
-        '<small>' + t('result.tableB') + '</small>' + predLine('B') + '<span class="ab-cutoff">' + t('result.currentCutoff') + ' <b>' + dateB + '</b></span></button>' +
-    '</div>' +
+    '<div class="ab-chips">' + resultFor('A') + resultFor('B') + '</div>' +
     '<div class="ab-hint">' + t('result.abHint') + ' · ' + t('result.filingUse', { month: bulletinMonth() }) + ' <span class="open">' + chartLabel() + '</span>' +
-      (abView === 'B' ? '<br><span class="ab-warn">' + t('result.bWarning') + '</span>' : '') + '</div>';
+      '<br><span class="ab-warn">' + t('result.bWarning') + '</span></div>';
 
   animateHero();
 }
 
-// 走势图主视图切换：表A裁定 ↔ 表B递交推演
-window.setAbView = function(v) {
-  if (abView === v || (v !== 'A' && v !== 'B')) return;
-  abView = v;
-  try { if (!sharedState) localStorage.setItem(AB_KEY, v); } catch (e) {}   // 分享预览不覆盖本机偏好
-  renderHero();                               // 大数字/快中慢/标签切表A裁定↔表B递交
-  renderStats();
-  renderMonthlyTable(lastPercentiles);
-  setTrendLegend(); redrawChart();            // 图表(含等待图)随视图重画
-};
-
 function setTrendLegend() {
   var legend = document.getElementById('chart-legend');
   if (!legend) return;
-  var color = chartTableColor(abView), waitMode = chartMode === 'wait';
-  var tables = waitMode ? [abView] : ['A', 'B'];
-  var html = tables.map(function(table) {
-    return '<span class="leg" data-series="history-' + table + '"><i style="background:' + chartTableColor(table) + '"></i>' + t(waitMode ? 'chart.legendHistoryWait' : 'chart.legendHistory', { table: chartTableLabel(table) }) + '</span>';
-  }).join('');
-  legend.innerHTML = html +
-    '<span class="leg" data-series="forecast-p50"><i class="dash" style="border-color:' + color + '"></i>' + t(waitMode ? 'chart.legendWaitPrediction' : 'chart.legendPrediction', { table: tx('bulletin.chart', { chart: abView }) }) + '</span>' +
-    '<span class="leg"><i class="band" style="background:' + color + '"></i>' + t('chart.range') + '</span>' +
-    '<span class="leg"><i style="background:' + color + ';opacity:.3"></i>' + t('chart.paths') + '</span>' +
+  var waitMode = chartMode === 'wait';
+  legend.innerHTML = ['A', 'B'].map(function(table) {
+    var color = chartTableColor(table), label = tx('bulletin.chart', { chart: table });
+    return '<span class="leg" data-series="history-' + table + '"><i style="background:' + color + '"></i>' +
+      t(waitMode ? 'chart.legendHistoryWait' : 'chart.legendHistory', { table: chartTableLabel(table) }) + '</span>' +
+      '<span class="leg" data-series="forecast-' + table + '-p50"><i class="dash" style="border-color:' + color + '"></i>' +
+      t(waitMode ? 'chart.legendWaitPrediction' : 'chart.legendPrediction', { table: label }) + '</span>';
+  }).join('') +
+    '<span class="leg"><i class="band" style="background:var(--text3)"></i>' + t('chart.range') + '</span>' +
     '<span class="leg" data-series="pd"><i class="dash" style="border-color:var(--text3);border-top-style:dotted"></i>' + t('chart.yourPd') + '</span>';
   var description = document.getElementById('chart-description');
-  if (description) description.textContent = tx(waitMode ? 'chart.waitDescription' : 'chart.description', { table: chartTableLabel(abView) });
+  if (description) description.textContent = tx(waitMode ? 'chart.waitDescription' : 'chart.description');
 }
 
 // 年度总供给聚合显示：把"固定基底 2,803 小、大头是浮动溢出"这个现实结构显性化
@@ -1935,7 +1711,7 @@ window.applySupplyScenario = function(sc) {
 };
 
 function renderStats() {
-  var cx = activeCrossings();
+  var cx = crossingsByPct;
   if (!cx) return;
   document.getElementById('stat-p10').textContent = formatDate(cx.p10);
   document.getElementById('stat-p50').textContent = formatDate(cx.p50);
@@ -1950,15 +1726,14 @@ function renderMonthlyTable(percentiles) {
   if (!tbody || !percentiles.p50 || !percentiles.p50.length) return;
   var months = Math.min(8, percentiles.p50.length);
   var yourPD = getYourPD();
-  var isB = abView === 'B';                         // 表B 视图：按 projectB 推演，命中=可递交
-  var hitWord = tx(isB ? 'result.filingReached' : 'result.reached');
+  // 旧版隐藏月表保持表 A 口径；可见界面由双表结果和图表负责。
+  var hitWord = tx('result.reached');
   var html = '', found = false;
-  var p50B = isB ? projectBPath(percentiles.p50) : null;
   for (var i = 0; i < months; i++) {
     var pt = percentiles.p50[i];
     var d = new Date(pt.x);
     var label = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0');
-    var y = isB ? p50B[i].y : pt.y;
+    var y = pt.y;
     var isHit = !found && y >= yourPD;
     if (isHit) found = true;
     html += '<tr' + (isHit ? ' class="highlight"' : '') + '><td>' + label + '</td><td>' + formatDate(y) + '</td><td>' + (isHit ? hitWord : '') + '</td></tr>';
@@ -2120,23 +1895,7 @@ function applyCell(cat, co) {
 // 该 cell 表A 为 Current：无需蒙特卡洛
 function renderCurrent(presentationOnly) {
   if (!presentationOnly) { lastPercentiles = null; crossingsByPct = null; crossingsByPctB = null; lastCloudPaths = null; }
-  var sc = cellScope(), pd = getYourPD();
-  if (heroRollTween) { heroRollTween.kill(); heroRollTween = null; }
-  document.getElementById('result-lead').textContent = tx('result.currentCutoff');
-  document.getElementById('hero-value').textContent = tx('result.current');
-  document.getElementById('hero-sub').textContent = tx('result.noWait');
-  ['p10', 'p50', 'p90'].forEach(function (k) { document.getElementById('stat-' + k).textContent = tx('result.now'); });
-  document.getElementById('progress-left').textContent = tx('result.cutoff', { date: tx('result.current') });
-  document.getElementById('progress-right').textContent = tx('result.yours', { date: formatDate(pd) });
-  document.getElementById('progress-fill').style.width = '100%';
-  document.getElementById('progress-note').textContent = tx('result.currentNote', { scope: sc });
-  var congratsEl = document.getElementById('congrats');
-  if (pd) { document.getElementById('congrats-description').innerHTML = t('result.congratsDescription', { date: formatDate(pd), scope: sc }); congratsEl.hidden = false; }
-  var aOpen = FILING_CHART === 'A' ? ' open' : '', bOpen = FILING_CHART === 'B' ? ' open' : '';
-  document.getElementById('ab-status').innerHTML =
-    '<div class="ab-chips"><button class="ab-chip selected' + aOpen + '" disabled><small>' + t('result.tableA') + '</small><b>' + fmtCut('A') + '</b></button>' +
-    '<button class="ab-chip' + bOpen + '" disabled><small>' + t('result.tableB') + '</small><b>' + fmtCut('B') + '</b></button></div>' +
-    '<div class="ab-hint">' + t('result.filingUse', { month: bulletinMonth() }) + ' <span class="open">' + chartLabel() + '</span></div>';
+  renderHero();
   renderProfileView();
   renderExplanation();
   renderBulletinPanel(presentationOnly);
@@ -2484,7 +2243,7 @@ function renderBulletinPanel(presentationOnly) {
     var input = document.getElementById('share-url');
     var url = window.GCShare.build(location.href, {
       category: profile.category, country: profile.country, pd: formatDateDay(profile.pd),
-      view: abView, pace: paceMode, percentile: selectedPercentile, supply: supplyScenario,
+      pace: paceMode, percentile: selectedPercentile, supply: supplyScenario,
       params: currentParams, lang: document.documentElement.lang
     });
     input.hidden = true;
@@ -2530,7 +2289,6 @@ document.getElementById('pe-save').addEventListener('click', function() {
     sharedState = null;
     try {
       history.replaceState(null, '', location.pathname + location.search);
-      localStorage.setItem(AB_KEY, abView);
       localStorage.setItem(PACE_KEY, paceMode);
     } catch (e) {}
     document.getElementById('shared-notice').hidden = true;

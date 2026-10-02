@@ -34,7 +34,7 @@ function build(locationHref, state) {
   const source = new URL(locationHref)
   const url = new URL(/^https?:$/.test(source.protocol) ? source.origin + source.pathname : 'https://gc.bracketboss2026.com/')
   const values = new URLSearchParams({ share: '1', category: state.category, country: state.country,
-    pd: state.pd, view: state.view, pace: state.pace, percentile: state.percentile })
+    pd: state.pd, pace: state.pace, percentile: state.percentile })
   if (state.supply) values.set('supply', state.supply)
   if (state.params) values.set('params', JSON.stringify(state.params))
   if (state.lang) values.set('lang', state.lang)

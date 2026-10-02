@@ -60,18 +60,32 @@ for (const category of categories) {
   }
 }
 
-test('A and B predictions remain visible when switching the chart', async ({ page }) => {
+test('one percentile selection updates both result cards without rerunning the simulation', async ({ page }) => {
   await openProfile(page)
-  const predictions = page.locator('#ab-status .ab-pred')
-  await expect(predictions).toHaveCount(2)
-  const original = await predictions.allTextContents()
-  await page.getByRole('tab', { name: /表B · 递交/ }).click()
-  await expect(page.getByRole('tab', { name: /表B · 递交/ })).toHaveAttribute('aria-selected', 'true')
-  await expect(predictions).toHaveText(original)
-  await expect(page.locator('#ab-status')).toContainText('表B为 DOS 预筛日期')
-  await page.getByRole('tab', { name: /表A · 裁定/ }).click()
-  await expect(page.getByRole('tab', { name: /表A · 裁定/ })).toHaveAttribute('aria-selected', 'true')
-  await expect(predictions).toHaveText(original)
+  await page.evaluate(() => {
+    window.dualResultState = { paths: lastPercentiles, cloud: lastCloudPaths, rng: _rngState, calls: 0 }
+    const original = monteCarlo
+    window.monteCarlo = function () { dualResultState.calls++; return original.apply(this, arguments) }
+  })
+  for (const percentile of ['p10', 'p90', 'p50']) {
+    await page.locator(`[data-pct="${percentile}"]`).click()
+    const expected = await page.evaluate(percentile => [
+      formatDateFull(crossingsByPct[percentile]), formatDateFull(crossingsByPctB[percentile])
+    ], percentile)
+    for (const [index, table] of ['A', 'B'].entries()) {
+      await expect(page.locator(`#ab-status [data-table="${table}"] .ab-pred em`)).toHaveText(expected[index])
+    }
+    for (const mode of ['wait', 'trend']) {
+      await page.locator(`#mode-${mode}`).click()
+      await expect(page.locator('#chart [data-series="forecast-A-p50"]')).toBeAttached()
+      await expect(page.locator('#chart [data-series="forecast-B-p50"]')).toBeAttached()
+    }
+  }
+  await expect(page.locator('#ab-status')).toContainText('表 B 为 DOS 预筛日期')
+  expect(await page.evaluate(() => ({
+    paths: lastPercentiles === dualResultState.paths, cloud: lastCloudPaths === dualResultState.cloud,
+    rng: _rngState === dualResultState.rng, calls: dualResultState.calls
+  }))).toEqual({ paths: true, cloud: true, rng: true, calls: 0 })
 })
 
 test('pace selection changes the forecast and survives reload and parameter reset', async ({ page }) => {
