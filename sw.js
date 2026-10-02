@@ -18,7 +18,7 @@ self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys().then(function (keys) {
       return Promise.all(keys.filter(function (k) {
-        return k !== CACHE && (k.indexOf(CACHE_PREFIX) === 0 || k === 'eb1a-v4');
+        return k !== CACHE && k.indexOf(CACHE_PREFIX) === 0;
       }).map(function (k) { return caches.delete(k); }));
     }).then(function () { return self.clients.claim(); })
   );
@@ -42,11 +42,16 @@ self.addEventListener('fetch', function (e) {
         caches.open(CACHE).then(function (c) { c.put(isHTML ? './index.html' : req, copy); });
         return r;
       }).catch(function () {
-        return caches.match(req).then(function (m) { return m || (isHTML ? caches.match('./index.html') : Response.error()); });
+        // 仅从当前快照回退；上游旧版及同源其他项目的缓存不能覆盖新页面。
+        return caches.open(CACHE).then(function (c) {
+          return c.match(req).then(function (m) { return m || (isHTML ? c.match('./index.html') : Response.error()); });
+        });
       })
     );
     return;
   }
   // 其它（图标 / manifest）：缓存优先
-  e.respondWith(caches.match(req).then(function (m) { return m || fetch(req); }));
+  e.respondWith(caches.open(CACHE).then(function (c) {
+    return c.match(req).then(function (m) { return m || fetch(req); });
+  }));
 });

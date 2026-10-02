@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sqlite3
+from datetime import date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "data", "visa_bulletin_history.json")
@@ -30,6 +31,27 @@ PDT_CAT = {"EB-1A": "EB-1", "EB-2": "EB-2", "EB-3": "EB-3", "EB-4": "EB-4", "EB-
 # 内部类别键 → DB 归一化键
 DB_CAT = {"EB-1A": "EB1", "EB-2": "EB2", "EB-3": "EB3", "EB-4": "EB4", "EB-5": "EB5U"}
 SETASIDE = ["EB-5-Rural", "EB-5-HighUnemp", "EB-5-Infra"]
+
+
+def validate_date(value):
+    """外部数据只接受真实的 ASCII ISO 日期，不能将任意文本注入内嵌 JavaScript。"""
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        raise ValueError("Invalid bulletin date; expected YYYY-MM-DD")
+    date.fromisoformat(value)
+    return value
+
+
+def validate_month(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}", value):
+        raise ValueError("Invalid bulletin month; expected YYYY-MM")
+    validate_date(value + "-01")
+    return value
+
+
+def validate_cutoff(value, sentinels=("C", "U")):
+    if isinstance(value, str) and value in sentinels:
+        return value
+    return validate_date(value)
 
 
 def norm_class(cl):
@@ -54,7 +76,9 @@ def load_db(path):
         k = norm_class(cl)
         if not k or at not in ("final_action", "filing"):
             continue
-        out.setdefault((k, co, "A" if at == "final_action" else "B"), {})[d[:7]] = "C" if cur else ("U" if un else cd)
+        month = validate_date(d)[:7]
+        value = validate_cutoff("C" if cur else ("U" if un else cd))
+        out.setdefault((k, co, "A" if at == "final_action" else "B"), {})[month] = value
     return out
 
 
@@ -68,6 +92,9 @@ def months(a, b):
 
 def compress(series):
     """月度 → 变化点 + 末点。x 用当月 15 日。"""
+    for month, value in series.items():
+        validate_month(month)
+        validate_cutoff(value)
     ks = sorted(series)
     out = []
     for i, k in enumerate(ks):
@@ -86,7 +113,8 @@ def cutoff_block_text(cut):
     for cat in CAT_ORDER:
         if cat not in cut:
             continue
-        cells = ", ".join(f"'{co}': {{ A: '{cut[cat][co]['A']}', B: '{cut[cat][co]['B']}' }}"
+        cells = ", ".join(f"'{co}': {{ A: '{validate_cutoff(cut[cat][co]['A'], ('current', 'unavailable'))}', "
+                          f"B: '{validate_cutoff(cut[cat][co]['B'], ('current', 'unavailable'))}' }}"
                           for co in CO_ORDER if co in cut[cat])
         lines.append(f"  '{cat}': {{ {cells} }}")
     return "var CUTOFF_DATA = {\n" + ",\n".join(lines) + "\n}; // CUTOFF_DATA_END"
@@ -107,7 +135,7 @@ def main():
     a = ap.parse_args()
     db = load_db(a.vyakunin_db)
     pdt = json.load(open(a.pd_tracker, encoding="utf-8"))
-    pdb = {b["id"]: b for b in pdt["bulletins"]}
+    pdb = {validate_month(b["id"]): b for b in pdt["bulletins"]}
     last = max(pdb)
     cells, mism = {}, 0
     for cat, dbc in DB_CAT.items():
@@ -123,7 +151,7 @@ def main():
                     if bid < START:
                         continue
                     v = b["tables"][t][PDT_CAT[cat]][PDT_CO[co]]
-                    v = "C" if v is None else v
+                    v = validate_cutoff("C" if v is None else v)
                     if bid in src and src[bid] != v:
                         mism += 1
                     s[bid] = v

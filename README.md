@@ -6,11 +6,11 @@ EB-1 ~ EB-5 排期预测工具（EB-1A / EB-2 / EB-3 / EB-4 / EB-5 及三类 EB-
 
 ## 在线 Demo
 
-主站：https://gc.bracketboss2026.com/
+主站：https://djzoom.github.io/EB1A/
 
-备用站：https://s546126.github.io/gctime/
+离线包：https://github.com/djzoom/EB1A/releases/download/offline-latest/EB1A-offline.zip 。解压后直接打开 `EB1A.html`；开发源码 `index.html` 需要先构建 UI 资源。
 
-也可直接打开 `index.html`。离线包：https://github.com/s546126/gctime/releases/download/offline-latest/EB1A-offline.zip
+本版本的在线站点与离线包均不包含广告、赞助入口或追踪脚本，不依赖个人域名或 Cloudflare 账户。
 
 ## 语言、图表与分享
 
@@ -65,7 +65,7 @@ EB1A/
 
 ## 数据自动更新
 
-排期数据由 GitHub Actions 定时探测 DOS 签证公告并自动上线。两条数据通道的可达性不同
+排期数据由 GitHub Actions 定时探测 DOS 签证公告，默认创建 PR 等待维护者复核，合并后由 CI 验证并上线。维护者可显式设置仓库变量 `BULLETIN_AUTO_MERGE=true` 启用数据 PR 自动合并；不设置则保留上游人工复核流程。两条数据通道的可达性不同
 （2026-08-22 实测，托管 runner 与住宅 IP 各跑一遍）：
 
 | 数据源 | GitHub 托管 runner | 住宅 IP |
@@ -115,15 +115,15 @@ bash scripts/uscis_chart_watch.sh --install   # 每小时问一次 USCIS，直�
 
 `CI` 在 push、PR 和手动运行时检查工作流语法、Python/Shell/JavaScript/JSX、JSON 和公告解析器。仓库分支 push 与 main 手动运行还会下载授权组件、构建站点并执行 Chromium 回归测试。PR 只执行不需要凭据的源码检查，不运行 HeroUI 授权安装；维护者应在受信分支验证 UI 后合并。浏览器覆盖 40 个类别×国家组合的两种远期速度、表A/B 并列预测、设置持久化、停留上限与财年锚点，以及离线产物。测试不依赖实时政府网站。
 
-只有 `main` 验证通过后才发布 GitHub Pages、Cloudflare Pages 和离线 Release；三个发布任务消费同一次构建产物。`version.json` 记录构建 commit，便于核对线上版本。数据机器人写入 `main` 后会显式派发 `CI`，因为 `GITHUB_TOKEN` 产生的 push 不会触发其他工作流。
+只有 `main` 验证通过后才发布 GitHub Pages 和离线 Release；两个发布任务消费同一次构建产物。`version.json` 记录构建 commit，便于核对线上版本。数据机器人写入 `main` 后会显式派发 `CI`，因为 `GITHUB_TOKEN` 产生的 push 不会触发其他工作流。
 
 一次性配置：
 
 1. GitHub Settings → Pages → Source 选择 **GitHub Actions**。初次启用需要仓库管理员，工作流 token 无权创建 Pages 站点。
-2. Cloudflare 创建 Pages 项目 `gctime`，生产分支 `main`。仓库 Secrets 配置 `CLOUDFLARE_API_TOKEN`（目标账户的 Cloudflare Pages:Edit）与 `CLOUDFLARE_ACCOUNT_ID`，然后设置仓库变量 `CLOUDFLARE_ENABLED=true`。启用后缺少凭据会明确失败；未启用时该发布 job 显示 skipped。
-3. Cloudflare Pages → gctime → Custom domains 绑定 `gc.bracketboss2026.com`。
-4. 重新发布可运行 `gh workflow run ci.yml --repo s546126/gctime --ref main`；子工作流不能绕过 CI 独立发布。
-5. 从 HeroUI Pro Dashboard 获取 CI/CD token，设置仓库 Secret `HEROUI_AUTH_TOKEN`。该令牌仅传给 `npm rebuild @heroui-pro/react` 的授权下载步骤；其它依赖安装使用 `npm ci --ignore-scripts`。不要把令牌放入源码、前端环境变量或生成产物。
+2. 维护者需要自己的 HeroUI Pro 授权。从 HeroUI Pro Dashboard 获取 CI/CD token，设置仓库 Secret `HEROUI_AUTH_TOKEN`。该令牌仅传给 `npm rebuild @heroui-pro/react` 的授权下载步骤；其它依赖安装使用 `npm ci --ignore-scripts`。不要把令牌放入源码、前端环境变量或生成产物。上游不会继承贡献者 fork 的 Secret；未配置时，完整构建会明确失败，不会发布。
+3. 重新发布可运行 `gh workflow run ci.yml --repo djzoom/EB1A --ref main`；子工作流不能绕过 CI 独立发布。
+
+迁移前请先完成上述授权与 Pages 配置，再合并到 `main`。无凭据的 PR 源码检查通过不等于完整 UI 构建通过。回退时可恢复合并前的 commit 与原 Pages 发布方式；本变更不修改 DNS，也不迁移服务端用户数据。
 
 本地验证：
 
@@ -135,6 +135,7 @@ npm run build
 npx playwright install chromium
 python3 scripts/check_project.py
 python3 scripts/test_sniff.py
+python3 scripts/test_bulletin_history.py
 npm test
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 ```
@@ -150,8 +151,8 @@ go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 ## 开发 (Claude Code)
 
 ```bash
-git clone https://github.com/s546126/gctime.git
-cd gctime
+git clone https://github.com/djzoom/EB1A.git
+cd EB1A
 claude  # 启动 Claude Code
 
 # 第一条 message:
@@ -173,7 +174,7 @@ claude  # 启动 Claude Code
 
 首次打开 `index.html` 时，会弹出欢迎面板要求输入你自己的 Priority Date、类别、出生国等信息。数据仅保存在浏览器 localStorage，不会上传。
 
-预测结果（P50 中位 + 90% 置信区间）以你输入的 PD 为准计算。
+预测结果（P50 中位 + P10–P90 模拟区间）以你输入的 PD 为准计算。
 
 ## License
 

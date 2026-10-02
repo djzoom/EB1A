@@ -190,7 +190,7 @@ export default {
   'explain.simulationTitle': '{step} 몬테카를로',
   'explain.simulation': '월별 전진 속도는 다르고 정체도 흔합니다. <b>{count}회 시뮬레이션</b>으로 분포를 구해 <b>빠름 / 중간 / 느림</b>의 세 단계를 제시합니다.',
   'footer.summary': '<span id="footer-scope">{scope}</span> 문호 예측 · 최신 비자 공보 자동 반영 · 데이터 출처 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a>',
-  'footer.license': '프로젝트 코드는 <a href="https://github.com/s546126/gctime/blob/main/LICENSE" target="_blank" rel="noopener">MIT 라이선스</a> 적용 · 소스 <a href="https://github.com/s546126/gctime" target="_blank" rel="noopener">s546126/gctime</a> · HeroUI Pro 의존성에는 별도 상용 라이선스가 적용됩니다',
+  'footer.license': '프로젝트 코드는 <a href="https://github.com/djzoom/EB1A/blob/main/LICENSE" target="_blank" rel="noopener">MIT 라이선스</a> 적용 · 소스 <a href="https://github.com/djzoom/EB1A" target="_blank" rel="noopener">djzoom/EB1A</a> · HeroUI Pro 의존성에는 별도 상용 라이선스가 적용됩니다',
   'footer.legal': '이 도구는 통계적 추정이며 <b>법률 또는 이민 자문이 아니고</b> 정확성을 보장하지 않습니다. 공식 비자 공보를 확인하고 자격을 갖춘 이민 변호사와 상담하세요. 입력 정보는 로컬 브라우저에만 저장됩니다.',
   'offline.notice': '오프라인 버전 · {month} 기준 데이터 · 이후 공보는 자동 반영되지 않음',
   'offline.readme': '영주권 문호 예측(EB-1～EB-5, 여러 국가 지원)\n\n브라우저에서 EB1A.html을 열면 완전히 오프라인으로 실행됩니다.\n이 파일은 데이터 스냅샷이며 이후 공보는 자동 반영되지 않습니다. 업데이트하려면 새 버전을 다운로드하세요.\n예측은 참고용이며 법률 또는 이민 자문이 아닙니다. 실제 문호는 공식 비자 공보를 기준으로 판단하세요.',

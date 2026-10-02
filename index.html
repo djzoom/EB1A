@@ -212,7 +212,7 @@
 
   <div class="footer">
     <span id="footer-summary"><span id="footer-scope">EB-1A 中国大陆</span>排期预测 · 自动同步最新签证公告 · 数据源 USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a></span><br>
-    <span data-i18n-html="footer.license">项目代码采用 <a href="https://github.com/s546126/gctime/blob/main/LICENSE" target="_blank" rel="noopener">MIT 协议</a> · 源码 <a href="https://github.com/s546126/gctime" target="_blank" rel="noopener">s546126/gctime</a> · HeroUI Pro 依赖另受商业授权约束</span><br>
+    <span data-i18n-html="footer.license">项目代码采用 <a href="https://github.com/djzoom/EB1A/blob/main/LICENSE" target="_blank" rel="noopener">MIT 协议</a> · 源码 <a href="https://github.com/djzoom/EB1A" target="_blank" rel="noopener">djzoom/EB1A</a> · HeroUI Pro 依赖另受商业授权约束</span><br>
     <span class="footer-legal" data-i18n-html="footer.legal">本工具为统计估算，<b>不构成法律或移民建议</b>，不保证准确。以官方签证公告为准，并咨询持牌移民律师。你填的信息只存在本地浏览器。</span><br>
     © 2026 djzoom
   </div>
@@ -325,7 +325,7 @@ function getCutoffData(category, country, chartType) {
   if (v === 'current') return TODAY;
   if (v === 'unavailable') {   // 本期不可用(U)：沿用该序列最后一个有日期的值
     var h = histFor(category, country, chartType);
-    for (var i = h.length - 1; i >= 0; i--) if (h[i].y > h[i].x + 1) return h[i].y;
+    for (var i = h.length - 1; i >= 0; i--) if (Number.isFinite(h[i].y) && h[i].y < h[i].x) return h[i].y;
     return new Date('2023-04-01').getTime();
   }
   return new Date(v).getTime();

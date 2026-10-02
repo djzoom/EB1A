@@ -184,7 +184,7 @@ def main():
             H=round(H, 1), P=round(P, 1), wall=WALL_DEFAULT, adv24=round(a24), hold=round(hold, 2),
             T=T, t0=fmt(t0), L=L, knots=knots, ramp=[s, e],
             invYear=c.get("inv_year"), invCount=(invd.get(c.get("inv_year")) if c.get("inv_year") else None),
-            invByYear={str(k): v for k, v in invd.items() if k != "prior" and v}, 
+            invByYear={str(k): v for k, v in invd.items() if k != "prior" and v},
             bNow=hist[f"{key}|B"]["2026-10"], aNow=A["2026-10"])
     out = {"inventory_file": os.path.basename(ipath), "i140_asof": asof, "T_end": fmt(T_END), "cells": cells}
     if "--write" in sys.argv or "--inject" in sys.argv:
