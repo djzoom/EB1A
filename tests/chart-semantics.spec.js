@@ -27,9 +27,10 @@ async function hoverPoint(page, { region = 'history', month = null } = {}) {
   const target = await page.locator('#chart').evaluate((svg, { region, month }) => {
     const bounds = chartBounds
     const series = region === 'history'
-      ? lastSnapData.p50.slice(0, lastSnapData.predStart)
-      : lastSnapData.p50.slice(lastSnapData.predStart + (chartMode === 'trend' ? 1 : 0))
-    const candidates = series.filter(point => point.x > bounds.xMin && point.x < bounds.xMax && point.y > bounds.yMin && point.y < bounds.yMax)
+      ? lastSnapData.tables.A.history
+      : lastSnapData.tables.A.p50
+    const candidates = series.filter(point => point.x > bounds.xMin && point.x < bounds.xMax && point.y > bounds.yMin && point.y < bounds.yMax &&
+      (region !== 'forecast' || chartMode !== 'wait' || point.x > Math.max(lastSnapData.tables.A.cutoff, lastSnapData.tables.B.cutoff)))
     const point = month ? candidates.find(point => new Date(point.x).toISOString().slice(0, 7) === month)
       : candidates[Math.floor(candidates.length / 2)]
     if (!point) throw new Error('测试需要当前显示范围内的图表数据点')
@@ -37,7 +38,14 @@ async function hoverPoint(page, { region = 'history', month = null } = {}) {
     coords.x = bounds.PAD.left + (point.x - bounds.xMin) / (bounds.xMax - bounds.xMin) * bounds.PW
     coords.y = bounds.PAD.top + (1 - (point.y - bounds.yMin) / (bounds.yMax - bounds.yMin)) * bounds.PH
     const screen = coords.matrixTransform(svg.getScreenCTM())
-    return { x: screen.x, y: screen.y, date: new Date(point.x).toISOString().slice(0, 10) }
+    const mouse = svg.createSVGPoint()
+    mouse.x = Math.round(screen.x)
+    mouse.y = Math.round(screen.y)
+    const local = mouse.matrixTransform(svg.getScreenCTM().inverse())
+    const dataX = bounds.xMin + (local.x - bounds.PAD.left) / bounds.PW * (bounds.xMax - bounds.xMin)
+    const timeline = lastSnapData.timeline.filter(item => item.x >= bounds.xMin && item.x <= bounds.xMax)
+    const snap = timeline.reduce((best, item) => Math.abs(item.x - dataX) < Math.abs(best.x - dataX) ? item : best)
+    return { x: mouse.x, y: mouse.y, date: new Date(snap.x).toISOString().slice(0, 10) }
   }, { region, month })
   await page.mouse.move(target.x, target.y)
   await expect(page.locator('#chart-tooltip')).toBeVisible()
@@ -61,16 +69,13 @@ for (const timezoneId of ['UTC', 'America/Los_Angeles']) {
         const other = histB().find(other => key(other.x) === key(point.x))
         return { month: key(point.x), A: new Date(point.y).toISOString().slice(0, 10), B: new Date(other.y).toISOString().slice(0, 10) }
       })
-      for (const table of ['A', 'B']) {
-        await page.locator('#ab-status .ab-chip').nth(table === 'A' ? 0 : 1).click()
-        await hoverPoint(page, { month: record.month })
-        for (const series of ['A', 'B']) {
-          const row = page.locator(`#chart-tooltip [data-table="${series}"]`)
-          await expect(row).toContainText(`表${series}`)
-          await expect(row.locator('.tt-sval')).toHaveText(record[series])
-        }
-        await expect(page.locator('#chart-tooltip')).not.toContainText('中位')
+      await hoverPoint(page, { month: record.month })
+      for (const series of ['A', 'B']) {
+        const row = page.locator(`#chart-tooltip .tt-series[data-table="${series}"]`)
+        await expect(row).toContainText(`表${series}`)
+        await expect(row.locator('.tt-sval')).toHaveText(record[series])
       }
+      await expect(page.locator('#chart-tooltip')).not.toContainText('中位')
     })
   })
 }
@@ -89,55 +94,50 @@ test('missing historical B data is not borrowed from a neighboring bulletin', as
   await expect(page.locator('#chart-tooltip [data-table="A"] .tt-sval')).not.toHaveText('本月无数据')
 })
 
-for (const table of ['A', 'B']) {
-  test(`table ${table} predictions and legends keep their identity in both chart modes`, async ({ page }) => {
-    await openChart(page, table)
-    const selectedLabel = table === 'A' ? '表A裁定' : '表B递交'
-    const otherTable = table === 'A' ? 'B' : 'A'
+for (const legacyView of ['A', 'B']) {
+  test(`both table predictions and legends keep their identity with legacy ${legacyView} preference`, async ({ page }) => {
+    await openChart(page, legacyView)
     const predictions = await page.evaluate(() => JSON.stringify([lastPercentiles, crossingsByPct, crossingsByPctB]))
     for (const mode of ['trend', 'wait']) {
       await page.locator(`#mode-${mode}`).click()
-      await expect(page.locator('#chart-description')).toContainText(selectedLabel)
+      await expect(page.locator('#chart-description')).toContainText('表 A')
+      await expect(page.locator('#chart-description')).toContainText('表 B')
       await expect(page.locator('#chart-description')).toContainText('实线历史，虚线预测')
-      const styles = await page.evaluate(table => {
+      const styles = await page.evaluate(() => ['A', 'B'].map(table => {
         const history = document.querySelector(`#chart [data-series="history-${table}"]`)
-        const forecast = document.querySelector('#chart [data-series="forecast-p50"]')
+        const forecast = document.querySelector(`#chart [data-series="forecast-${table}-p50"]`)
         const pd = document.querySelector('#chart [data-series="pd"]')
         const historicalLegend = document.querySelector(`#chart-legend [data-series="history-${table}"] i`)
-        const forecastLegend = document.querySelector('#chart-legend [data-series="forecast-p50"] i')
+        const forecastLegend = document.querySelector(`#chart-legend [data-series="forecast-${table}-p50"] i`)
         const pdLegend = document.querySelector('#chart-legend [data-series="pd"] i')
         return {
           history: getComputedStyle(history).stroke, forecast: getComputedStyle(forecast).stroke,
           historyLegend: getComputedStyle(historicalLegend).backgroundColor, forecastLegend: getComputedStyle(forecastLegend).borderTopColor,
           historyDash: getComputedStyle(history).strokeDasharray, forecastDash: getComputedStyle(forecast).strokeDasharray,
           pd: getComputedStyle(pd).stroke, pdLegend: getComputedStyle(pdLegend).borderTopColor,
-          edgeColors: [...document.querySelectorAll('#chart [data-series^="forecast-"], #chart .mc-line')].map(path => getComputedStyle(path).stroke)
+          edgeColors: [...document.querySelectorAll(`#chart [data-series^="forecast-${table}-"]`)].map(path => getComputedStyle(path).stroke)
         }
-      }, table)
-      expect(styles.history).toBe(styles.forecast)
-      expect(styles.history).toBe(styles.historyLegend)
-      expect(styles.forecast).toBe(styles.forecastLegend)
-      expect(styles.historyDash).toBe('none')
-      expect(styles.forecastDash).not.toBe('none')
-      expect(styles.pd).toBe(styles.pdLegend)
-      expect(styles.pd).not.toBe(styles.forecast)
-      expect(styles.edgeColors.every(color => color === styles.forecast)).toBe(true)
-
-      if (mode === 'wait') {
-        await hoverPoint(page)
-        await expect(page.locator('#chart-tooltip')).toContainText(selectedLabel)
-        await expect(page.locator('#chart-tooltip')).toContainText('历史等待')
-        await expect(page.locator('#chart-tooltip')).not.toContainText('中位')
+      }))
+      for (const style of styles) {
+        expect(style.history).toBe(style.forecast)
+        expect(style.history).toBe(style.historyLegend)
+        expect(style.forecast).toBe(style.forecastLegend)
+        expect(style.historyDash).toBe('none')
+        expect(style.forecastDash).not.toBe('none')
+        expect(style.pd).toBe(style.pdLegend)
+        expect(style.pd).not.toBe(style.forecast)
+        expect(style.edgeColors.every(color => color === style.forecast)).toBe(true)
       }
+      expect(styles[0].forecast).not.toBe(styles[1].forecast)
       await hoverPoint(page, { region: 'forecast' })
-      await expect(page.locator('#chart-tooltip .tt-hdr')).toContainText(selectedLabel)
-      await expect(page.locator('#chart-tooltip .tt-hdr')).toContainText(mode === 'wait' ? '等待预测' : '预测')
-      await expect(page.locator('#chart-tooltip .tt-sname')).toHaveText(['乐观', '中位', '保守'])
-      await expect(page.locator('#chart-tooltip')).toContainText('另一表请切换查看')
-      await expect(page.locator('#chart-tooltip')).not.toContainText(`表${otherTable}`)
+      for (const table of ['A', 'B']) {
+        const section = page.locator(`#chart-tooltip section[data-table="${table}"]`)
+        await expect(section.locator('.tt-label')).toContainText(`表${table}`)
+        await expect(section.locator('.tt-sname')).toHaveText(['乐观', '中位', '保守'])
+        await expect(section.locator('[data-percentile]')).toHaveCount(3)
+      }
+      await expect(page.locator('#chart-tooltip')).not.toContainText('另一表请切换查看')
     }
-    await page.locator('#ab-status .ab-chip').nth(table === 'A' ? 1 : 0).click()
-    await expect(page.locator('#chart-legend [data-series="forecast-p50"]')).toContainText(`表${otherTable}`)
     expect(await page.evaluate(() => JSON.stringify([lastPercentiles, crossingsByPct, crossingsByPctB]))).toBe(predictions)
   })
 }

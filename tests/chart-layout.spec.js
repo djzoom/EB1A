@@ -32,9 +32,10 @@ async function expectMatchingCanvas(page) {
 for (const width of [375, 768, 1440, 1920]) {
   test(`chart fills its ${width}px workspace without shrinking its labels`, async ({ page }) => {
     await openChart(page, width)
-    for (const [mode, chartIndex] of [['trend', 0], ['wait', 0], ['trend', 1], ['wait', 1]]) {
+    for (const mode of ['trend', 'wait']) {
       await page.locator(`#mode-${mode}`).click()
-      await page.locator('#ab-status .ab-chip').nth(chartIndex).click()
+      await expect(page.locator('#chart [data-series="forecast-A-p50"]')).toBeAttached()
+      await expect(page.locator('#chart [data-series="forecast-B-p50"]')).toBeAttached()
       await expectMatchingCanvas(page)
       const geometry = await page.locator('#chart').evaluate(svg => {
         const rect = svg.getBoundingClientRect()
@@ -141,20 +142,30 @@ for (const mode of ['trend', 'wait']) {
     await page.locator('#chart').scrollIntoViewIfNeeded()
     const target = await page.locator('#chart').evaluate(svg => {
       const bounds = chartBounds
-      const visible = lastSnapData.p50.filter(point => point.x > bounds.xMin && point.x < bounds.xMax && point.y > bounds.yMin && point.y < bounds.yMax)
+      const visible = lastSnapData.tables.A.p50.filter(point => point.x > bounds.xMin && point.x < bounds.xMax && point.y > bounds.yMin && point.y < bounds.yMax)
       const point = visible[Math.floor(visible.length * .7)]
       const coords = svg.createSVGPoint()
       coords.x = bounds.PAD.left + (point.x - bounds.xMin) / (bounds.xMax - bounds.xMin) * bounds.PW
       coords.y = bounds.PAD.top + (1 - (point.y - bounds.yMin) / (bounds.yMax - bounds.yMin)) * bounds.PH
       const screen = coords.matrixTransform(svg.getScreenCTM())
-      return { x: screen.x, y: screen.y, date: new Date(point.x).toISOString().slice(0, 10) }
+      // 原生鼠标按整数像素定位；窄屏的一像素可能覆盖数天，应检验该像素最近的共同采样点。
+      const mouse = svg.createSVGPoint()
+      mouse.x = Math.round(screen.x)
+      mouse.y = Math.round(screen.y)
+      const local = mouse.matrixTransform(svg.getScreenCTM().inverse())
+      const dataX = bounds.xMin + (local.x - bounds.PAD.left) / bounds.PW * (bounds.xMax - bounds.xMin)
+      const timeline = lastSnapData.timeline.filter(item => item.x >= bounds.xMin && item.x <= bounds.xMax)
+      const snap = timeline.reduce((best, item) => Math.abs(item.x - dataX) < Math.abs(best.x - dataX) ? item : best)
+      coords.x = bounds.PAD.left + (snap.x - bounds.xMin) / (bounds.xMax - bounds.xMin) * bounds.PW
+      return { x: mouse.x, y: mouse.y, dotX: coords.matrixTransform(svg.getScreenCTM()).x, date: new Date(snap.x).toISOString().slice(0, 10) }
     })
     await page.mouse.move(target.x, target.y)
     const tooltip = page.locator('#chart-tooltip')
     await expect(tooltip).toBeVisible()
     await expect(tooltip.locator('.tt-hdr')).toContainText(target.date)
-    const dot = await page.locator('#chart > circle').boundingBox()
-    expect(Math.abs(dot.x + dot.width / 2 - target.x)).toBeLessThan(1)
+    for (const table of ['A', 'B']) await expect(tooltip.locator(`section[data-table="${table}"]`)).toBeVisible()
+    const dot = await page.locator('#chart > circle[data-hover-table="A"]').boundingBox()
+    expect(Math.abs(dot.x + dot.width / 2 - target.dotX)).toBeLessThan(1)
     const tip = await tooltip.boundingBox()
     const box = await page.locator('.chart-box').boundingBox()
     expect(tip.x).toBeGreaterThanOrEqual(box.x)

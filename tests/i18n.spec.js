@@ -50,8 +50,9 @@ async function hoverForecast(page) {
   await page.locator('#chart').scrollIntoViewIfNeeded()
   const target = await page.locator('#chart').evaluate(svg => {
     const bounds = chartBounds
-    const candidates = lastSnapData.p50.slice(lastSnapData.predStart + (chartMode === 'trend' ? 1 : 0))
-      .filter(point => point.x > bounds.xMin && point.x < bounds.xMax && point.y > bounds.yMin && point.y < bounds.yMax)
+    const candidates = lastSnapData.tables.A.p50
+      .filter(point => point.x > bounds.xMin && point.x < bounds.xMax && point.y > bounds.yMin && point.y < bounds.yMax &&
+        (chartMode !== 'wait' || point.x > Math.max(lastSnapData.tables.A.cutoff, lastSnapData.tables.B.cutoff)))
     const point = candidates[Math.floor(candidates.length / 2)]
     if (!point) throw new Error('测试需要可见预测数据点')
     const coords = svg.createSVGPoint()
@@ -101,18 +102,24 @@ for (const locale of locales) {
     await expect(page.locator('#pe-pd-y')).toHaveAttribute('aria-label', messages['profile.editYearLabel'])
     await expect(page.locator('#pe-co option:checked')).toHaveText(messages['country.CN'])
     await expect(page.locator('#ab-status .ab-chip').first()).toContainText(messages['result.tableA'])
-    await page.locator('#ab-status .ab-chip').nth(1).click()
-    await expect(page.locator('#chart-description')).toContainText(messages['chart.tableB'])
-    await expect(page.locator('#chart-legend [data-series="forecast-p50"]')).toHaveText(
-      messages['chart.legendPrediction'].replace('{table}', messages['bulletin.chart'].replace('{chart}', 'B')))
-    await page.locator('#mode-wait').click()
-    await expect(page.locator('#chart-description')).toHaveText(messages['chart.waitDescription'].replace('{table}', messages['chart.tableB']))
-    await hoverForecast(page)
-    await expect(page.locator('#chart-tooltip .tt-hdr')).toContainText(messages['chart.waitPredictionHeading'].replace('{table}', messages['chart.tableB']))
-    await expect(page.locator('#chart-tooltip .tt-sname')).toHaveText([
-      messages['result.optimistic'], messages['result.median'], messages['result.conservative']
-    ])
-    await expect(page.locator('#chart-tooltip')).toContainText(messages['chart.otherTableHint'])
+    await expect(page.locator('#chart-description')).toHaveText(messages['chart.description'])
+    for (const table of ['A', 'B']) {
+      await expect(page.locator(`#chart-legend [data-series="forecast-${table}-p50"]`)).toHaveText(
+        messages['chart.legendPrediction'].replace('{table}', messages['bulletin.chart'].replace('{chart}', table)))
+    }
+    for (const mode of ['trend', 'wait']) {
+      await page.locator(`#mode-${mode}`).click()
+      await expect(page.locator('#chart-description')).toHaveText(messages[mode === 'wait' ? 'chart.waitDescription' : 'chart.description'])
+      await hoverForecast(page)
+      await expect(page.locator('#chart-tooltip .tt-hdr')).toContainText(messages[mode === 'wait' ? 'chart.waitComparisonHeading' : 'chart.comparisonHeading'])
+      for (const table of ['A', 'B']) {
+        const section = page.locator(`#chart-tooltip section[data-table="${table}"]`)
+        await expect(section.locator('.tt-label')).toContainText(messages[`chart.table${table}`])
+        await expect(section.locator('.tt-sname')).toHaveText([
+          messages['result.optimistic'], messages['result.median'], messages['result.conservative']
+        ])
+      }
+    }
     await page.locator('[data-tab="settings"]').click()
     await expect(page.locator('[data-pace="recent"]')).toHaveText(messages['pace.recent'])
     await page.locator('[data-pace="recent"]').click()
@@ -134,7 +141,6 @@ for (const locale of locales) {
 test('switching every locale preserves drafts, selections, model objects and RNG without resimulation', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await openSaved(page)
-  await page.locator('#ab-status .ab-chip').nth(1).click()
   await page.locator('[data-pct="p90"]').click()
   await page.locator('#mode-wait').click()
   await page.locator('[data-tab="settings"]').click()
@@ -162,7 +168,7 @@ test('switching every locale preserves drafts, selections, model objects and RNG
       window[name] = function () { localeTest.counts[name]++; return original.apply(this, arguments) }
     }
     return JSON.stringify({ profile, params: currentParams, paths: lastPercentiles,
-      crossings: [crossingsByPct, crossingsByPctB], view: abView, pace: paceMode,
+      crossings: [crossingsByPct, crossingsByPctB], pace: paceMode,
       percentile: selectedPercentile, supply: supplyScenario, mode: chartMode,
       stored: localStorage.getItem('eb1a_user_profile') })
   })
@@ -180,7 +186,7 @@ test('switching every locale preserves drafts, selections, model objects and RNG
     await expect(page.locator('#familyMultiplier')).toHaveValue('2.4')
     const state = await page.evaluate(() => ({
       serialized: JSON.stringify({ profile, params: currentParams, paths: lastPercentiles,
-        crossings: [crossingsByPct, crossingsByPctB], view: abView, pace: paceMode,
+        crossings: [crossingsByPct, crossingsByPctB], pace: paceMode,
         percentile: selectedPercentile, supply: supplyScenario, mode: chartMode,
         stored: localStorage.getItem('eb1a_user_profile') }),
       identities: [lastPercentiles === localeTest.paths, lastCloudPaths === localeTest.cloud,
@@ -252,9 +258,11 @@ test('a saved locale localizes the welcome and unconfigured background without g
     await expect(page.locator('#wf-start')).toHaveText(messages['welcome.start'])
     await expect(page.locator('#wf-start')).toBeDisabled()
     await expect(page.locator('#hero-sub')).toHaveText(messages['result.fromNow'].replace('{wait}', '--'))
-    await expect(page.locator('#chart-description')).toHaveText(messages['chart.description'].replace('{table}', messages['chart.tableA']))
-    await expect(page.locator('#chart-legend [data-series="history-A"]')).toHaveText(messages['chart.legendHistory'].replace('{table}', messages['chart.tableA']))
-    await expect(page.locator('#chart-legend [data-series="forecast-p50"]')).toHaveText(messages['chart.legendPrediction'].replace('{table}', messages['bulletin.chart'].replace('{chart}', 'A')))
+    await expect(page.locator('#chart-description')).toHaveText(messages['chart.description'])
+    for (const table of ['A', 'B']) {
+      await expect(page.locator(`#chart-legend [data-series="history-${table}"]`)).toHaveText(messages['chart.legendHistory'].replace('{table}', messages[`chart.table${table}`]))
+      await expect(page.locator(`#chart-legend [data-series="forecast-${table}-p50"]`)).toHaveText(messages['chart.legendPrediction'].replace('{table}', messages['bulletin.chart'].replace('{chart}', table)))
+    }
     expect(await page.evaluate(() => JSON.stringify({
       params: currentParams, profile, paths: lastPercentiles, cloud: lastCloudPaths,
       crossings: [crossingsByPct, crossingsByPctB], panel: window._panelPct, rng: _rngState
@@ -454,10 +462,14 @@ for (const width of [375, 768, 1440, 1920]) {
       const picker = await page.locator('#language-select').boundingBox()
       expect(picker.x, locale).toBeGreaterThanOrEqual(header.x - 1)
       expect(picker.x + picker.width, locale).toBeLessThanOrEqual(header.x + header.width + 1)
-      const date = await page.locator('#hero-value').boundingBox()
-      const result = await page.locator('.forecast-widget').boundingBox()
-      expect(date.x, locale).toBeGreaterThanOrEqual(result.x - 1)
-      expect(date.x + date.width, locale).toBeLessThanOrEqual(result.x + result.width + 1)
+      for (const table of ['A', 'B']) {
+        const card = page.locator(`#ab-status .ab-chip[data-table="${table}"]`)
+        await expect(card.locator('.ab-pred em')).toBeVisible()
+        const date = await card.locator('.ab-pred em').boundingBox()
+        const result = await card.boundingBox()
+        expect(date.x, `${locale} ${table}`).toBeGreaterThanOrEqual(result.x - 1)
+        expect(date.x + date.width, `${locale} ${table}`).toBeLessThanOrEqual(result.x + result.width + 1)
+      }
     }
   })
 }

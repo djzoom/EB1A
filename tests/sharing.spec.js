@@ -67,6 +67,27 @@ async function copyLink(page) {
   return page.evaluate(() => sharingCopies.at(-1))
 }
 
+for (const view of ['A', 'B']) {
+  test(`legacy view=${view} links show both tables and copied links omit the retired view field`, async ({ page }) => {
+    await seedSavedProfile(page)
+    await page.goto(`./${shareHash({ view, country: 'IN' })}`)
+    await expectReady(page)
+    await expect(page.locator('#pv-pd')).toHaveText('2024-02-29')
+    for (const mode of ['trend', 'wait']) {
+      await page.locator(`#mode-${mode}`).click()
+      for (const table of ['A', 'B']) {
+        await expect(page.locator(`#ab-status .ab-chip[data-table="${table}"]`)).toBeVisible()
+        await expect(page.locator(`#chart [data-series="forecast-${table}-p50"]`)).toBeAttached()
+      }
+    }
+    const hash = new URLSearchParams(new URL(await copyLink(page)).hash.slice(1))
+    expect(hash.has('view')).toBe(false)
+    expect(Object.fromEntries(['category', 'country', 'pd'].map(key => [key, hash.get(key)])))
+      .toEqual({ category: 'EB-3', country: 'IN', pd: '2024-02-29' })
+    expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), profileKey)).toEqual(savedProfile)
+  })
+}
+
 for (const timezoneId of ['UTC', 'America/Los_Angeles', 'Asia/Shanghai']) {
   test.describe(`shared calendar dates in ${timezoneId}`, () => {
     test.use({ timezoneId })
@@ -76,8 +97,10 @@ for (const timezoneId of ['UTC', 'America/Los_Angeles', 'Asia/Shanghai']) {
       await expect(page.locator('#pv-pd')).toHaveText('2024-02-29')
       expect(await page.evaluate(() => {
         const date = new Date(profile.pd)
-        return { category: profile.category, country: profile.country, date: [date.getFullYear(), date.getMonth() + 1, date.getDate()], view: abView }
-      })).toEqual({ category: 'EB-3', country: 'CN', date: [2024, 2, 29], view: 'B' })
+        return { category: profile.category, country: profile.country, date: [date.getFullYear(), date.getMonth() + 1, date.getDate()] }
+      })).toEqual({ category: 'EB-3', country: 'CN', date: [2024, 2, 29] })
+      await expect(page.locator('#chart [data-series="forecast-A-p50"]')).toBeAttached()
+      await expect(page.locator('#chart [data-series="forecast-B-p50"]')).toBeAttached()
       expect(await page.evaluate(key => localStorage.getItem(key), profileKey)).toBeNull()
       const url = new URL(await copyLink(page))
       expect(new URLSearchParams(url.hash.slice(1)).get('pd')).toBe('2024-02-29')
@@ -104,7 +127,7 @@ test('the parser rejects invalid dates and identifiers and defaults an omitted c
   expect(results.invalidCategory).toEqual({ invalid: true })
   expect(results.invalidCountry).toEqual({ invalid: true })
   expect(results.defaults.profile.country).toBe('CN')
-  expect(results.defaults).toMatchObject({ view: 'A', pace: 'model', percentile: 'p50' })
+  expect(results.defaults).toMatchObject({ pace: 'model', percentile: 'p50' })
 })
 
 test('shared conditions override the display without overwriting the recipient profile or preferences', async ({ page }) => {
@@ -113,11 +136,10 @@ test('shared conditions override the display without overwriting the recipient p
   await expectReady(page)
   await expect(page.locator('#pv-pd')).toHaveText('2024-02-29')
   await expect(page.locator('#shared-notice')).toBeVisible()
-  expect(await page.evaluate(() => ({ category: profile.category, country: profile.country, view: abView, pace: paceMode })))
-    .toEqual({ category: 'EB-3', country: 'IN', view: 'B', pace: 'recent' })
+  expect(await page.evaluate(() => ({ category: profile.category, country: profile.country, pace: paceMode })))
+    .toEqual({ category: 'EB-3', country: 'IN', pace: 'recent' })
   // 分享预览内切换也不能悄悄改掉接收者原有偏好。
-  await page.locator('#ab-status .ab-chip').first().click()
-  await page.locator('#ab-status .ab-chip').nth(1).click()
+  await expect(page.locator('#ab-status .ab-chip[data-table]')).toHaveCount(2)
   await page.locator('[data-tab="settings"]').click()
   await page.locator('[data-pace="model"]').click()
   await page.locator('[data-pace="recent"]').click()
@@ -145,9 +167,9 @@ test('same-document share navigation applies incoming conditions and language wh
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
   await expect(page.locator('#language-select')).toHaveValue('fr')
   await expect(page.locator('#shared-notice')).toBeVisible()
-  expect(await page.evaluate(() => ({ category: profile.category, country: profile.country, view: abView, pace: paceMode })))
-    .toEqual({ category: 'EB-3', country: 'IN', view: 'B', pace: 'model' })
-  await expect(page.locator('#ab-status .ab-chip').nth(1)).toHaveAttribute('aria-selected', 'true')
+  expect(await page.evaluate(() => ({ category: profile.category, country: profile.country, pace: paceMode })))
+    .toEqual({ category: 'EB-3', country: 'IN', pace: 'model' })
+  await expect(page.locator('#ab-status .ab-chip[data-table]')).toHaveCount(2)
   expect(await page.evaluate(key => ({
     profile: localStorage.getItem(key), view: localStorage.getItem('eb1a_ab_view'),
     pace: localStorage.getItem('gc_pace_mode'), language: localStorage.getItem('gc_language')
@@ -168,8 +190,8 @@ test('same-document share navigation applies incoming conditions and language wh
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
   await expect(page.locator('#shared-notice')).toBeHidden()
   expect(new URL(page.url()).hash).toBe('')
-  expect(await page.evaluate(() => ({ active: profile, view: abView, pace: paceMode })))
-    .toEqual({ active: savedProfile, view: 'A', pace: 'model' })
+  expect(await page.evaluate(() => ({ active: profile, pace: paceMode })))
+    .toEqual({ active: savedProfile, pace: 'model' })
   expect(await page.evaluate(key => ({
     profile: localStorage.getItem(key), view: localStorage.getItem('eb1a_ab_view'),
     pace: localStorage.getItem('gc_pace_mode'), language: localStorage.getItem('gc_language')
@@ -237,11 +259,10 @@ for (const [name, params] of [
   })
 }
 
-test('a copied snapshot restores all model parameters and the active view, pace, percentile and supply scenario', async ({ page }) => {
+test('a copied snapshot restores all model parameters, pace, percentile and supply without a single-table view', async ({ page }) => {
   await seedSavedProfile(page)
   await page.goto('./')
   await expectReady(page)
-  await page.locator('#ab-status .ab-chip').nth(1).click()
   await page.locator('[data-pct="p90"]').click()
   await page.locator('[data-tab="settings"]').click()
   await page.locator('[data-pace="recent"]').click()
@@ -252,13 +273,13 @@ test('a copied snapshot restores all model parameters and the active view, pace,
   })
   await expect.poll(() => page.evaluate(() => currentParams.familyMultiplier)).toBe(2.4)
   const snapshot = await page.evaluate(() => ({
-    params: { ...currentParams }, view: abView, pace: paceMode, percentile: selectedPercentile,
+    params: { ...currentParams }, pace: paceMode, percentile: selectedPercentile,
     supply: supplyScenario, model: activeModel().key, chartType: profile.chartType
   }))
   const url = await copyLink(page)
   const fragment = new URLSearchParams(new URL(url).hash.slice(1))
   expect(JSON.parse(fragment.get('params'))).toEqual(snapshot.params)
-  expect(fragment.get('view')).toBe('B')
+  expect(fragment.has('view')).toBe(false)
   expect(fragment.get('pace')).toBe('recent')
   expect(fragment.get('percentile')).toBe('p90')
   expect(fragment.get('supply')).toBe('tight')
@@ -269,10 +290,10 @@ test('a copied snapshot restores all model parameters and the active view, pace,
   await expectReady(page)
   await expect(page.locator('#shared-notice')).toBeVisible()
   expect(await page.evaluate(() => ({
-    params: { ...currentParams }, view: abView, pace: paceMode, percentile: selectedPercentile,
+    params: { ...currentParams }, pace: paceMode, percentile: selectedPercentile,
     supply: supplyScenario, model: activeModel().key, chartType: profile.chartType
   }))).toEqual(snapshot)
-  await expect(page.locator('#ab-status .ab-chip').nth(1)).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#ab-status .ab-chip[data-table]')).toHaveCount(2)
   await expect(page.locator('[data-pct="p90"]')).toHaveClass(/selected/)
   await expect(page.locator('[data-pace="recent"]')).toHaveClass(/active/)
   await expect(page.locator('[data-sc="tight"]')).toHaveClass(/active/)
