@@ -39,6 +39,24 @@ async function selectLocale(page, locale, picker = '#language-select') {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 }
 
+async function expectFooterAttribution(page, locale) {
+  const attribution = page.locator('.footer [data-i18n-html="footer.attribution"]')
+  await expect(attribution).toHaveCount(1)
+  const messages = await catalog(locale)
+  await expect(attribution).toHaveText(messages['footer.attribution'].replace(/<[^>]+>/g, ''))
+  const source = attribution.locator('a')
+  await expect(source).toHaveCount(1)
+  await expect(source).toHaveText('djzoom/EB1A')
+  await expect(source).toHaveAttribute('href', 'https://github.com/djzoom/EB1A')
+  await expect(source).toHaveAttribute('target', '_blank')
+  await expect(source).toHaveAttribute('rel', /\bnoopener\b/)
+  await expect(source).toHaveAttribute('dir', 'ltr')
+  await expect(page.locator('#footer-summary, #footer-scope, .footer [data-i18n-html="footer.license"]')).toHaveCount(0)
+  await expect(page.locator('.footer')).not.toContainText(/USCIS|DOS|HeroUI Pro|MIT|@DJWZ/)
+  await expect(page.locator('.footer-legal')).toHaveText(messages['footer.legal'].replace(/<[^>]+>/g, ''))
+  await expect(page.locator('.footer')).toContainText('© 2026 djzoom')
+}
+
 async function visibleChinese(page, selector) {
   return page.locator(selector).evaluateAll(elements => elements
     .filter(element => element.getClientRects().length)
@@ -89,11 +107,38 @@ test('all ten bundled catalogs have the same complete keys and interpolation con
   expect(() => t('missing.message')).toThrow('Unknown i18n message')
 })
 
+test('footer keeps only the original-project attribution on first visit and language changes', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('#welcome-modal')).toBeVisible()
+  await expectFooterAttribution(page, 'zh-CN')
+  for (const locale of ['ar', 'ja', 'zh-CN']) {
+    await selectLocale(page, locale, '#welcome-language-select')
+    await expectFooterAttribution(page, locale)
+  }
+})
+
+test('footer attribution survives category changes, saved conditions and reload', async ({ page }) => {
+  await openSaved(page, 'zh-CN')
+  await expectFooterAttribution(page, 'zh-CN')
+  await page.locator('#profile-toggle').click()
+  await page.locator('#pe-cat').selectOption('EB-2')
+  await page.locator('#pe-co').selectOption('IN')
+  await page.locator('#pe-save').click()
+  await expect(page.locator('#profile-edit')).toBeHidden()
+  await expectFooterAttribution(page, 'zh-CN')
+  await selectLocale(page, 'es')
+  await expectFooterAttribution(page, 'es')
+  await page.reload()
+  await expect(page.locator('#pe-cat')).toHaveValue('EB-2')
+  await expectFooterAttribution(page, 'es')
+})
+
 for (const locale of locales) {
   test(`${locale} localizes initial, dynamic, accessible and parameter-source text`, async ({ page }) => {
     const messages = await catalog(locale)
     await page.setViewportSize({ width: 1440, height: 1000 })
     await openSaved(page, locale)
+    await expectFooterAttribution(page, locale)
     await expect(page.locator('html')).toHaveAttribute('lang', locale)
     await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr')
     await expect(page.locator('#language-select option')).toHaveCount(10)
@@ -434,7 +479,7 @@ test('Current results remain localized without creating simulation paths', async
     expect(await page.evaluate(() => lastPercentiles)).toBeNull()
     await expect.poll(async () => stripBidi(await page.locator('#congrats-pd').textContent())).toBe('2026-01')
     await expect(page.locator('#pv-pd')).toHaveText('2026-01-15')
-    await expect(page.locator('#footer-scope')).toHaveCount(1)
+    await expectFooterAttribution(page, locale)
   }
 })
 
@@ -482,6 +527,7 @@ test('single HTML includes all languages and can switch them completely offline'
   for (const locale of locales) {
     await selectLocale(page, locale)
     const messages = await catalog(locale)
+    await expectFooterAttribution(page, locale)
     await expect(page.locator('#share-btn')).toHaveAccessibleName(messages['action.share'])
     await expect(page.locator('#language-select option')).toHaveCount(10)
     const notice = await page.evaluate(() => GCI18n.text('offline.notice', { month: GCI18n.formatMonth(VB_YEAR, VB_MON) }))
