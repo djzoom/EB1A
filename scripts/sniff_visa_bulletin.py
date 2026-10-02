@@ -334,6 +334,166 @@ def parse_eb1_china(html, debug=False):
     return fad, dff
 
 
+# ---- 多类别：解析就业类两张表的【所有】 类别 × chargeability 格子 ----
+# 行标签与类别键（None = 暂不收录：EW 其他工人、EB-4 宗教工作者）。顺序即表内顺序，按序向后搜索以避开说明文字里的回声。
+CELL_ROWS = [("EB-1A", r"\b1st\b"), ("EB-2", r"\b2nd\b"), ("EB-3", r"\b3rd\b"),
+             (None, r"other\s+workers"), ("EB-4", r"\b4th\b"), (None, r"certain\s+religious\s+workers"),
+             ("EB-5", r"5th\s+unreserved"), ("EB-5-Rural", r"\brural\b"),
+             ("EB-5-HighUnemp", r"high\s+unemployment"), ("EB-5-Infra", r"infrastructure")]
+# 列顺序：All(ROW) / CHINA / [EL SALVADOR-GUATEMALA-HONDURAS，2023-03 后已取消] / INDIA / MEXICO / PHILIPPINES
+CELL_COLS = ["ROW", "CN", "IN", "MX", "PH"]
+_MON = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+        "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+
+
+def _row_tokens(seg):
+    """一行文本 → 值列表：'YYYY-MM-DD' / 'current' / 'unavailable'。先去掉括号里的说明(如 (including C5, T5, ...))。"""
+    seg = re.sub(r"\([^)]*\)", " ", seg)
+    vals = []
+    for d, mo, yy, flag in re.findall(r"(\d{2})\s*([A-Za-z]{3})\s*(\d{2})|\b([CcUu])\b", seg):
+        if flag:
+            vals.append("current" if flag.upper() == "C" else "unavailable")
+        else:
+            m = _MON.get(mo.upper())
+            if m:
+                vals.append(f"20{yy}-{m:02d}-{int(d):02d}")
+    return vals
+
+
+def _parse_table_rows(seg):
+    """一张表的文本 → {类别键: {国家键: 值}}。行内取前 5 个值；若多出一列(6 个，含 ESGH)则丢掉第 3 列。"""
+    out, pos, spans = {}, 0, []
+    for key, pat in CELL_ROWS:
+        m = re.search(pat, seg[pos:], re.I)
+        if not m:
+            spans.append((key, None, None))
+            continue
+        s0, e0 = pos + m.start(), pos + m.end()
+        spans.append((key, s0, e0))
+        pos = e0
+    found = [(k, s0, e0) for k, s0, e0 in spans if s0 is not None]
+    for i, (key, s0, e0) in enumerate(found):
+        if key is None:
+            continue
+        end = found[i + 1][1] if i + 1 < len(found) else e0 + 220
+        vals = _row_tokens(seg[e0:end])
+        if len(vals) >= 6:
+            vals = vals[:2] + vals[3:6]
+        if len(vals) >= 5:
+            out[key] = dict(zip(CELL_COLS, vals[:5]))
+    return out
+
+
+def parse_eb_cells(html):
+    """解析所有 类别×国家 格子。返回 {(类别, 国家): (表A值, 表B值)}。
+    锚定方式与 parse_eb1_china 相同（截到【对方】表头），结构守卫同样生效；表内行数不足 5 行则抛异常。"""
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"\s+", " ", text)
+    fa_m = re.search(r"Final Action Date.{0,80}?Employment", text, re.I)
+    df_m = re.search(r"Dates for Filing.{0,80}?Employment", text, re.I)
+    if not fa_m or not df_m:
+        raise ValueError("多类别解析：未找到两张就业类表头")
+
+    def seg(m, other):
+        end = other.start() if other.start() > m.end() else len(text)
+        return text[m.end():end]
+
+    a = _parse_table_rows(seg(fa_m, df_m))
+    b = _parse_table_rows(seg(df_m, fa_m))
+    if len(a) < 5 or len(b) < 5:
+        raise ValueError(f"多类别解析：表A 识别 {len(a)} 行 / 表B {len(b)} 行（需 ≥5）")
+    cells = {}
+    for cat in a:
+        for co in CELL_COLS:
+            if cat in b and co in a[cat] and co in b[cat]:
+                cells[(cat, co)] = (a[cat][co], b[cat][co])
+    return cells
+
+
+def parse_cells_safe(html):
+    """尽力而为：EB-2..5 等格子解析失败绝不能拖累 EB-1A 中国的更新，故吞异常并大声告警，返回 None。"""
+    try:
+        cells = parse_eb_cells(html)
+        print(f"[parse] 多类别格子 {len(cells)} 个（EB-1..EB-5 × 5 个 chargeability）")
+        return cells
+    except Exception as e:
+        print(f"[parse] ⚠️ 多类别解析失败（不影响 EB-1A 中国）：{type(e).__name__}: {e}")
+        return None
+
+
+CUT_CAT_ORDER = ["EB-1A", "EB-2", "EB-3", "EB-4", "EB-5", "EB-5-Rural", "EB-5-HighUnemp", "EB-5-Infra"]
+CUT_CO_ORDER = ["CN", "IN", "ROW", "MX", "PH"]     # EB-1A 必须以 CN 打头：read_current_ab 的正则依赖它
+
+
+def read_cutoff_block(s):
+    """index.html 的 CUTOFF_DATA → {类别: {国家: {'A':..,'B':..}}}"""
+    m = re.search(r"var CUTOFF_DATA = \{(.*?)\}; // CUTOFF_DATA_END", s, re.S)
+    if not m:
+        raise ValueError("index.html 缺 CUTOFF_DATA 块")
+    cut = {}
+    for line in m.group(1).splitlines():
+        lm = re.match(r"\s*'([A-Za-z0-9-]+)':\s*\{(.*)\}\s*,?\s*$", line)
+        if not lm:
+            continue
+        for co, a, b in re.findall(r"'([A-Z]+)':\s*\{\s*A:\s*'([^']*)',\s*B:\s*'([^']*)'\s*\}", lm.group(2)):
+            cut.setdefault(lm.group(1), {})[co] = {"A": a, "B": b}
+    return cut
+
+
+def write_cutoff_block(s, cut):
+    lines = []
+    for cat in CUT_CAT_ORDER + [c for c in cut if c not in CUT_CAT_ORDER]:
+        if cat not in cut:
+            continue
+        cs = ", ".join(f"'{co}': {{ A: '{cut[cat][co]['A']}', B: '{cut[cat][co]['B']}' }}"
+                       for co in CUT_CO_ORDER + [c for c in cut[cat] if c not in CUT_CO_ORDER] if co in cut[cat])
+        lines.append(f"  '{cat}': {{ {cs} }}")
+    text = "var CUTOFF_DATA = {\n" + ",\n".join(lines) + "\n}; // CUTOFF_DATA_END"
+    s2, n = re.subn(r"var CUTOFF_DATA = \{.*?\}; // CUTOFF_DATA_END", lambda m: text, s, count=1, flags=re.S)
+    if n != 1:
+        raise ValueError("index.html 缺 CUTOFF_DATA 块")
+    return s2
+
+
+def _valid_cell_value(v):
+    return v in ("current", "unavailable") or parse_iso(v) is not None
+
+
+def apply_cells_to_index(s, cells, bull):
+    """把多类别格子写进 index.html：整块重写 CUTOFF_DATA，并给 HIST_DATA 追加本期点。
+    EB-1A|CN 不在此处理（由 update_index 原有逻辑 + HISTORY/HISTORY_B 维护）。返回新文本；任何一格非法则跳过该格。"""
+    cut = read_cutoff_block(s)
+    hm = re.search(r"/\*HIST_DATA_BEGIN\*/(.*?)/\*HIST_DATA_END\*/", s, re.S)
+    hist = json.loads(hm.group(1)) if hm else None
+    n_upd = 0
+    for (cat, co), (a, b) in cells.items():
+        if not (_valid_cell_value(a) and _valid_cell_value(b)):
+            print(f"[cells] 跳过 {cat}|{co}：非法值 A={a} B={b}")
+            continue
+        if cat == "EB-1A" and co == "CN":
+            continue
+        cut.setdefault(cat, {})[co] = {"A": a, "B": b}
+        n_upd += 1
+        if hist is not None and not cat.startswith("EB-5-"):
+            for t, v in (("A", a), ("B", b)):
+                val = "C" if v == "current" else ("U" if v == "unavailable" else v)
+                pts = hist.setdefault(f"{cat}|{co}|{t}", [])
+                if pts and pts[-1][0] == bull:
+                    pts[-1][1] = val
+                elif len(pts) >= 2 and pts[-1][1] == val and pts[-2][1] == val:
+                    pts[-1][0] = bull            # 平台期：只把末点(=最新月标记)往后挪
+                else:
+                    pts.append([bull, val])
+    s = write_cutoff_block(s, cut)
+    if hist is not None:
+        body = "{\n" + ",\n".join("  " + json.dumps(k) + ":" + json.dumps(v, separators=(",", ":"))
+                                  for k, v in hist.items()) + "\n}"
+        s = re.sub(r"/\*HIST_DATA_BEGIN\*/.*?/\*HIST_DATA_END\*/",
+                   lambda m: "/*HIST_DATA_BEGIN*/" + body + "/*HIST_DATA_END*/", s, count=1, flags=re.S)
+    print(f"[cells] 已写入 {n_upd} 个格子的 CUTOFF_DATA / HIST_DATA（{bull}）")
+    return s
+
+
 # ---- A1: 写入前的理智门禁（防止解析错误把垃圾日期写进 index.html）----
 def parse_iso(s):
     try:
@@ -859,6 +1019,7 @@ def probe_target(ty, tm, tag, log, args, t_now):
     print(f"[hit] {tag} 已发布！{url}" + ("（经 Wayback 兜底）" if est_time else ""))
     fad, dff = parse_eb1_china(html)
     print(f"[parse] EB-1 中国 表A(裁定)={fad}  表B(递交)={dff}")
+    cells = parse_cells_safe(html)      # EB-2..5 等其余格子：尽力而为
 
     # 经 Wayback 命中的 hour 不进自学习窗口（快照时间是抓取时刻，非官方释出时刻）
     rec = {"bulletin": tag, "detected_et": t.strftime("%Y-%m-%d %H:%M"),
@@ -897,7 +1058,7 @@ def probe_target(ty, tm, tag, log, args, t_now):
         save_log(log)
         print(f"[log] 已记录到 {LOG}")
         try:
-            update_index(ty, tm, fad, dff, t, est=est_time)
+            update_index(ty, tm, fad, dff, t, est=est_time, cells=cells)
             print("[index] 已更新 CUTOFF_DATA / HISTORY / VB_RELEASED；FILING_CHART 已自动判定(A/B 或待确认)")
             # 标题+正文写进 GITHUB_ENV；由 workflow 在"确实新建了复核 PR"时才推送一次，防刷屏。
             _emit_env("BARK_TITLE", f"EB1A · {ty}年{tm}月排期已更新")
@@ -1054,7 +1215,7 @@ def main():
     write_run_summary(status, detail)
 
 
-def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None, manual_entry=False):
+def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None, manual_entry=False, cells=None):
     """把新一期表A/表B 写回 index.html：更新 CUTOFF_DATA、VB_* 公告元信息，并追加 HISTORY/HISTORY_B。
     detected: 本期探测到的时刻(aware datetime, ET)；既写显示用日期 VB_RELEASED，也写精确时刻 VB_RELEASED_TS。
     est=True(经 Wayback 兜底)时 VB_RELEASED_EST 置 true → 前端显示加「约」。
@@ -1077,6 +1238,13 @@ def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None, man
     # 1) 更新 EB-1A CN 的 A/B
     s = re.sub(r"('EB-1A':\s*\{\s*'CN':\s*\{\s*A:\s*')[0-9-]+(',\s*B:\s*')[0-9-]+(')",
                lambda m: m.group(1) + fad + m.group(2) + dff + m.group(3), s, count=1)
+
+    # 1a) 其余类别×国家格子（尽力而为：失败只告警，绝不影响上面 EB-1A 中国的更新）
+    if cells:
+        try:
+            s = apply_cells_to_index(s, cells, bull)
+        except Exception as e:
+            print(f"[cells] ⚠️ 多类别写回失败（EB-1A 中国已更新，其余格子保持旧值）：{type(e).__name__}: {e}")
 
     # 1b) 更新公告元信息 VB_MONTH / VB_YEAR / VB_MON / VB_RELEASED
     s = re.sub(r"(var VB_MONTH = ')[^']*(')", lambda m: m.group(1) + f"{ty}年{tm}月" + m.group(2), s, count=1)
@@ -1111,7 +1279,8 @@ def update_index(ty, tm, fad, dff, detected, est=False, chart_override=None, man
                lambda m: m.group(1) + chart_state + m.group(2), s, count=1)
 
     # 2) 追加 HISTORY（表A）与 HISTORY_B（表B）最新点（若该 bulletin 月尚未存在）
-    if bull not in s:
+    # 判重只看单引号形式 ['2026-10-15',…]：HIST_DATA 是 JSON(双引号)，也含同样的日期串，不能用裸子串判断
+    if f"['{bull}'," not in s:
         s = re.sub(r"(\n\]\.map\(function\(p\) \{ return \{ x: new Date\(p\[0\]\)\.getTime\(\),"
                    r" y: new Date\(p\[1\]\)\.getTime\(\) \}; \}\);\s*\n\s*var HISTORY_B)",
                    f",\n  ['{bull}','{fad}']\\1", s, count=1)

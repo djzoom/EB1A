@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# main 的整条检查和发布串行，防止旧快照在新快照之后发布。
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: false
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+
+  # 外部 PR 只运行无凭据的源码检查；授权组件不会分发给 PR runner。
+  source-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install public dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Source syntax and data regression
+        run: |
+          python scripts/check_project.py --source-only
+          python scripts/test_sniff.py
+          python scripts/test_bulletin_history.py
+      - name: Explain PR validation scope
+        if: github.event_name == 'pull_request'
+        run: echo '源码和公告回归已验证。HeroUI Pro 授权构建及浏览器测试在可信仓库分支 push 时运行；PR 不接收授权令牌。' >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    needs: source-checks
+    # 仓库分支 push 由有写入权限的成员产生；不在 PR 上运行带授权令牌的步骤。
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Download licensed HeroUI Pro components
+        env:
+          HEROUI_AUTH_TOKEN: ${{ secrets.HEROUI_AUTH_TOKEN }}
+        run: |
+          test -n "$HEROUI_AUTH_TOKEN" || { echo '::error::Configure the HEROUI_AUTH_TOKEN repository secret to build HeroUI Pro'; exit 1; }
+          npm rebuild @heroui-pro/react
+      - name: Build site and offline release
+        run: npm run build
+      - name: Validate generated assets
+        run: python scripts/check_project.py
+      - name: Install browser test dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Browser regression
+        env:
+          GCTIME_PREBUILT: '1'
+        run: npm test
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-diagnostics
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: dist/site/
+          include-hidden-files: true
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline
+          path: dist/EB1A-offline.zip
+          if-no-files-found: error
+
+  github-pages:
+    needs: [workflow-lint, validate]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy-pages.yml
+
+  offline-release:
+    needs: [workflow-lint, validate]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/package-offline.yml
