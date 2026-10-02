@@ -32,7 +32,7 @@ function parse(hash, categories, countries) {
 
 function build(locationHref, state) {
   const source = new URL(locationHref)
-  const url = new URL(/^https?:$/.test(source.protocol) ? source.origin + source.pathname : 'https://gc.bracketboss2026.com/')
+  const url = new URL(/^https?:$/.test(source.protocol) ? source.origin + source.pathname : 'https://djzoom.github.io/EB1A/')
   const values = new URLSearchParams({ share: '1', category: state.category, country: state.country,
     pd: state.pd, pace: state.pace, percentile: state.percentile })
   if (state.supply) values.set('supply', state.supply)

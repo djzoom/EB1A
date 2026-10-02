@@ -189,7 +189,7 @@ export default {
   'explain.simulationTitle': '{step} مونت كارلو',
   'explain.simulation': 'يتفاوت التقدم شهرياً ويشهد فترات توقف. تُجرى <b>{count} محاكاة</b> لاستخراج توزيع مع حالات <b>سريعة / وسيطة / بطيئة</b>.',
   'footer.summary': 'توقعات <span id="footer-scope">{scope}</span> · مزامنة تلقائية للنشرات · المصادر USCIS / DOS · <a href="https://x.com/DJWZ" target="_blank" rel="noopener">@DJWZ</a>',
-  'footer.license': 'شيفرة المشروع وفق <a href="https://github.com/s546126/gctime/blob/main/LICENSE" target="_blank" rel="noopener">ترخيص MIT</a> · المصدر <a href="https://github.com/s546126/gctime" target="_blank" rel="noopener">s546126/gctime</a> · تخضع HeroUI Pro أيضاً لترخيص تجاري مستقل',
+  'footer.license': 'شيفرة المشروع وفق <a href="https://github.com/djzoom/EB1A/blob/main/LICENSE" target="_blank" rel="noopener">ترخيص MIT</a> · المصدر <a href="https://github.com/djzoom/EB1A" target="_blank" rel="noopener">djzoom/EB1A</a> · تخضع HeroUI Pro أيضاً لترخيص تجاري مستقل',
   'footer.legal': 'تقدير إحصائي <b>لا يشكل مشورة قانونية أو مشورة هجرة</b>، ولا يضمن الدقة. المرجع هو النشرة الرسمية؛ استشر محامي هجرة مرخصاً. تبقى مدخلاتك في متصفحك المحلي.',
   'offline.notice': 'نسخة دون اتصال · البيانات حتى {month} · لا تُزامَن النشرات المستقبلية تلقائياً',
   'offline.readme': 'توقعات البطاقة الخضراء (EB-1 إلى EB-5، عدة دول)\n\nافتح EB1A.html في المتصفح؛ يعمل بالكامل دون اتصال.\nهذا الملف لقطة بيانات ولا يُزامن النشرات المستقبلية تلقائياً. نزّل نسخة جديدة للحصول على التحديثات.\nالتوقع للاستئناس وليس مشورة قانونية أو مشورة هجرة. النشرة الرسمية هي المرجع.',
