@@ -41,7 +41,7 @@ on:
         description: '人工录入·官方发布日 YYYY-MM-DD（留空=未知，不会用今天顶替）'
         default: ''
       manual_chart:
-        description: '人工录入·本月职业类递交用表'
+        description: '人工录入·本月职业类递交用表（只填本框=只改用表，不动表A/表B；USCIS 公布后自动补判抓不到时用）'
         type: choice
         options: ['?', 'A', 'B']
         default: '?'
@@ -94,6 +94,9 @@ jobs:
               --dff "${{ inputs.manual_dff }}" \
               --released "${{ inputs.manual_released }}" \
               --chart "${{ inputs.manual_chart }}"
+          elif [ -n "${{ github.event_name == 'workflow_dispatch' && inputs.manual_chart != '?' && inputs.manual_chart || '' }}" ]; then
+            # 只填了用表框：只改 FILING_CHART(USCIS 已公布但托管 runner 抓不到、本机值守也没跑时)
+            python scripts/sniff_visa_bulletin.py --set-chart "${{ inputs.manual_chart }}"
           elif [ -n "${{ github.event_name == 'workflow_dispatch' && inputs.rehearse || '' }}" ]; then
             python scripts/sniff_visa_bulletin.py --rehearse "${{ inputs.rehearse }}"
           elif [ "${{ github.event_name == 'workflow_dispatch' && inputs.drill }}" = "true" ]; then
@@ -126,9 +129,9 @@ jobs:
           branch: auto/visa-bulletin-update
           delete-branch: true
           commit-message: "Auto: visa bulletin update"
-          title: "🔎 探测到新签证公告（自动更新）"
+          title: "🔎 签证公告数据更新（自动）"
           body: |
-            探测器检测到新一期签证公告，已自动更新 `data/release_log.json` 与 `index.html`，
+            探测器检测到新一期签证公告（或人工录入了本月递交用表），已自动更新 `data/release_log.json` 与 `index.html`，
             **本 PR 将自动合并上线**（保留作审计记录）。
 
             数据已过理智门禁（合法日期 / 区间 / 移动幅度校验）。如发现有误：
