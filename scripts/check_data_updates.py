@@ -20,6 +20,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 USCIS_DIR = REPO_ROOT / "data" / "raw" / "uscis"
 DOS_DIR = REPO_ROOT / "data" / "raw" / "dos"
+INDEX_HTML = REPO_ROOT / "index.html"
+# 递交用表宽限期(天):USCIS 承诺公告后一周内指定用表,实测多为当天(2026-10 期 9/29 当天)。
+# 超过宽限仍是 '?' 就说明自动补判没跑通,必须有人去看一眼。
+CHART_GRACE_DAYS = 3
 
 MONTHS = [
     "january", "february", "march", "april", "may", "june",
@@ -300,6 +304,34 @@ def freshness_report():
     return lines, stale
 
 
+def chart_pending_note(now=None):
+    """本月递交用表(index.html 的 FILING_CHART)仍为 '?' 且公告发布已超宽限期 → 返回告警文案;否则 None。
+
+    2026-10 期事故:USCIS 9/29 当天公布职业类用表B,线上却挂了 17 天「逾期未公布」。
+    自动补判只在 self-hosted runner 跑(托管 runner 被 USCIS 403),而自建 runner 并不存在;
+    本机值守 9/18 后再没提交过;页面那行灰字没人看。三条路全断,却没有任何一条告警。
+    这里不抓 USCIS(托管抓不到),只看"我们自己有没有把值填上"——填不上就每天提醒人去填。"""
+    now = now or datetime.now()
+    try:
+        s = INDEX_HTML.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    m = re.search(r"var VB_YEAR = (\d+), VB_MON = (\d+);", s)
+    c = re.search(r"var FILING_CHART = '([^']*)'", s)
+    if not m or not c or c.group(1) in ("A", "B"):
+        return None
+    vy, vm = int(m.group(1)), int(m.group(2))
+    r = re.search(r"var VB_RELEASED = '(\d{4}-\d{2}-\d{2})'", s)
+    # 发布日未知时按公告期月份 1 号起算——到那天 USCIS 必然已公布。
+    base = datetime.strptime(r.group(1), "%Y-%m-%d") if r else datetime(vy, vm, 1)
+    days = (now - base).days
+    if days <= CHART_GRACE_DAYS:
+        return None
+    return (f"{vy}年{vm}月递交用表仍未录入（公告发布已 {days} 天；USCIS 通常当天至一周内公布，"
+            "托管 runner 抓不到）——请打开 USCIS 用表页核对，"
+            "再到 Sniff Visa Bulletin 工作流只填 manual_chart 一键录入")
+
+
 def probe_status(url: str):
     """HEAD 探测,返回 HTTP 状态码(连接失败返回 None)。403=被反爬挡,404=文件不存在。"""
     try:
@@ -556,6 +588,10 @@ def main():
     # 逐源新鲜度巡检：报表永远写运行摘要(被动存活证明，不推 Bark)；
     # 只有"有问题"(漏抓/逾期)或"有新数据"才推 Bark —— 空跑一律静默。
     report, stale = freshness_report()
+    cp = chart_pending_note()
+    if cp:
+        report.append("  递交用表: ⚠️ " + cp)
+        stale.append(cp)
     print()
     for ln in report:
         print(ln)

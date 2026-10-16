@@ -190,13 +190,22 @@ _m = _re.search(r"cron:\s*'[\d,]+ [\d-]+ (\d+)-(\d+) \* \*'", open(_wf, encoding
 check("cron 加密档期与 CORE_DAY_LO/HI 一致",
       (int(_m.group(1)), int(_m.group(2))) if _m else None,
       (S.CORE_DAY_LO, S.CORE_DAY_HI))
-# 历史实测发布日必须全部落在密探窗内,否则命中当天会被稀疏探测拖慢数小时
+# 历史实测发布日必须全部落在密探窗内,否则命中当天会被稀疏探测拖慢数小时。
+# 只约束本系统观测到的发布日;律所快讯推断的日期(inferred)不参与断言,但落在窗外必须打出来——
+# 2026-10 期 9/29 才发(FY 首期、史上最晚),窗外只有每日两次的哨兵,这不能被静默吞掉。
 import json as _json  # noqa: E402
-_days = [r["day"] for r in _json.load(open(_os.path.join(
+_log = _json.load(open(_os.path.join(
     _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "data", "release_log.json"),
-    encoding="utf-8")) if r.get("day") is not None]   # 发布日未知的补录期不是观测值，不参与
-check(f"历史发布日 {sorted(_days)} 全在密探窗 {S.CORE_DAY_LO}-{S.CORE_DAY_HI} 内",
+    encoding="utf-8"))
+_days = [r["day"] for r in _log if r.get("day") is not None
+         and r.get("release_date_source") != "inferred"]   # 发布日未知/推断的补录期不是观测值
+check(f"实测发布日 {sorted(_days)} 全在密探窗 {S.CORE_DAY_LO}-{S.CORE_DAY_HI} 内",
       all(S.CORE_DAY_LO <= d <= S.CORE_DAY_HI for d in _days), True)
+_out = [(r["bulletin"], r["day"]) for r in _log if r.get("day") is not None
+        and r.get("release_date_source") == "inferred"
+        and not (S.CORE_DAY_LO <= r["day"] <= S.CORE_DAY_HI)]
+if _out:
+    print(f"  ⚠️ 推断发布日落在密探窗外(仅哨兵覆盖，每日 2 次): {_out}")
 
 print("\n## 7. 兜底分支不得谎报「已发布」")
 # 2026-09 的真实 bug:fetch_filing_chart 改成返回 (chart, fetched_ok) 后,
@@ -254,6 +263,41 @@ if _ET:
     check("命中的是 ET 09:00 那一槽", summer and summer[0].hour == 9, True)
 else:
     print("  ⏭ 无 zoneinfo，跳过")
+
+print("\n## 8. 递交用表：人工一键录入 + 逾期未录入告警")
+# 2026-10 期:USCIS 9/29 当天公布用表B。自动补判只在 self-hosted 跑(托管被 403)而自建 runner
+# 不存在,本机值守 9/18 后停了,唯一的人工路径又要整期重录 → 线上挂了 17 天「逾期未公布」。
+# 两道补丁:--set-chart 只改用表;check_data_updates 在用表超宽限仍为 '?' 时每日告警。
+import re  # noqa: E402
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+import check_data_updates as C  # noqa: E402
+
+_tmp = tempfile.mkdtemp()
+_idx = os.path.join(_tmp, "index.html")
+shutil.copy(S.INDEX, _idx)
+_s = open(_idx, encoding="utf-8").read()
+_s = re.sub(r"(var FILING_CHART = ')[^']*(')", r"\g<1>?\g<2>", _s, count=1)
+_s = re.sub(r"(var FILING_CHART_STATE = ')[^']*(')", r"\g<1>pending\g<2>", _s, count=1)
+_s = re.sub(r"var VB_RELEASED = [^;]*;", "var VB_RELEASED = '2026-09-29';", _s, count=1)
+open(_idx, "w", encoding="utf-8").write(_s)
+_saved_idx, _saved_c = S.INDEX, C.INDEX_HTML
+try:
+    S.INDEX, C.INDEX_HTML = _idx, Path(_idx)
+    check("发布 2 天内用表为 ? → 不告警(USCIS 正常滞后)", C.chart_pending_note(datetime(2026, 10, 1)), None)
+    _note = C.chart_pending_note(datetime(2026, 10, 9))
+    check("发布 10 天仍为 ? → 告警", bool(_note and "仍未录入" in _note), True)
+    _st, _ = S.set_chart("B")
+    check("--set-chart B 写回", _st, "hit")
+    check("  ↑ FILING_CHART 变为 B", S.read_vb_state()[2], "B")
+    check("  ↑ STATE 变为 ok", "var FILING_CHART_STATE = 'ok'" in open(_idx, encoding="utf-8").read(), True)
+    check("录入后不再告警", C.chart_pending_note(datetime(2026, 10, 9)), None)
+    check("重复录入同值 → skip(不产生空 PR)", S.set_chart("B")[0], "skip")
+    check("非法值 → error", S.set_chart("C")[0], "error")
+finally:
+    S.INDEX, C.INDEX_HTML = _saved_idx, _saved_c
+    shutil.rmtree(_tmp, ignore_errors=True)
 
 print()
 if FAILED:

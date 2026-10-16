@@ -525,11 +525,11 @@ var VB_YEAR = 2026, VB_MON = 10;  // 同上，数值形式（用于推下月）
 // 而那个整点 12:00 根本不可能来自真实抓取。现按来源三分:
 //   observed = 本系统抓取器首见时间戳(精确到分)  inferred = 外部可验证来源推得(仅到日)
 //   unknown  = 无可靠来源(禁止回填任何估算值)
-var VB_RELEASED = null;          // 该期发布日期；null=未知
+var VB_RELEASED = '2026-09-29';  // 该期发布日期；null=未知
 var VB_RELEASED_TS = 0;          // 发布/探测时刻（epoch 毫秒, UTC）；0=无观测时刻
 var VB_RELEASED_EST = true;     // 保留兼容；来源判定一律以 VB_RELEASED_SOURCE 为准
-var VB_RELEASED_SOURCE = 'unknown';   // 'observed' | 'inferred' | 'unknown'
-var VB_RELEASED_NOTE = '';  // inferred/unknown 时的来源说明
+var VB_RELEASED_SOURCE = 'inferred';   // 'observed' | 'inferred' | 'unknown'
+var VB_RELEASED_NOTE = '律所 9/29 同日快讯';  // inferred/unknown 时的来源说明
 
 // 历史发布日（bulletin月 → 实际发布日，来源律所同日文章）。探测器命中后自动追加；
 // 供"下月发布预测(近3次均值→工作日)"与未来研究。结尾哨兵注释勿删（探测器按它追加）。
@@ -545,7 +545,8 @@ var RELEASE_HISTORY = [
   // 已置 null 并标 unknown——旁证亦不支持 8/14：该日后一周内第三方轮询站与各律所快讯
   // 均无该期动静，实际上线更可能在 8/20–8/21。真值待 Wayback CDX 重建（见 rebuild_release_dates.py）。
   ['2026-09', null, 'unknown'],
-  ['2026-10', null, 'unknown']
+  // 2026-10：探测器全程被 403，发布日取自 Fragomen/Murthy/bizlegalservices 三家 9/29 同日快讯。
+  ['2026-10', '2026-09-29', 'inferred']
 ]; // RELEASE_HISTORY_END
 var FILING_CHART = 'B'; // 'A'=用表A递交；'B'=用表B递交；'?'=尚未取到（具体措辞见 FILING_CHART_STATE）
 // 'pending'=USCIS 尚未更新该月（正常滞后）；'error'=我们抓取报错。两者必须区分显示，

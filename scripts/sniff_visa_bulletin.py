@@ -532,6 +532,30 @@ def resolve_filing_chart():
     return "hit", f"FILING_CHART 补判为 {chart}（{vy}-{vm:02d}）"
 
 
+def set_chart(chart):
+    """人工指定本月职业类递交用表：只改 FILING_CHART/STATE，不碰表A/表B。
+
+    为什么要单独一个入口：自动补判只在 self-hosted runner 上跑(托管 runner 被 USCIS 403)，
+    本机值守又依赖那台电脑开着。两条都断时，此前唯一的人工路径是整期重录(--manual 必须
+    给 --fad/--dff)。2026-10 期 USCIS 9/29 当天就公布用表B，线上却挂了 17 天「逾期未公布」。
+    现在 workflow_dispatch 只填 manual_chart 一个框即可走到这里。"""
+    if chart not in ('A', 'B'):
+        return "error", f"--set-chart 只接受 A/B，收到 {chart!r}"
+    vy, vm, cur = read_vb_state()
+    if not vy:
+        return "error", "读不到 VB_YEAR/VB_MON"
+    if cur == chart:
+        return "skip", f"FILING_CHART 已是 {chart}（{vy}-{vm:02d}），无需改动"
+    s = open(INDEX, encoding="utf-8").read()
+    s = re.sub(r"(var FILING_CHART = ')[^']*(')", lambda m: m.group(1) + chart + m.group(2), s, count=1)
+    s = re.sub(r"(var FILING_CHART_STATE = ')[^']*(')", lambda m: m.group(1) + "ok" + m.group(2), s, count=1)
+    open(INDEX, "w", encoding="utf-8").write(s)
+    label = 'Final Action(表A)' if chart == 'A' else 'Dates for Filing(表B)'
+    _emit_env("BARK_TITLE", f"EB1A · {vy}年{vm}月递交用表已确认")
+    _emit_env("BARK_BODY", f"USCIS 指定 {vy}年{vm}月职业类递交用 {label}。已上线（人工录入）。")
+    return "hit", f"FILING_CHART 人工录入为 {chart}（{vy}-{vm:02d}，原值 {cur}）"
+
+
 def selftest():
     """抓取『已发布的当前那期』公告，跑 parse_eb1_china 并与 index.html 现存值对比，
     验证解析器对真实 HTML 端到端正确。不写任何文件。返回 (status, detail)。"""
@@ -1008,6 +1032,8 @@ def main():
                     help="读取环境变量 BARK_BODY 发一条命中通知(由 workflow 在新建复核 PR 后调用)")
     ap.add_argument("--filing-chart", action="store_true",
                     help="若当前 FILING_CHART 为 '?'，尝试从 USCIS 补判本月职业类用表(滞后场景每日补判)")
+    ap.add_argument("--set-chart", default="", choices=["", "A", "B"],
+                    help="人工指定本月职业类递交用表(只改用表，不动表A/表B)；自动补判全断时用")
     ap.add_argument("--manual", action="store_true",
                     help="一键人工录入一期公告(官网+档案馆全堵时)；配合 --bulletin/--fad/--dff 等")
     ap.add_argument("--bulletin", help="人工录入：公告对应月份，形如 2026-09")
@@ -1022,6 +1048,10 @@ def main():
 
     if args.filing_chart:
         status, detail = resolve_filing_chart()
+        write_run_summary(status, detail)
+        return
+    if args.set_chart:
+        status, detail = set_chart(args.set_chart)
         write_run_summary(status, detail)
         return
     if args.manual:
