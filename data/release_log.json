@@ -58,5 +58,16 @@
     "dff": "2024-07-01",
     "via": "manual",
     "release_date_source": "inferred"
+  },
+  {
+    "bulletin": "2026-11",
+    "detected_et": null,
+    "day": null,
+    "hour": null,
+    "weekday": null,
+    "fad": "2023-08-01",
+    "dff": "2024-07-01",
+    "via": "manual",
+    "release_date_source": "unknown"
   }
 ]
