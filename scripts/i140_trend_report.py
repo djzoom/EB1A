@@ -123,9 +123,11 @@ def china_cohort_wall(cohort, rate_now, p):
         dec = d_["approved"] + d_["denied"]
         p(f"  FY{y}: 总 {d_['total']:,} | 已批 {d_['approved']:,} 已拒 {d_['denied']:,} "
           f"待决 {d_['pending_other']:,} → 已决获批率 {d_['approved']/dec*100:.1f}%")
-    p(f"  → 待决集中在近两届共 {overhang:,} 件（FY2014-2022 合计仅 {old:,}，历史各届早已消化完）")
+    first_old = [y for y in yrs if y not in recent]
+    old_span = f"FY{first_old[0]}-{first_old[-1]}" if first_old else "更早各届"
+    p(f"  → 待决集中在近 {len(recent)} 届共 {overhang:,} 件（{old_span} 合计仅 {old:,}，历史各届早已消化完）")
     if rate_now:
-        p(f"  这批将在 FY2026 裁定，正撞上获批率塌方：按 {rate_now}% 计 → "
+        p(f"  这批将在此后逐季裁定，正撞上获批率塌方：按 {rate_now}% 计 → "
           f"未来进入排队 ≈ {round(overhang*rate_now/100):,} 人(主申)")
         # 表观获批率的幻觉:待决未计入,一旦按当前低获批率裁完,各届最终值大幅下修
         for y in recent:

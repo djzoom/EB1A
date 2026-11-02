@@ -13,111 +13,589 @@
     "  2) 获批率定义 = Approved / (Approved + Denied),不含 Pending。",
     "  3) 某些类别 Approved > Received 属正常(在消化历史积压)。"
   ],
-
   "eb1a_adjudication_rate": {
     "_note": "EB-1A(E11) 逐季获批率。denied_pct 取自官方图表标注,approved_pct = 100 - denied_pct。",
-    "_source": "USCIS EB-1A Adjudications Over Time(FY2025 Q1 – FY2026 Q2)",
-    "FY2024_Q1": { "approved_pct": 73.0, "approximate": true, "_src": "二手转述,无原表" },
-    "FY2024_Q2": { "approved_pct": 71.0, "approximate": true, "_src": "二手转述,无原表" },
-    "FY2024_Q3": { "approved_pct": 70.0, "approximate": true, "_src": "二手转述,无原表" },
-    "FY2024_Q4": { "approved_pct": 74.0, "approximate": true, "_src": "二手转述,无原表" },
-    "FY2025_Q1": { "approved_pct": 74.86, "denied_pct": 25.14, "_src": "原表精算 3291/(3291+1105)" },
-    "FY2025_Q2": { "approved_pct": 72.70, "denied_pct": 27.30 },
-    "FY2025_Q3": { "approved_pct": 66.60, "denied_pct": 33.40 },
-    "FY2025_Q4": { "approved_pct": 53.40, "denied_pct": 46.60 },
-    "FY2026_Q1": { "approved_pct": 47.40, "denied_pct": 52.60 },
-    "FY2026_Q2": { "approved_pct": 41.70, "denied_pct": 58.30 }
+    "_source": "USCIS EB-1A Adjudications Over Time(FY2025 Q1 – FY2026 Q2)；FY2026 Q3 起改由季报 xlsx 直接计算",
+    "FY2024_Q1": {
+      "approved_pct": 73.0,
+      "approximate": true,
+      "_src": "二手转述,无原表"
+    },
+    "FY2024_Q2": {
+      "approved_pct": 71.0,
+      "approximate": true,
+      "_src": "二手转述,无原表"
+    },
+    "FY2024_Q3": {
+      "approved_pct": 70.0,
+      "approximate": true,
+      "_src": "二手转述,无原表"
+    },
+    "FY2024_Q4": {
+      "approved_pct": 74.0,
+      "approximate": true,
+      "_src": "二手转述,无原表"
+    },
+    "FY2025_Q1": {
+      "approved_pct": 74.86,
+      "denied_pct": 25.14,
+      "_src": "原表精算 3291/(3291+1105)"
+    },
+    "FY2025_Q2": {
+      "approved_pct": 72.7,
+      "denied_pct": 27.3
+    },
+    "FY2025_Q3": {
+      "approved_pct": 66.6,
+      "denied_pct": 33.4
+    },
+    "FY2025_Q4": {
+      "approved_pct": 53.4,
+      "denied_pct": 46.6
+    },
+    "FY2026_Q1": {
+      "approved_pct": 47.4,
+      "denied_pct": 52.6
+    },
+    "FY2026_Q2": {
+      "approved_pct": 41.7,
+      "denied_pct": 58.3
+    },
+    "FY2026_Q3": {
+      "approved_pct": 32.2,
+      "denied_pct": 67.8,
+      "_src": "季报 xlsx E11 approved/denied 直接计算(非图表标注)"
+    }
   },
-
   "niw_adjudication_rate": {
     "_note": "NIW 获批率,均由 Approved/Denied 原始数精算。",
-    "FY2025_Q1": { "approved_pct": 62.78, "approximate": false },
-    "FY2026_Q1": { "approved_pct": 42.61, "approximate": false },
-    "FY2026_Q2": { "approved_pct": 48.09, "approximate": false }
+    "FY2025_Q1": {
+      "approved_pct": 62.78,
+      "approximate": false
+    },
+    "FY2026_Q1": {
+      "approved_pct": 42.61,
+      "approximate": false
+    },
+    "FY2026_Q2": {
+      "approved_pct": 48.09,
+      "approximate": false
+    },
+    "FY2026_Q3": {
+      "approved_pct": 55.28,
+      "approximate": false,
+      "_src": "季报 xlsx NIW approved/denied 直接计算"
+    }
   },
-
   "china_cohort": {
     "_note": [
-      "USCIS《I-140 Petitions Received and Current Status for China》,按【收件财年】分组、",
-      "列该组当前状态。与 quarters(按裁定季度)是两个不同切面,勿混用。",
-      "快照约 2025 年中(FY2025 仅含 Q1-Q3),故 FY2026 起的获批率塌方尚未反映在本表里。",
+      "USCIS《I-140 Petitions Received and Current Status for China》(Fiscal Years 2014 to 2026 (Q3)),",
+      "按【收件财年】分组、列该组当前状态。与 quarters(按裁定季度)是两个不同切面,勿混用。",
+      "快照 FY2026 Q3(约 2026-07);FY2026 仅含 Q1-Q3。来源:用户 2026-10-02 转发的官方表格截图,",
+      "每行 approved+denied+pending 与 total、E11+E12+E13 与 approved 均已核对相等。",
       "⚠️ pending 列原名 'Pending, Other',含撤回/其它处置,作为纯待决量属上界。"
     ],
     "_scope": "china",
-    "_snapshot": "FY2025_Q3",
+    "_snapshot": "FY2026_Q3",
     "eb1": {
-      "2014": { "total": 4434, "approved": 3824, "denied": 540,  "pending_other": 70 },
-      "2015": { "total": 4864, "approved": 4309, "denied": 494,  "pending_other": 61 },
-      "2016": { "total": 5328, "approved": 4615, "denied": 664,  "pending_other": 49 },
-      "2017": { "total": 6120, "approved": 4939, "denied": 1138, "pending_other": 43 },
-      "2018": { "total": 5979, "approved": 4492, "denied": 1450, "pending_other": 37 },
-      "2019": { "total": 5615, "approved": 3704, "denied": 1892, "pending_other": 19 },
-      "2020": { "total": 4390, "approved": 2964, "denied": 1403, "pending_other": 23 },
-      "2021": { "total": 4415, "approved": 3389, "denied": 998,  "pending_other": 28 },
-      "2022": { "total": 5643, "approved": 4318, "denied": 1244, "pending_other": 81 },
-      "2023": { "total": 9380, "approved": 7186, "denied": 1824, "pending_other": 370 },
-      "2024": { "total": 10486, "approved": 6288, "denied": 1307, "pending_other": 2891 },
-      "2025": { "total": 9092, "approved": 3353, "denied": 739,  "pending_other": 5000, "partial_q1q3": true }
+      "2014": {
+        "total": 4472,
+        "approved": 3854,
+        "denied": 548,
+        "pending_other": 70
+      },
+      "2015": {
+        "total": 4903,
+        "approved": 4340,
+        "denied": 502,
+        "pending_other": 61
+      },
+      "2016": {
+        "total": 5372,
+        "approved": 4652,
+        "denied": 674,
+        "pending_other": 46
+      },
+      "2017": {
+        "total": 6180,
+        "approved": 4989,
+        "denied": 1147,
+        "pending_other": 44
+      },
+      "2018": {
+        "total": 6027,
+        "approved": 4531,
+        "denied": 1455,
+        "pending_other": 41
+      },
+      "2019": {
+        "total": 5652,
+        "approved": 3730,
+        "denied": 1900,
+        "pending_other": 22
+      },
+      "2020": {
+        "total": 4425,
+        "approved": 2988,
+        "denied": 1410,
+        "pending_other": 27
+      },
+      "2021": {
+        "total": 4444,
+        "approved": 3410,
+        "denied": 1002,
+        "pending_other": 32
+      },
+      "2022": {
+        "total": 5701,
+        "approved": 4350,
+        "denied": 1253,
+        "pending_other": 98
+      },
+      "2023": {
+        "total": 9587,
+        "approved": 7249,
+        "denied": 1892,
+        "pending_other": 446
+      },
+      "2024": {
+        "total": 10653,
+        "approved": 6886,
+        "denied": 1664,
+        "pending_other": 2103
+      },
+      "2025": {
+        "total": 11818,
+        "approved": 5066,
+        "denied": 1762,
+        "pending_other": 4990
+      },
+      "2026": {
+        "total": 7158,
+        "approved": 2004,
+        "denied": 1026,
+        "pending_other": 4128,
+        "partial_q1q3": true
+      }
     },
     "eb1_approvals_by_category": {
       "_note": "仅有各子类【获批数】,官方未按子类拆分拒绝数,故中国 E11 单独获批率不可算。",
-      "E11": { "2022": 2335, "2023": 4308, "2024": 3608, "2025": 1538 },
-      "E12": { "2022": 1524, "2023": 2122, "2024": 1792, "2025": 1113 },
-      "E13": { "2022": 459,  "2023": 756,  "2024": 888,  "2025": 702 }
+      "E11": {
+        "2014": 1792,
+        "2015": 2093,
+        "2016": 2375,
+        "2017": 2716,
+        "2018": 2359,
+        "2019": 1738,
+        "2020": 1294,
+        "2021": 1627,
+        "2022": 2333,
+        "2023": 4307,
+        "2024": 3838,
+        "2025": 2109,
+        "2026": 677
+      },
+      "E12": {
+        "2014": 1406,
+        "2015": 1495,
+        "2016": 1322,
+        "2017": 1346,
+        "2018": 1319,
+        "2019": 1165,
+        "2020": 1025,
+        "2021": 1331,
+        "2022": 1531,
+        "2023": 2148,
+        "2024": 2047,
+        "2025": 1845,
+        "2026": 951
+      },
+      "E13": {
+        "2014": 656,
+        "2015": 752,
+        "2016": 955,
+        "2017": 927,
+        "2018": 853,
+        "2019": 827,
+        "2020": 669,
+        "2021": 452,
+        "2022": 486,
+        "2023": 794,
+        "2024": 1001,
+        "2025": 1112,
+        "2026": 376
+      }
     },
     "eb2": {
-      "_note": "供对照:同期中国 EB2 待决同样堆积(FY2024 3,435 / FY2025 6,936)。",
-      "2023": { "total": 12978, "approved": 12439, "denied": 422,  "pending_other": 117 },
-      "2024": { "total": 17281, "approved": 12228, "denied": 1618, "pending_other": 3435 },
-      "2025": { "total": 13807, "approved": 5909,  "denied": 962,  "pending_other": 6936, "partial_q1q3": true }
+      "_note": "供对照:同期中国 EB2 待决同样堆积(FY2024 2,601 / FY2025 5,972 / FY2026 Q1-Q3 5,792)。",
+      "2014": {
+        "total": 4256,
+        "approved": 4094,
+        "denied": 138,
+        "pending_other": 24
+      },
+      "2015": {
+        "total": 5359,
+        "approved": 5202,
+        "denied": 131,
+        "pending_other": 26
+      },
+      "2016": {
+        "total": 7815,
+        "approved": 7518,
+        "denied": 238,
+        "pending_other": 59
+      },
+      "2017": {
+        "total": 6586,
+        "approved": 6280,
+        "denied": 252,
+        "pending_other": 54
+      },
+      "2018": {
+        "total": 8393,
+        "approved": 8015,
+        "denied": 312,
+        "pending_other": 66
+      },
+      "2019": {
+        "total": 11009,
+        "approved": 10424,
+        "denied": 421,
+        "pending_other": 164
+      },
+      "2020": {
+        "total": 11051,
+        "approved": 10482,
+        "denied": 344,
+        "pending_other": 225
+      },
+      "2021": {
+        "total": 10020,
+        "approved": 9472,
+        "denied": 279,
+        "pending_other": 269
+      },
+      "2022": {
+        "total": 10355,
+        "approved": 9972,
+        "denied": 281,
+        "pending_other": 102
+      },
+      "2023": {
+        "total": 13113,
+        "approved": 12562,
+        "denied": 453,
+        "pending_other": 98
+      },
+      "2024": {
+        "total": 17444,
+        "approved": 12928,
+        "denied": 1915,
+        "pending_other": 2601
+      },
+      "2025": {
+        "total": 18408,
+        "approved": 9757,
+        "denied": 2679,
+        "pending_other": 5972
+      },
+      "2026": {
+        "total": 11499,
+        "approved": 5119,
+        "denied": 588,
+        "pending_other": 5792,
+        "partial_q1q3": true
+      }
     }
   },
-
   "quarters": {
     "FY2025_Q1": {
       "_asof": "2024-12-31",
       "_scope": "worldwide",
-      "TOTAL":        { "received": 57827, "approved": 33105, "denied": 4396, "pending": 132938 },
-      "EB1":          { "received": 13454, "approved": 7516,  "denied": 1213, "pending": 23538 },
-      "E11_EB1A":     { "received": 7338,  "approved": 3291,  "denied": 1105, "pending": 13567 },
-      "E12_ProfResearcher": { "received": 1515, "approved": 1344, "denied": 19, "pending": 1981 },
-      "E13_MultinatExec":   { "received": 4601, "approved": 2881, "denied": 89, "pending": 7990 },
-      "EB2":          { "received": 28409, "approved": 14504, "denied": 2956, "pending": 68325 },
-      "NIW":          { "received": 20124, "approved": 4722,  "denied": 2799, "pending": 56679 },
-      "EB3":          { "received": 15964, "approved": 11085, "denied": 227,  "pending": 41075 },
-      "E31_Skilled":  { "received": 6862,  "approved": 3531,  "denied": 93,   "pending": 21970 },
-      "E32_Bachelor": { "received": 4130,  "approved": 4458,  "denied": 77,   "pending": 5059 },
-      "EW3_Unskilled":{ "received": 4972,  "approved": 3096,  "denied": 57,   "pending": 14046 }
+      "TOTAL": {
+        "received": 57827,
+        "approved": 33105,
+        "denied": 4396,
+        "pending": 132938
+      },
+      "EB1": {
+        "received": 13454,
+        "approved": 7516,
+        "denied": 1213,
+        "pending": 23538
+      },
+      "E11_EB1A": {
+        "received": 7338,
+        "approved": 3291,
+        "denied": 1105,
+        "pending": 13567
+      },
+      "E12_ProfResearcher": {
+        "received": 1515,
+        "approved": 1344,
+        "denied": 19,
+        "pending": 1981
+      },
+      "E13_MultinatExec": {
+        "received": 4601,
+        "approved": 2881,
+        "denied": 89,
+        "pending": 7990
+      },
+      "EB2": {
+        "received": 28409,
+        "approved": 14504,
+        "denied": 2956,
+        "pending": 68325
+      },
+      "NIW": {
+        "received": 20124,
+        "approved": 4722,
+        "denied": 2799,
+        "pending": 56679
+      },
+      "EB3": {
+        "received": 15964,
+        "approved": 11085,
+        "denied": 227,
+        "pending": 41075
+      },
+      "E31_Skilled": {
+        "received": 6862,
+        "approved": 3531,
+        "denied": 93,
+        "pending": 21970
+      },
+      "E32_Bachelor": {
+        "received": 4130,
+        "approved": 4458,
+        "denied": 77,
+        "pending": 5059
+      },
+      "EW3_Unskilled": {
+        "received": 4972,
+        "approved": 3096,
+        "denied": 57,
+        "pending": 14046
+      }
     },
     "FY2026_Q1": {
       "_asof": "2025-12-31",
       "_scope": "worldwide",
-      "TOTAL":        { "received": 59148, "approved": 47922, "denied": 6453, "pending": 186875 },
-      "EB1":          { "received": 13040, "approved": 5961,  "denied": 2562, "pending": 39463 },
-      "E11_EB1A":     { "received": 7756,  "approved": 2180,  "denied": 2414, "pending": 24653 },
-      "E12_ProfResearcher": { "received": 1508, "approved": 1342, "denied": 73, "pending": 2229 },
-      "E13_MultinatExec":   { "received": 3776, "approved": 2439, "denied": 75, "pending": 12581 },
-      "EB2":          { "received": 24765, "approved": 18246, "denied": 3458, "pending": 88234 },
-      "E21_AdvDegree":{ "received": 10936, "approved": 15866, "denied": 252,  "pending": 5422 },
-      "NIW":          { "received": 13829, "approved": 2380,  "denied": 3206, "pending": 82812 },
-      "EB3":          { "received": 21343, "approved": 23715, "denied": 433,  "pending": 59178 },
-      "E31_Skilled":  { "received": 7287,  "approved": 5021,  "denied": 171,  "pending": 36263 }
+      "TOTAL": {
+        "received": 59148,
+        "approved": 47922,
+        "denied": 6453,
+        "pending": 186875
+      },
+      "EB1": {
+        "received": 13040,
+        "approved": 5961,
+        "denied": 2562,
+        "pending": 39463
+      },
+      "E11_EB1A": {
+        "received": 7756,
+        "approved": 2180,
+        "denied": 2414,
+        "pending": 24653
+      },
+      "E12_ProfResearcher": {
+        "received": 1508,
+        "approved": 1342,
+        "denied": 73,
+        "pending": 2229
+      },
+      "E13_MultinatExec": {
+        "received": 3776,
+        "approved": 2439,
+        "denied": 75,
+        "pending": 12581
+      },
+      "EB2": {
+        "received": 24765,
+        "approved": 18246,
+        "denied": 3458,
+        "pending": 88234
+      },
+      "E21_AdvDegree": {
+        "received": 10936,
+        "approved": 15866,
+        "denied": 252,
+        "pending": 5422
+      },
+      "NIW": {
+        "received": 13829,
+        "approved": 2380,
+        "denied": 3206,
+        "pending": 82812
+      },
+      "EB3": {
+        "received": 21343,
+        "approved": 23715,
+        "denied": 433,
+        "pending": 59178
+      },
+      "E31_Skilled": {
+        "received": 7287,
+        "approved": 5021,
+        "denied": 171,
+        "pending": 36263
+      }
     },
     "FY2026_Q2": {
       "_asof": "2026-03-31",
       "_scope": "worldwide",
-      "TOTAL":        { "received": 51110, "approved": 47406, "denied": 7241, "pending": 184209 },
-      "EB1":          { "received": 11629, "approved": 6607,  "denied": 2612, "pending": 41726 },
-      "E11_EB1A":     { "received": 6647,  "approved": 1723,  "denied": 2405, "pending": 27024 },
-      "E12_ProfResearcher": { "received": 1334, "approved": 1546, "denied": 103, "pending": 1901 },
-      "E13_MultinatExec":   { "received": 3648, "approved": 3338, "denied": 104, "pending": 12801 },
-      "EB2":          { "received": 23563, "approved": 14000, "denied": 3976, "pending": 94495 },
-      "E21_AdvDegree":{ "received": 10922, "approved": 10958, "denied": 693,  "pending": 5280 },
-      "NIW":          { "received": 12641, "approved": 3042,  "denied": 3283, "pending": 89215 },
-      "EB3":          { "received": 15918, "approved": 26799, "denied": 653,  "pending": 47988 },
-      "E31_Skilled":  { "received": 5658,  "approved": 5981,  "denied": 219,  "pending": 35847 },
-      "E32_Bachelor": { "received": 5839,  "approved": 5947,  "denied": 190,  "pending": 3861 },
-      "EW3_Unskilled":{ "received": 4421,  "approved": 14871, "denied": 244,  "pending": 8280 }
+      "TOTAL": {
+        "received": 51110,
+        "approved": 47406,
+        "denied": 7241,
+        "pending": 184209
+      },
+      "EB1": {
+        "received": 11629,
+        "approved": 6607,
+        "denied": 2612,
+        "pending": 41726
+      },
+      "E11_EB1A": {
+        "received": 6647,
+        "approved": 1723,
+        "denied": 2405,
+        "pending": 27024
+      },
+      "E12_ProfResearcher": {
+        "received": 1334,
+        "approved": 1546,
+        "denied": 103,
+        "pending": 1901
+      },
+      "E13_MultinatExec": {
+        "received": 3648,
+        "approved": 3338,
+        "denied": 104,
+        "pending": 12801
+      },
+      "EB2": {
+        "received": 23563,
+        "approved": 14000,
+        "denied": 3976,
+        "pending": 94495
+      },
+      "E21_AdvDegree": {
+        "received": 10922,
+        "approved": 10958,
+        "denied": 693,
+        "pending": 5280
+      },
+      "NIW": {
+        "received": 12641,
+        "approved": 3042,
+        "denied": 3283,
+        "pending": 89215
+      },
+      "EB3": {
+        "received": 15918,
+        "approved": 26799,
+        "denied": 653,
+        "pending": 47988
+      },
+      "E31_Skilled": {
+        "received": 5658,
+        "approved": 5981,
+        "denied": 219,
+        "pending": 35847
+      },
+      "E32_Bachelor": {
+        "received": 5839,
+        "approved": 5947,
+        "denied": 190,
+        "pending": 3861
+      },
+      "EW3_Unskilled": {
+        "received": 4421,
+        "approved": 14871,
+        "denied": 244,
+        "pending": 8280
+      }
+    },
+    "FY2026_Q3": {
+      "_asof": "2026-06-30",
+      "_scope": "worldwide",
+      "_src": "data/raw/uscis/I140_FY2026_Q3.xlsx RADP Summary",
+      "TOTAL": {
+        "received": 62932,
+        "approved": 37975,
+        "denied": 7069,
+        "pending": 203204
+      },
+      "EB1": {
+        "received": 10918,
+        "approved": 6414,
+        "denied": 3034,
+        "pending": 43218
+      },
+      "E11_EB1A": {
+        "received": 6036,
+        "approved": 1348,
+        "denied": 2832,
+        "pending": 28874
+      },
+      "E12_ProfResearcher": {
+        "received": 1328,
+        "approved": 1408,
+        "denied": 106,
+        "pending": 1687
+      },
+      "E13_MultinatExec": {
+        "received": 3554,
+        "approved": 3658,
+        "denied": 96,
+        "pending": 12657
+      },
+      "EB2": {
+        "received": 29307,
+        "approved": 15989,
+        "denied": 3426,
+        "pending": 104941
+      },
+      "E21_AdvDegree": {
+        "received": 15476,
+        "approved": 12154,
+        "denied": 323,
+        "pending": 8644
+      },
+      "NIW": {
+        "received": 13831,
+        "approved": 3835,
+        "denied": 3103,
+        "pending": 96297
+      },
+      "EB3": {
+        "received": 22707,
+        "approved": 15572,
+        "denied": 609,
+        "pending": 55045
+      },
+      "E31_Skilled": {
+        "received": 9547,
+        "approved": 5649,
+        "denied": 194,
+        "pending": 39674
+      },
+      "E32_Bachelor": {
+        "received": 8208,
+        "approved": 5846,
+        "denied": 125,
+        "pending": 6269
+      },
+      "EW3_Unskilled": {
+        "received": 4952,
+        "approved": 4077,
+        "denied": 290,
+        "pending": 9102
+      }
     }
   }
 }
