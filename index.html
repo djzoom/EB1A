@@ -613,7 +613,7 @@ var PARAM_META = {
   demandWall: {
     label: '未来需求墙 (I-140 池)', default: 1.7, min: 1.0, max: 2.5, step: 0.1,
     unit: '×', format: function(v) { return v.toFixed(1); },
-    source: { title: '2024+ PD 的隐藏需求 (I-140 待签池)', rows: [{ lbl: 'I-140 待签 (China EB1)', val: '~13,600' },{ lbl: '近半年增量', val: '+429（见顶退潮）' },{ lbl: '收件较峰', val: '−23%' },{ lbl: 'I-485 库存', val: '~5,650' },{ lbl: '原始比', val: '×2.45' },{ lbl: '阻尼后(默认)', val: '×1.7' }], methodology: '2024+ 的 PD 多在 I-140 待签池、尚未进 I-485，放开后涌入会让 cutoff 变慢。待签/库存原始比 ≈2.45，因待签池已见顶、收件退潮，阻尼到 1.7', sources: ['USCIS I-140 Awaiting Visa', 'USCIS I-485 Inventory'] }
+    source: { title: '2024+ PD 的隐藏需求 (I-140 待签池)', rows: [{ lbl: 'I-140 待签 (China EB1)', val: '14,101（2026-06）' },{ lbl: '近两季增量', val: '+323 / +180（退潮）' },{ lbl: 'EB-1A 收件较峰', val: '−35%' },{ lbl: 'EB-1A 获批率', val: '75% → 32%（FY26 Q3）' },{ lbl: 'I-485 库存', val: '~5,650' },{ lbl: '原始比', val: '×2.45' },{ lbl: '阻尼后(默认)', val: '×1.7' }], methodology: '2024+ 的 PD 多在 I-140 待签池、尚未进 I-485，放开后涌入会让 cutoff 变慢。待签/库存原始比 ≈2.45，因待签池增速放缓、收件退潮、获批率下滑，阻尼到 1.7', sources: ['USCIS I-140 Awaiting Visa', 'USCIS I-140 Quarterly', 'USCIS I-485 Inventory'] }
   }
 };
 
@@ -668,7 +668,7 @@ function getPDDensity(pdDate, params, wall) {
   // 比值正确故预测无误,但参数无物理意义。现按 ×1.911 同步放大二者,比值不变。
   var d_low = 9.6, d_med = 19.1;
   var d_high = params.densityHigh || 23, d_peak = params.densityPeak || 29;
-  // I-140 需求墙：2024+ 的 PD 大多还在 I-140 待签池(China EB1 ~13,600)、尚未进 I-485；待 DFF 放开会涌入。
+  // I-140 需求墙：2024+ 的 PD 大多还在 I-140 待签池(China EB1 14,101 @2026-06)、尚未进 I-485；待 DFF 放开会涌入。
   // 原始 待签/库存 ≈ 2.45，阻尼到 demandWall(默认 1.7；2026 待签池见顶退潮后由 1.8 下调)。cutoff 进入 2024 PD 后变慢。
   var d_wall = d_peak * (wall || params.demandWall || 1.7);
   if (pdDate < d_2021) return d_low;
