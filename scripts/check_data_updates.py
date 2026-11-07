@@ -378,10 +378,56 @@ def download(url: str, dest: Path) -> bool:
         return False
 
 
+# I-485 库存文件的候选命名。2026-05 起 eb_inventory_<month>_<year>.xlsx 对 5–10 月全部 404,
+# 而官方数据页已列出 7/6、8/5、9/3、10/5 等快照(2026-11-07 巡检告警),说明命名变了。
+# 列表页对托管 runner 常 403,只能逐个试;哪个命中用哪个,并把命中的模式打进日志。
+I485_URL_PATTERNS = [
+    "eb_inventory_{m}_{y}.xlsx",        # 2024–2026-04 的既有命名,保持首位
+    "eb_inventory_{M}_{y}.xlsx",
+    "EB_inventory_{m}_{y}.xlsx",
+    "eb_inventory_{m3}_{y}.xlsx",
+    "eb_inventory_{m}{y}.xlsx",
+    "eb_inventory_{y}_{mm}.xlsx",
+    "eb_i485_inventory_{m}_{y}.xlsx",
+    "i485_eb_inventory_{m}_{y}.xlsx",
+    "I485_EB_Inventory_{M}_{y}.xlsx",
+    "i485_inventory_{m}_{y}.xlsx",
+    "eb_inventory_{m}_{y}.csv",
+]
+USCIS_DATA_PAGE = "https://www.uscis.gov/tools/reports-and-studies/immigration-and-citizenship-data"
+
+
+def i485_candidate_urls(month_name: str, year: int) -> list[str]:
+    """按 I485_URL_PATTERNS 展开某月的候选下载地址,去重、保序。"""
+    mm = f"{MONTHS.index(month_name) + 1:02d}"
+    seen, out = set(), []
+    for p in I485_URL_PATTERNS:
+        u = f"{USCIS_BASE}/" + p.format(m=month_name, M=month_name.capitalize(),
+                                        m3=month_name[:3], y=year, mm=mm)
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+def discover_i485_links() -> list[str]:
+    """候选全部未命中时抓官方数据页,把疑似库存文件链接打进日志(不下载)。
+    列表页对托管 runner 可能 403——那样也只打一行状态,下一步靠人看日志改 I485_URL_PATTERNS。"""
+    html = _get_text(USCIS_DATA_PAGE)
+    if not html:
+        return []
+    links = sorted(set(re.findall(r'href="([^"]*[Ii]nventory[^"]*\.(?:xlsx|xls|csv))"', html)))
+    print(f"  [发现] 官方数据页含 {len(links)} 个疑似库存文件链接(请据此更新 I485_URL_PATTERNS):")
+    for link in links[:40]:
+        print(f"     {link}")
+    return links
+
+
 def check_i485_inventory(dry_run: bool) -> list[str]:
     """Check for new monthly I-485 Pending Inventory snapshots."""
     new_files = []
     now = datetime.now()
+    discovered = False
 
     for year in range(2025, now.year + 1):
         for month_name in MONTHS:
@@ -393,16 +439,30 @@ def check_i485_inventory(dry_run: bool) -> list[str]:
             if local.exists():
                 continue
 
-            url = f"{USCIS_BASE}/eb_inventory_{month_name}_{year}.xlsx"
-            if probe_diag("I-485库存", url) == 200:
-                new_files.append(str(local.relative_to(REPO_ROOT)))
-                if not dry_run:
-                    if download(url, local):
-                        print(f"  DOWNLOADED: {local.name}")
-                    else:
-                        new_files.pop()
+            urls = i485_candidate_urls(month_name, year)
+            hit = None
+            for i, url in enumerate(urls):
+                st = probe_diag("I-485库存", url) if i == 0 else probe_status(url)
+                if st == 200:
+                    hit = url
+                    break
+                if st == 403:
+                    break   # 被挡就别再试别的名字,全是 403
+            if hit is None:
+                if not discovered:
+                    discovered = True
+                    discover_i485_links()
+                continue
+            if hit != urls[0]:
+                print(f"  [命名] {local.name} 命中非默认模式: {hit.rsplit('/', 1)[-1]}")
+            new_files.append(str(local.relative_to(REPO_ROOT)))
+            if not dry_run:
+                if download(hit, local):
+                    print(f"  DOWNLOADED: {local.name}")
                 else:
-                    print(f"  AVAILABLE: {local.name}")
+                    new_files.pop()
+            else:
+                print(f"  AVAILABLE: {local.name}")
 
     return new_files
 

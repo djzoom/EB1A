@@ -299,6 +299,14 @@ finally:
     S.INDEX, C.INDEX_HTML = _saved_idx, _saved_c
     shutil.rmtree(_tmp, ignore_errors=True)
 
+print("\n## 9. I-485 库存：候选命名展开")
+# 2026-05 起官方文件命名变了(既有模式对 5–10 月全部 404),改为按候选列表逐个试。
+_c = C.i485_candidate_urls("october", 2026)
+check("既有模式仍在首位(老文件不受影响)", _c[0].endswith("/eb_inventory_october_2026.xlsx"), True)
+check("候选无重复", len(_c) == len(set(_c)), True)
+check("含 年_月 数字变体", any(u.endswith("/eb_inventory_2026_10.xlsx") for u in _c), True)
+check("全部指向 USCIS 数据目录", all(u.startswith(C.USCIS_BASE + "/") for u in _c), True)
+
 print()
 if FAILED:
     print(f"❌ {len(FAILED)} 项失败: {FAILED}")
