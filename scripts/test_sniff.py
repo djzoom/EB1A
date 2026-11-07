@@ -305,6 +305,8 @@ _c = C.i485_candidate_urls("october", 2026)
 check("既有模式仍在首位(老文件不受影响)", _c[0].endswith("/eb_inventory_october_2026.xlsx"), True)
 check("候选无重复", len(_c) == len(set(_c)), True)
 check("含 年_月 数字变体", any(u.endswith("/eb_inventory_2026_10.xlsx") for u in _c), True)
+# 2026-11-07 官方数据页实际链接:eb_inventory_october_2026_v1.xlsx(带 _v1 后缀)
+check("含官方新命名 _v1 变体", _c[1].endswith("/eb_inventory_october_2026_v1.xlsx"), True)
 check("全部指向 USCIS 数据目录", all(u.startswith(C.USCIS_BASE + "/") for u in _c), True)
 
 print()

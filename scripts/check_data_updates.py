@@ -383,6 +383,11 @@ def download(url: str, dest: Path) -> bool:
 # 列表页对托管 runner 常 403,只能逐个试;哪个命中用哪个,并把命中的模式打进日志。
 I485_URL_PATTERNS = [
     "eb_inventory_{m}_{y}.xlsx",        # 2024–2026-04 的既有命名,保持首位
+    # 2026-11-07 托管 runner 抓到官方数据页实际链接:eb_inventory_october_2026_v1.xlsx、
+    # eb_inventory_september_2026_v1.xlsx——新命名带 _v1 版本后缀;留 _v2/_v3 给官方改版。
+    "eb_inventory_{m}_{y}_v1.xlsx",
+    "eb_inventory_{m}_{y}_v2.xlsx",
+    "eb_inventory_{m}_{y}_v3.xlsx",
     "eb_inventory_{M}_{y}.xlsx",
     "EB_inventory_{m}_{y}.xlsx",
     "eb_inventory_{m3}_{y}.xlsx",
