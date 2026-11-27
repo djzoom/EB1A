@@ -503,7 +503,8 @@ var HISTORY = [
   ['2026-08-15','2023-07-01'],
   ['2026-09-15','2023-07-01'],
   ['2026-10-15','2023-07-01'],
-  ['2026-11-15','2023-08-01']
+  ['2026-11-15','2023-08-01'],
+  ['2026-12-15','2023-08-01']
 ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; });
 
 var HISTORY_B = [
@@ -514,14 +515,15 @@ var HISTORY_B = [
   ['2026-08-15','2023-12-01'],
   ['2026-09-15','2023-12-01'],
   ['2026-10-15','2024-07-01'],
-  ['2026-11-15','2024-07-01']
+  ['2026-11-15','2024-07-01'],
+  ['2026-12-15','2024-07-01']
 ].map(function(p) { return { x: new Date(p[0]).getTime(), y: new Date(p[1]).getTime() }; });
 
 // 当前签证公告状态（每月更新）：本月 AOS 职业移民递交用哪张表
 // 2026年11月：待 USCIS 公布（10 月为表B）。托管 runner 被 USCIS 403，自动补判跑不通，
 // 公布后在 Sniff 工作流只填 manual_chart 一键录入；见 docs/postmortem-2026-10-chart.md
-var VB_MONTH = '2026年11月';      // 最新已发布公告对应的月份
-var VB_YEAR = 2026, VB_MON = 11;  // 同上，数值形式（用于推下月）
+var VB_MONTH = '2026年12月';      // 最新已发布公告对应的月份
+var VB_YEAR = 2026, VB_MON = 12;  // 同上，数值形式（用于推下月）
 // 发布时间的【来源】必须与数值一起保存,否则估算值会被当成观测值渲染——
 // 2026-09 期即因此事故:抓取器故障期间系统按历史规律回填了「约 2026/08/14 12:00 ET」,
 // 而那个整点 12:00 根本不可能来自真实抓取。现按来源三分:
@@ -549,12 +551,13 @@ var RELEASE_HISTORY = [
   ['2026-09', null, 'unknown'],
   // 2026-10：探测器全程被 403，发布日取自 Fragomen/Murthy/bizlegalservices 三家 9/29 同日快讯。
   ['2026-10', '2026-09-29', 'inferred'],
-  ['2026-11', null, 'unknown']
+  ['2026-11', null, 'unknown'],
+  ['2026-12', null, 'unknown']
 ]; // RELEASE_HISTORY_END
-var FILING_CHART = 'B'; // 'A'=用表A递交；'B'=用表B递交；'?'=尚未取到（具体措辞见 FILING_CHART_STATE）
+var FILING_CHART = '?'; // 'A'=用表A递交；'B'=用表B递交；'?'=尚未取到（具体措辞见 FILING_CHART_STATE）
 // 'pending'=USCIS 尚未更新该月（正常滞后）；'error'=我们抓取报错。两者必须区分显示，
 // 否则「抓取根本没跑通」会被「待确认」掩盖。探测器每次解析后写回此值。
-var FILING_CHART_STATE = 'ok';
+var FILING_CHART_STATE = 'pending';
 // 四态措辞。旧版一律显示「待确认」——那会被读成「正在加载」,把「抓取根本没跑通」
 // 掩盖过去,与本次 2026-09 漏抓事故同类。故必须区分「USCIS 尚未公布」与「我们抓取失败」。
 var USCIS_CHART_URL = 'https://www.uscis.gov/green-card/green-card-processes-and-procedures/' +
