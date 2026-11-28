@@ -1,12 +1,28 @@
-# EB1A Priority Date Predictor
+# GC Time · EB-1–EB-5 Priority Date Predictor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-EB-1A 中国大陆排期预测工具。基于公开政府数据（USCIS / DOS），用供给 + 队列密度的第一性原理方法估算 Priority Date 何时到期。
+EB-1 ~ EB-5 排期预测工具（EB-1 杰出人才 / EB-2 / EB-3 / EB-4 / EB-5 及三类 EB-5 预留；中国大陆、印度、其他国家 ROW、墨西哥、菲律宾）。EB-1 中国大陆为最初的、参数经手工标定并回测的主场景。基于公开政府数据（USCIS / DOS），用供给 + 队列密度的第一性原理方法估算 Priority Date 何时到期。
 
 ## 在线 Demo
 
-打开 `index.html`，或部署到 GitHub Pages 后访问。
+主站：https://djzoom.github.io/EB1A/
+
+离线包：https://github.com/djzoom/EB1A/releases/download/offline-latest/EB1A-offline.zip 。解压后直接打开 `EB1A.html`；开发源码 `index.html` 需要先构建 UI 资源。
+
+本版本的在线站点与离线包均不包含广告、赞助入口或追踪脚本，不依赖个人域名或 Cloudflare 账户。
+
+## 语言、图表与分享
+
+界面支持中文、印地语、西班牙语、巴西葡萄牙语、日语、韩语、阿拉伯语、德语、法语和意大利语。首次访问自动匹配浏览器偏好中第一个支持的语言，均不支持时回退中文；首次进入和页首仍可手动切换，选择仅保存在本地。词典随应用打包，覆盖图表提示、参数来源、错误和免责声明，无翻译 API；离线单文件也会自动匹配浏览器语言。阿拉伯语使用 RTL 布局，但日期输入保持年／月／日，时间轴仍从左到右。
+
+语言优先级为分享链接指定、已保存的手动选择、浏览器偏好、中文兜底。自动匹配不会写入手动偏好，也不增加“跟随浏览器”选项；没有手动选择时，重新加载页面会读取最新浏览器偏好。
+
+切换语言只更新显示，不改变档案、参数、情景或已计算的预测。翻译由机器辅助编写，尚未经各语言母语者审校。
+
+表 A/B 结果固定并列，不再选择其中一表。趋势图和等待图同时显示两表：绿色为表 A、琥珀色为表 B，历史实线、预测中位虚线、浅色阴影为 p10–p90 区间。乐观／中位／保守情景同时更新两张结果卡。历史光标展示同月 A/B 值，缺失月份明确提示；预测光标对照两表，等待图按同一 PD 插值，不超出各自范围外推。B 复用既有投影算法，不额外运行一轮模拟；是否可递交仍以 USCIS 本期用表为准。
+
+“分享链接”包含类别、出生国、优先日、速度、情景、供给、参数和界面语言，放在 URL `#` 片段内，不随 HTTP 请求发送。旧链接的 `view=A/B` 仍可打开，但两表始终同时展示，新链接不再携带选表参数。链接接收者先进入共享预览，不覆盖其已保存条件；点击“更新预测”才保存。“修改条件”打开或聚焦条件表单；“重新加载”重载当前发布版本，不主动抓取官方公告，保留档案但重置未保存的高级参数。
 
 ## 方法
 
@@ -16,6 +32,17 @@ EB-1A 中国大陆排期预测工具。基于公开政府数据（USCIS / DOS）
 2. **供给（supply）**：每财年法定配额 + 单国 7% 上限 + 其他国家用不完的溢出。
 3. **密度**：估算目标 PD 之前还有多少人，决定需要消耗多少签证号才能轮到。
 4. **不确定性**：用蒙特卡洛模拟给出 P10 / P50 / P90 区间，而非单点预测。
+
+## 多类别 / 多国家
+
+首次打开时可选类别与出生国（随时可在编辑面板修改，保存在 localStorage `eb1a_user_profile`）。每个 类别×国家 有独立的表A/表B 当期值、历史序列与模型参数：
+
+EB-1 统一定义为「杰出人才」，使用第一优先类别的排期，不细分类别。旧档案和分享链接中的 `EB-1A` 自动兼容为 `EB-1`，只在内存转换，不自动覆盖已保存档案；主动更新条件后的保存值和新分享链接统一使用 `EB-1`。历史数据键、公告机器人和离线产物文件名保持不变，预测公式及模型参数不变。
+
+- 数据：`data/visa_bulletin_history.json`（2016-10 → 2026-10，脚本 `scripts/build_bulletin_history.py`）
+- 参数：`scripts/calibrate_categories.py` 由「表A 近 24 月推进速度 + I-140 已批准待签（cutoff 之后排队总量）+ I-485 库存」标定，写入 `index.html` 的 `CELL_MODELS`
+- 表A 为 Current 的格子（如 EB-1 ROW、EB-5 ROW、EB-5 三个预留类）直接显示「已 current，无需等待」
+- EW（其他工人）与 EB-4 宗教工作者行暂未收录；EB-2..5 及非中国格子的参数含较多假设（溢入、家庭系数），置信度低于 EB-1 中国
 
 ## 已知局限与改进方向
 
@@ -29,7 +56,7 @@ EB-1A 中国大陆排期预测工具。基于公开政府数据（USCIS / DOS）
 ## 项目结构
 
 ```
-EB1A/
+gctime/
 ├── index.html               # 预测工具主页面
 ├── README.md
 ├── CLAUDE_CODE_BOOTSTRAP.md  # 架构 / 开发接手指南
@@ -42,7 +69,7 @@ EB1A/
 
 ## 数据自动更新
 
-排期数据由 GitHub Actions 定时探测 DOS 签证公告并自动上线。两条数据通道的可达性不同
+排期数据由 GitHub Actions 定时探测 DOS 签证公告，默认创建 PR 等待维护者复核，合并后由 CI 验证并上线。维护者可显式设置仓库变量 `BULLETIN_AUTO_MERGE=true` 启用数据 PR 自动合并；不设置则保留上游人工复核流程。两条数据通道的可达性不同
 （2026-08-22 实测，托管 runner 与住宅 IP 各跑一遍）：
 
 | 数据源 | GitHub 托管 runner | 住宅 IP |
@@ -84,11 +111,46 @@ bash scripts/uscis_chart_watch.sh --install   # 每小时问一次 USCIS，直�
 - vyakunin/visa_bulletin: Django + Bazel (https://visa-bulletin.us/)
 - visabulletin.ai: timeline + cohort comparison
 
-## 部署 GitHub Pages
+## CI 与部署
 
-1. Settings → Pages → Build and deployment → Source: "Deploy from a branch"
-2. Branch: `main`，folder: `/ (root)` → Save
-3. 1–2 分钟后访问（路径区分大小写，须与仓库名一致）: https://djzoom.github.io/EB1A/
+界面使用 React 19、HeroUI Pro 和 Tailwind CSS 4；预测模型与公告数据仍保留在 `index.html`，数据机器人继续按原有格式更新。
+
+自有源码沿用项目 MIT 协议；HeroUI Pro 是独立商业依赖，不受本仓库 MIT 协议覆盖。仓库不包含授权包源文件，只有合法授权的构建环境才能下载该依赖；发布的是应用编译产物。
+
+`CI` 在 push、PR 和手动运行时检查工作流语法、Python/Shell/JavaScript/JSX、JSON 和公告解析器。仓库分支 push 与 main 手动运行还会下载授权组件、构建站点并执行 Chromium 回归测试。PR 只执行不需要凭据的源码检查，不运行 HeroUI 授权安装；维护者应在受信分支验证 UI 后合并。浏览器覆盖 40 个类别×国家组合的两种远期速度、表A/B 并列预测、设置持久化、停留上限与财年锚点，以及离线产物。测试不依赖实时政府网站。
+
+只有 `main` 验证通过后才发布 GitHub Pages 和离线 Release；两个发布任务消费同一次构建产物。`version.json` 记录构建 commit，便于核对线上版本。数据机器人写入 `main` 后会显式派发 `CI`，因为 `GITHUB_TOKEN` 产生的 push 不会触发其他工作流。
+
+一次性配置：
+
+1. GitHub Settings → Pages → Source 选择 **GitHub Actions**。初次启用需要仓库管理员，工作流 token 无权创建 Pages 站点。
+2. 维护者需要自己的 HeroUI Pro 授权。从 HeroUI Pro Dashboard 获取 CI/CD token，设置仓库 Secret `HEROUI_AUTH_TOKEN`。该令牌仅传给 `npm rebuild @heroui-pro/react` 的授权下载步骤；其它依赖安装使用 `npm ci --ignore-scripts`。不要把令牌放入源码、前端环境变量或生成产物。上游不会继承贡献者 fork 的 Secret；未配置时，完整构建会明确失败，不会发布。
+3. 重新发布可运行 `gh workflow run ci.yml --repo djzoom/EB1A --ref main`；子工作流不能绕过 CI 独立发布。
+
+迁移前请先完成上述授权与 Pages 配置，再合并到 `main`。无凭据的 PR 源码检查通过不等于完整 UI 构建通过。回退时可恢复合并前的 commit 与原 Pages 发布方式；本变更不修改 DNS，也不迁移服务端用户数据。
+
+本地验证：
+
+```bash
+npm ci --ignore-scripts
+# 已完成 heroui-pro login，或已通过环境提供 HEROUI_AUTH_TOKEN 后：
+npm rebuild @heroui-pro/react
+npm run build
+npx playwright install chromium
+python3 scripts/check_project.py
+python3 scripts/test_sniff.py
+python3 scripts/test_bulletin_history.py
+npm test
+go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+```
+
+`npm run build:ui` 把 `src/shell.jsx` 和 `src/styles.css` 编译为忽略提交的 `assets/ui.js`、`assets/ui.css`，不拆分 chunk、不生成 source map。`npm run build` 继续生成 `dist/site/`、`dist/EB1A.html` 和 `dist/EB1A-offline.zip`；直接运行 `python3 scripts/build_site.py` 也会先编译 UI。
+
+`npm test` 自动完整构建，在真实子路径运行浏览器测试；CI 用 `GCTIME_PREBUILT=1` 复用刚验证的产物。离线 HTML 内联 React/HeroUI 的 JS 和 CSS，不需要 CDN 或本地服务器。站点 service worker 预缓存这些资源，并以构建内容指纹更新缓存。当前页面未自动注册 service worker；相关测试主动注册以验证分发的 worker，单 HTML 离线版无需注册。
+
+没有 HeroUI Pro 授权的贡献者可运行 `npm ci --ignore-scripts`、`python3 scripts/check_project.py --source-only` 和 `python3 scripts/test_sniff.py` 完成源码检查；该结果不代表 UI 已通过构建或浏览器测试。
+
+可选：`BARK_KEY` 用于通知；`RUNNER_LABEL` 用于住宅出口自建 runner。没有住宅出口时 USCIS 抓取可能返回 403，定时任务成功不等于数据已刷新。
 
 ## 开发 (Claude Code)
 
@@ -116,7 +178,7 @@ claude  # 启动 Claude Code
 
 首次打开 `index.html` 时，会弹出欢迎面板要求输入你自己的 Priority Date、类别、出生国等信息。数据仅保存在浏览器 localStorage，不会上传。
 
-预测结果（P50 中位 + 90% 置信区间）以你输入的 PD 为准计算。
+预测结果（P50 中位 + P10–P90 模拟区间）以你输入的 PD 为准计算。
 
 ## License
 
